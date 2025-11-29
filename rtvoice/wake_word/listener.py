@@ -65,7 +65,7 @@ class WakeWordListener(LoggingMixin):
         self.cleanup()
         return False
 
-    async def listen_for_wakeword(self) -> bool:
+    async def start(self) -> bool:
         self.logger.info("Starting async wake word listening…")
         self._detection_event.clear()
         self.should_stop = False
@@ -86,7 +86,7 @@ class WakeWordListener(LoggingMixin):
         self.logger.info("Wake word listening stopped")
         return False
 
-    def stop_listening(self) -> None:
+    def stop(self) -> None:
         self.logger.info("Stopping wake word listener")
         self.should_stop = True
         self.is_listening = False

@@ -58,7 +58,7 @@ class IdleState(AssistantState):
     async def _wake_word_loop(self, context: VoiceAssistantContext) -> None:
         try:
             self.logger.debug("Starting wake word detection...")
-            await context.wake_word_listener.listen_for_wakeword()
+            await context.wake_word_listener.start()
             self.logger.debug("Wake word detection completed")
 
         except asyncio.CancelledError:

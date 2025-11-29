@@ -73,7 +73,7 @@ class RespondingState(AssistantState):
 
     async def _stop_wake_word_detection(self, context: VoiceAssistantContext) -> None:
         self.logger.debug("Stopping wake word detection")
-        context.wake_word_listener.stop_listening()
+        context.wake_word_listener.stop()
         if self._wake_word_task and not self._wake_word_task.done():
             self._wake_word_task.cancel()
             try:
@@ -85,7 +85,7 @@ class RespondingState(AssistantState):
 
     async def _wake_word_detection_loop(self, context: VoiceAssistantContext) -> None:
         try:
-            wake_word_detected = await context.wake_word_listener.listen_for_wakeword()
+            wake_word_detected = await context.wake_word_listener.start()
             if wake_word_detected:
                 self.logger.info("Wake word detected during assistant response")
         except Exception as e:

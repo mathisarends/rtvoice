@@ -10,8 +10,6 @@ if TYPE_CHECKING:
 
 
 class IdleState(AssistantState):
-    """Initial state - waiting for wake word"""
-
     def __init__(self):
         super().__init__(StateType.IDLE)
         self._wake_task: asyncio.Task | None = None

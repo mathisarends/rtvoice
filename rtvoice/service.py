@@ -16,7 +16,7 @@ from rtvoice.events.schemas import (
 )
 from rtvoice.mic import MicrophoneCapture, SpeechDetector
 from rtvoice.realtime.reatlime_client import RealtimeClient
-from rtvoice.shared.logging_mixin import LoggingMixin, ensure_logging_configured
+from rtvoice.shared.logging_mixin import LoggingMixin
 from rtvoice.sound import AudioPlayer, SoundEventHandler
 from rtvoice.sound.audio import AudioStrategy, PyAudioStrategy
 from rtvoice.state.context import VoiceAssistantContext
@@ -51,7 +51,6 @@ class Agent(LoggingMixin):
         wake_word_settings: WakeWordSettings | None = None,
         env: AgentEnv | None = None,
     ):
-        ensure_logging_configured()
         self._env = env or AgentEnv()
 
         self._model_settings = model_settings or ModelSettings(

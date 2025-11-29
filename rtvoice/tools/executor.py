@@ -3,7 +3,6 @@ from __future__ import annotations
 import inspect
 from typing import TYPE_CHECKING, Any
 
-from rtvoice.events.bus import EventBus
 from rtvoice.shared.logging_mixin import LoggingMixin
 from rtvoice.state.base import VoiceAssistantEvent
 from rtvoice.tools.models import (
@@ -14,6 +13,7 @@ from rtvoice.tools.models import (
 from rtvoice.tools.registry import Tool, ToolRegistry
 
 if TYPE_CHECKING:
+    from rtvoice.events.bus import EventBus
     from rtvoice.realtime.messaging.message_manager import RealtimeMessageManager
 
 

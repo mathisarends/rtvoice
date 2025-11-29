@@ -5,8 +5,6 @@ from rtvoice.state.context import VoiceAssistantContext
 
 
 class RespondingState(AssistantState):
-    """State when generating and delivering response to user"""
-
     def __init__(self):
         super().__init__(StateType.RESPONDING)
         self._wake_word_task = None

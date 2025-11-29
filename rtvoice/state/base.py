@@ -11,8 +11,6 @@ if TYPE_CHECKING:
 
 
 class VoiceAssistantEvent(Enum):
-    """Events that can trigger state transitions"""
-
     WAKE_WORD_DETECTED = "wake_word_detected"
     USER_STARTED_SPEAKING = "user_started_speaking"
     USER_SPEECH_ENDED = "user_speech_ended"
@@ -51,8 +49,6 @@ class VoiceAssistantEvent(Enum):
 
 
 class StateType(Enum):
-    """Enum for different state types"""
-
     IDLE = "idle"
     TIMEOUT = "timeout"
     LISTENING = "listening"
@@ -65,57 +61,45 @@ class StateType(Enum):
 
 
 class AssistantState(ABC, LoggingMixin):
-    """Base class for all states"""
-
     def __init__(self, state_type: StateType):
         self._state_type = state_type
 
     @property
     def state_type(self) -> StateType:
-        """Read-only property that returns the state type"""
         return self._state_type
 
     async def on_enter(self, context: VoiceAssistantContext) -> None:
-        """Called when entering this state"""
         pass
 
     async def on_exit(self, context: VoiceAssistantContext) -> None:
-        """Called when exiting this state"""
         pass
 
     @abstractmethod
     async def handle(
         self, event: VoiceAssistantEvent, context: VoiceAssistantContext
-    ) -> None:
-        """Handle an event in this state"""
-        ...
+    ) -> None: ...
 
     async def transition_to_idle(self, context: VoiceAssistantContext) -> None:
-        """Transition to IdleState"""
         from rtvoice.state.idle import IdleState
 
         await self._transition_to(IdleState(), context)
 
     async def _transition_to_timeout(self, context: VoiceAssistantContext) -> None:
-        """Transition to TimeoutState"""
         from rtvoice.state.timeout import TimeoutState
 
         await self._transition_to(TimeoutState(), context)
 
     async def _transition_to_listening(self, context: VoiceAssistantContext) -> None:
-        """Transition to ListeningState"""
         from rtvoice.state.listening import ListeningState
 
         await self._transition_to(ListeningState(), context)
 
     async def _transition_to_responding(self, context: VoiceAssistantContext) -> None:
-        """Transition to RespondingState"""
         from rtvoice.state.responding import RespondingState
 
         await self._transition_to(RespondingState(), context)
 
     async def _transition_to_tool_calling(self, context: VoiceAssistantContext) -> None:
-        """Transition to ToolCallingState"""
         from rtvoice.state.tool_calling import ToolCallingState
 
         await self._transition_to(ToolCallingState(), context)
@@ -123,13 +107,15 @@ class AssistantState(ABC, LoggingMixin):
     async def _transition_to(
         self, new_state: AssistantState, context: VoiceAssistantContext
     ) -> None:
-        """Transition to a new state"""
         self.logger.info(
             "Transitioning from %s to %s",
             self.__class__.__name__,
             new_state.__class__.__name__,
         )
-        context.state = new_state
 
         await self.on_exit(context)
+        context.state = new_state
+
+        self.logger.debug("Calling on_enter for %s", new_state.__class__.__name__)
         await context.state.on_enter(context)
+        self.logger.debug("on_enter completed for %s", new_state.__class__.__name__)

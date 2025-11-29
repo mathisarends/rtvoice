@@ -3,8 +3,6 @@ from rtvoice.state.context import VoiceAssistantContext
 
 
 class ListeningState(AssistantState):
-    """State when listening for user input after they started speaking"""
-
     def __init__(self):
         super().__init__(StateType.LISTENING)
 
@@ -15,9 +13,7 @@ class ListeningState(AssistantState):
         await context.ensure_realtime_audio_channel_connected()
 
         self.logger.debug("Initiating realtime session for user conversation")
-        success = await context.start_realtime_session()
-        if not success:
-            self.logger.error("Failed to initiate realtime session in listening state")
+        await context.start_realtime_session()
 
     async def handle(
         self, event: VoiceAssistantEvent, context: VoiceAssistantContext

@@ -44,6 +44,10 @@ class VoiceAssistantContext(LoggingMixin):
     def state(self) -> AssistantState:
         return self._state
 
+    @state.setter
+    def state(self, new_state: AssistantState) -> None:
+        self._state = new_state
+
     @property
     def wake_word_listener(self) -> WakeWordListener:
         return self._wake_word_listener
@@ -82,21 +86,15 @@ class VoiceAssistantContext(LoggingMixin):
         else:
             await self._state.handle(event, self)
 
-    async def start_realtime_session(self) -> bool:
+    async def start_realtime_session(self) -> None:
         if self._is_realtime_session_active():
             self.logger.warning("Realtime session already active, skipping start")
-            return True
+            return
 
-        try:
-            self.logger.info("Starting realtime session...")
-            self._realtime_task = asyncio.create_task(
-                self._realtime_client.setup_and_run()
-            )
-            self.logger.info("Realtime session started successfully")
-            return True
-        except Exception as e:
-            self.logger.error("Failed to start realtime session: %s", e)
-            return False
+        self.logger.info("Starting realtime session...")
+        self._realtime_task = asyncio.create_task(self._realtime_client.setup_and_run())
+        self.logger.info("Realtime session started successfully")
+        return True
 
     async def close_realtime_session(self, timeout: float = 1.0) -> bool:
         if not self._is_realtime_session_active():

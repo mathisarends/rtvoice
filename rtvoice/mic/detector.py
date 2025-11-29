@@ -3,9 +3,9 @@ import asyncio
 import numpy as np
 
 from rtvoice.events.bus import EventBus
-from rtvoice.events.models import VoiceAssistantEvent
 from rtvoice.mic import MicrophoneCapture
 from rtvoice.shared.logging_mixin import LoggingMixin
+from rtvoice.state.base import VoiceAssistantEvent
 
 
 class SpeechDetector(LoggingMixin):

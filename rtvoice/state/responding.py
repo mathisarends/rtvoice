@@ -8,6 +8,13 @@ class RespondingState(AssistantState):
     def __init__(self):
         super().__init__(StateType.RESPONDING)
         self._wake_word_task = None
+        self._event_handlers = {
+            VoiceAssistantEvent.ASSISTANT_STARTED_TOOL_CALL: self._handle_tool_call,
+            VoiceAssistantEvent.ASSISTANT_STARTED_MCP_TOOL_CALL: self._handle_mcp_tool_call,
+            VoiceAssistantEvent.ASSISTANT_RESPONSE_COMPLETED: self._handle_response_completed,
+            VoiceAssistantEvent.ASSISTANT_SPEECH_INTERRUPTED: self._handle_speech_interrupted,
+            VoiceAssistantEvent.WAKE_WORD_DETECTED: self._handle_wake_word,
+        }
 
     async def on_enter(self, context: VoiceAssistantContext) -> None:
         self.logger.info(
@@ -24,41 +31,37 @@ class RespondingState(AssistantState):
     async def handle(
         self, event: VoiceAssistantEvent, context: VoiceAssistantContext
     ) -> None:
-        match event:
-            case VoiceAssistantEvent.ASSISTANT_STARTED_TOOL_CALL:
-                self.logger.info(
-                    "Assistant started tool call - transitioning to Tool Calling"
-                )
-                await self._transition_to_tool_calling(context)
-            case VoiceAssistantEvent.ASSISTANT_STARTED_MCP_TOOL_CALL:
-                self.logger.info(
-                    "MCP tool call started - remaining in Tool Calling state"
-                )
-                await self._transition_to_tool_calling(context)
-            case VoiceAssistantEvent.ASSISTANT_RESPONSE_COMPLETED:
-                self.logger.info(
-                    "Assistant response completed - returning to waiting for user input"
-                )
-                await self._transition_to_timeout(context)
-            case VoiceAssistantEvent.ASSISTANT_SPEECH_INTERRUPTED:
-                self.logger.info(
-                    "Assistant speech interrupted - returning to listening"
-                )
-                await self._transition_to_listening(context)
-            case VoiceAssistantEvent.WAKE_WORD_DETECTED:
-                self.logger.info(
-                    "Wake word detected during assistant response - interrupting and transitioning to listening"
-                )
-                await self._transition_to_listening(context)
-            case _:
-                self.logger.debug("Ignoring event %s in Responding state", event.value)
+        handler = self._event_handlers.get(event)
+        if handler:
+            await handler(context)
+
+    async def _handle_tool_call(self, context: VoiceAssistantContext) -> None:
+        self.logger.info("Assistant started tool call - transitioning to Tool Calling")
+        await self._transition_to_tool_calling(context)
+
+    async def _handle_mcp_tool_call(self, context: VoiceAssistantContext) -> None:
+        self.logger.info("MCP tool call started - remaining in Tool Calling state")
+        await self._transition_to_tool_calling(context)
+
+    async def _handle_response_completed(self, context: VoiceAssistantContext) -> None:
+        self.logger.info(
+            "Assistant response completed - returning to waiting for user input"
+        )
+        await self._transition_to_timeout(context)
+
+    async def _handle_speech_interrupted(self, context: VoiceAssistantContext) -> None:
+        self.logger.info("Assistant speech interrupted - returning to listening")
+        await self._transition_to_listening(context)
+
+    async def _handle_wake_word(self, context: VoiceAssistantContext) -> None:
+        self.logger.info(
+            "Wake word detected during assistant response - interrupting and transitioning to listening"
+        )
+        await self._transition_to_listening(context)
 
     async def _start_wake_word_detection(self, context: VoiceAssistantContext) -> None:
-        """Start wake word detection for interruption during assistant speech"""
         self.logger.debug("Starting wake word detection during assistant response")
 
-        # Start wake word listening for interruption
-        # WakeWordListener will publish WAKE_WORD_DETECTED directly via EventBus
         self._wake_word_task = asyncio.create_task(
             self._wake_word_detection_loop(context)
         )
@@ -71,7 +74,6 @@ class RespondingState(AssistantState):
             try:
                 await self._wake_word_task
             except asyncio.CancelledError:  # NOSONAR
-                # Intentional cleanup - CancelledError not re-raised to avoid aborting state transition
                 pass
             finally:
                 self._wake_word_task = None

@@ -5,6 +5,9 @@ from rtvoice.state.context import VoiceAssistantContext
 class ListeningState(AssistantState):
     def __init__(self):
         super().__init__(StateType.LISTENING)
+        self._event_handlers = {
+            VoiceAssistantEvent.USER_SPEECH_ENDED: self._handle_speech_ended,
+        }
 
     async def on_enter(self, context: VoiceAssistantContext) -> None:
         self.logger.info("Entering Listening state - user is speaking")
@@ -18,9 +21,10 @@ class ListeningState(AssistantState):
     async def handle(
         self, event: VoiceAssistantEvent, context: VoiceAssistantContext
     ) -> None:
-        match event:
-            case VoiceAssistantEvent.USER_SPEECH_ENDED:
-                self.logger.info("User finished speaking")
-                return await self._transition_to_responding(context)
-            case _:
-                self.logger.debug("Ignoring event %s in Listening state", event.value)
+        handler = self._event_handlers.get(event)
+        if handler:
+            await handler(context)
+
+    async def _handle_speech_ended(self, context: VoiceAssistantContext) -> None:
+        self.logger.info("User finished speaking")
+        await self._transition_to_responding(context)

@@ -13,6 +13,9 @@ class IdleState(AssistantState):
     def __init__(self):
         super().__init__(StateType.IDLE)
         self._wake_task: asyncio.Task | None = None
+        self._event_handlers = {
+            VoiceAssistantEvent.WAKE_WORD_DETECTED: self._handle_wake_word,
+        }
 
     async def on_enter(self, context: VoiceAssistantContext) -> None:
         await self._start_wake_word_detection(context)
@@ -23,11 +26,12 @@ class IdleState(AssistantState):
     async def handle(
         self, event: VoiceAssistantEvent, context: VoiceAssistantContext
     ) -> None:
-        match event:
-            case VoiceAssistantEvent.WAKE_WORD_DETECTED:
-                await self._transition_to_listening(context)
-            case _:
-                self.logger.debug("Ignoring event %s in Idle state", event.value)
+        handler = self._event_handlers.get(event)
+        if handler:
+            await handler(context)
+
+    async def _handle_wake_word(self, context: VoiceAssistantContext) -> None:
+        await self._transition_to_listening(context)
 
     async def _start_wake_word_detection(self, context: VoiceAssistantContext) -> None:
         self.logger.debug("Starting wake word detection task")
@@ -42,7 +46,7 @@ class IdleState(AssistantState):
         self._wake_task.cancel()
         try:
             await self._wake_task
-        except asyncio.CancelledError:  # NOSONAR
+        except asyncio.CancelledError:
             pass
         finally:
             self._wake_task = None

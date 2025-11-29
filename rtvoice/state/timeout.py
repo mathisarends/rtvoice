@@ -9,6 +9,10 @@ class TimeoutState(AssistantState):
     def __init__(self):
         super().__init__(StateType.TIMEOUT)
         self.timeout_service = None
+        self._event_handlers = {
+            VoiceAssistantEvent.USER_STARTED_SPEAKING: self._handle_user_started_speaking,
+            VoiceAssistantEvent.TIMEOUT_OCCURRED: self._handle_timeout,
+        }
 
     async def on_enter(self, context: VoiceAssistantContext) -> None:
         if self.timeout_service is None:
@@ -41,27 +45,29 @@ class TimeoutState(AssistantState):
     async def handle(
         self, event: VoiceAssistantEvent, context: VoiceAssistantContext
     ) -> None:
-        match event:
-            case VoiceAssistantEvent.USER_STARTED_SPEAKING:
-                self.logger.info("User started speaking - transitioning to listening")
-                await self._transition_to_listening(context)
-            case VoiceAssistantEvent.TIMEOUT_OCCURRED:
-                self.logger.info(
-                    "Timeout occurred - user did not start speaking within %s seconds",
-                    self.timeout_service.timeout_seconds,
-                )
-                await self.transition_to_idle(context)
-            case _:
-                self.logger.debug("Ignoring event %s in TimeoutState", event.value)
+        handler = self._event_handlers.get(event)
+        if handler:
+            await handler(context)
+
+    async def _handle_user_started_speaking(
+        self, context: VoiceAssistantContext
+    ) -> None:
+        self.logger.info("User started speaking - transitioning to listening")
+        await self._transition_to_listening(context)
+
+    async def _handle_timeout(self, context: VoiceAssistantContext) -> None:
+        self.logger.info(
+            "Timeout occurred - user did not start speaking within %s seconds",
+            self.timeout_service.timeout_seconds,
+        )
+        await self.transition_to_idle(context)
 
     async def _start_timeout_service(self, context: VoiceAssistantContext) -> None:
-        """Start the timeout service"""
         self.logger.debug("Starting timeout service")
         if self.timeout_service:
             await self.timeout_service.start_timeout()
 
     async def _stop_timeout_service(self, context: VoiceAssistantContext) -> None:
-        """Stop the timeout service"""
         self.logger.debug("Stopping timeout service")
         if self.timeout_service:
             await self.timeout_service.stop_timeout()

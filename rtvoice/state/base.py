@@ -5,6 +5,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from rtvoice.shared.logging_mixin import LoggingMixin
+from rtvoice.state.models import StateType
 
 if TYPE_CHECKING:
     from rtvoice.state.context import VoiceAssistantContext
@@ -48,25 +49,10 @@ class VoiceAssistantEvent(Enum):
         return self.value
 
 
-class StateType(Enum):
-    IDLE = "idle"
-    TIMEOUT = "timeout"
-    LISTENING = "listening"
-    RESPONDING = "responding"
-    TOOL_CALLING = "tool_calling"
-    ERROR = "error"
-
-    def __str__(self) -> str:
-        return self.value
-
-
 class AssistantState(ABC, LoggingMixin):
-    def __init__(self, state_type: StateType):
-        self._state_type = state_type
-
     @property
-    def state_type(self) -> StateType:
-        return self._state_type
+    @abstractmethod
+    def state_type(self) -> StateType: ...
 
     async def on_enter(self, context: VoiceAssistantContext) -> None:
         pass

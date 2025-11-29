@@ -1,13 +1,17 @@
-from rtvoice.state.base import AssistantState, StateType, VoiceAssistantEvent
+from rtvoice.state.base import AssistantState, VoiceAssistantEvent
 from rtvoice.state.context import VoiceAssistantContext
+from rtvoice.state.models import StateType
 
 
 class ListeningState(AssistantState):
     def __init__(self):
-        super().__init__(StateType.LISTENING)
         self._event_handlers = {
             VoiceAssistantEvent.USER_SPEECH_ENDED: self._handle_speech_ended,
         }
+
+    @property
+    def state_type(self) -> StateType:
+        return StateType.LISTENING
 
     async def on_enter(self, context: VoiceAssistantContext) -> None:
         self.logger.info("Entering Listening state - user is speaking")

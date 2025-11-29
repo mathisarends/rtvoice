@@ -1,15 +1,19 @@
-from rtvoice.state.base import AssistantState, StateType, VoiceAssistantEvent
+from rtvoice.state.base import AssistantState, VoiceAssistantEvent
 from rtvoice.state.context import VoiceAssistantContext
+from rtvoice.state.models import StateType
 
 
 class ToolCallingState(AssistantState):
     def __init__(self):
-        super().__init__(StateType.TOOL_CALLING)
         self._event_handlers = {
             VoiceAssistantEvent.ASSISTANT_RECEIVED_TOOL_CALL_RESULT: self._handle_tool_call_result,
             VoiceAssistantEvent.ASSISTANT_COMPLETED_MCP_TOOL_CALL_RESULT: self._handle_mcp_tool_call_completed,
             VoiceAssistantEvent.ASSISTANT_FAILED_MCP_TOOL_CALL: self._handle_mcp_tool_call_failed,
         }
+
+    @property
+    def state_type(self) -> StateType:
+        return StateType.TOOL_CALLING
 
     async def handle(
         self, event: VoiceAssistantEvent, context: VoiceAssistantContext

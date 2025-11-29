@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from rtvoice.state.base import AssistantState, StateType, VoiceAssistantEvent
+from rtvoice.state.base import AssistantState, VoiceAssistantEvent
+from rtvoice.state.models import StateType
 
 if TYPE_CHECKING:
     from rtvoice.state.base import VoiceAssistantContext
@@ -11,11 +12,14 @@ if TYPE_CHECKING:
 
 class IdleState(AssistantState):
     def __init__(self):
-        super().__init__(StateType.IDLE)
         self._wake_task: asyncio.Task | None = None
         self._event_handlers = {
             VoiceAssistantEvent.WAKE_WORD_DETECTED: self._handle_wake_word,
         }
+
+    @property
+    def state_type(self) -> StateType:
+        return StateType.IDLE
 
     async def on_enter(self, context: VoiceAssistantContext) -> None:
         await self._start_wake_word_detection(context)

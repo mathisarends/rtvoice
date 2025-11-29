@@ -1,12 +1,12 @@
 import asyncio
 
-from rtvoice.state.base import AssistantState, StateType, VoiceAssistantEvent
+from rtvoice.state.base import AssistantState, VoiceAssistantEvent
 from rtvoice.state.context import VoiceAssistantContext
+from rtvoice.state.models import StateType
 
 
 class RespondingState(AssistantState):
     def __init__(self):
-        super().__init__(StateType.RESPONDING)
         self._wake_word_task = None
         self._event_handlers = {
             VoiceAssistantEvent.ASSISTANT_STARTED_TOOL_CALL: self._handle_tool_call,
@@ -15,6 +15,10 @@ class RespondingState(AssistantState):
             VoiceAssistantEvent.ASSISTANT_SPEECH_INTERRUPTED: self._handle_speech_interrupted,
             VoiceAssistantEvent.WAKE_WORD_DETECTED: self._handle_wake_word,
         }
+
+    @property
+    def state_type(self) -> StateType:
+        return StateType.RESPONDING
 
     async def on_enter(self, context: VoiceAssistantContext) -> None:
         self.logger.info(
@@ -73,7 +77,7 @@ class RespondingState(AssistantState):
             self._wake_word_task.cancel()
             try:
                 await self._wake_word_task
-            except asyncio.CancelledError:  # NOSONAR
+            except asyncio.CancelledError:
                 pass
             finally:
                 self._wake_word_task = None

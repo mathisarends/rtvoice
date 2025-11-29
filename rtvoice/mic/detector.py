@@ -9,7 +9,7 @@ from rtvoice.state.base import VoiceAssistantEvent
 
 
 class SpeechDetector(LoggingMixin):
-    DEFAULT_THRESHOLD = 40.0
+    DEFAULT_THRESHOLD = 60.0
     DEFAULT_CHECK_INTERVAL = 0.1
 
     def __init__(

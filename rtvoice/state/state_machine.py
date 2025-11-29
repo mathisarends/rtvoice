@@ -109,9 +109,7 @@ class VoiceAssistantStateMachine(LoggingMixin):
     async def ensure_realtime_audio_channel_connected(self) -> None:
         if not self._is_realtime_session_active():
             self.logger.info("Realtime session not active, starting new session...")
-            success = await self.start_realtime_session()
-            if not success:
-                raise RuntimeError("Failed to start realtime session")
+            await self.start_realtime_session()
 
         if not self._context.audio_capture.is_active:
             self._context.audio_capture.start_stream()

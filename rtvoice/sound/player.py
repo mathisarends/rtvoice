@@ -36,3 +36,6 @@ class AudioPlayer(LoggingMixin):
 
     def play_error_sound(self) -> None:
         self._strategy.play_error_sound()
+
+    def add_audio_chunk(self, base64_audio: str) -> None:
+        self._strategy.add_audio_chunk(base64_audio)

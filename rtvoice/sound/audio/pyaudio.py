@@ -11,7 +11,6 @@ import numpy as np
 import pyaudio
 import pygame
 
-from rtvoice.events import EventBus
 from rtvoice.sound.audio.strategy import AudioStrategy
 from rtvoice.sound.models import AudioConfig, SoundFile
 from rtvoice.state.base import VoiceAssistantEvent
@@ -23,7 +22,6 @@ class PyAudioStrategy(AudioStrategy):
 
     def __init__(
         self,
-        event_bus: EventBus | None = None,
         config: AudioConfig | None = None,
         sounds_dir: str | Path | None = None,
     ):
@@ -40,7 +38,6 @@ class PyAudioStrategy(AudioStrategy):
         self._state_lock = threading.Lock()
         self._is_playing = False
 
-        self.event_bus = event_bus
         self.volume = 1.0
 
         self._sounds_dir = Path(sounds_dir) if sounds_dir else self.DEFAULT_SOUNDS_DIR

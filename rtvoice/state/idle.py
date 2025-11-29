@@ -21,6 +21,7 @@ class IdleState(AssistantState):
         return StateType.IDLE
 
     async def on_enter(self, context: VoiceAssistantContext) -> None:
+        await self._state_machine.close_realtime_session()
         await self._start_wake_word_detection(context)
 
     async def on_exit(self, context: VoiceAssistantContext) -> None:

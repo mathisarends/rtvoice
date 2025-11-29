@@ -20,6 +20,7 @@ from rtvoice.shared.logging_mixin import LoggingMixin
 from rtvoice.sound import AudioPlayer, SoundEventHandler
 from rtvoice.sound.audio import AudioStrategy, PyAudioStrategy
 from rtvoice.state.context import VoiceAssistantContext
+from rtvoice.state.state_machine import VoiceAssistantStateMachine
 from rtvoice.tools import SpecialToolParameters, Tools
 from rtvoice.tools.models import SpecialToolParameters as _SpecialToolParameters
 from rtvoice.wake_word import WakeWordListener
@@ -89,6 +90,7 @@ class Agent(LoggingMixin):
         self._sound_event_handler = self._create_sound_event_handler()
         self._realtime_client = self._create_realtime_client()
         self._context = self._create_context()
+        self._state_machine = VoiceAssistantStateMachine(self._context)
 
         self._running = False
         self._shutdown_event = asyncio.Event()
@@ -102,7 +104,7 @@ class Agent(LoggingMixin):
             self.logger.info("Starting Voice Assistant")
             self._running = True
 
-            await self._context.run()
+            await self._state_machine.run()
 
             while self._running:
                 try:
@@ -131,7 +133,7 @@ class Agent(LoggingMixin):
         self.logger.info("Cleaning up all services...")
 
         cleanup_tasks = {
-            "state_machine": self._cleanup_state_machine(),
+            "state_machine": self._state_machine.stop(),
             "wake_word": self._cleanup_wake_word_service(),
             "sound": self._cleanup_sound_service(),
         }
@@ -145,9 +147,6 @@ class Agent(LoggingMixin):
                 )
 
         self.logger.info("All services cleaned up")
-
-    async def _cleanup_state_machine(self) -> None:
-        await self._context.state.on_exit(self._context)
 
     async def _cleanup_wake_word_service(self) -> None:
         if self._wake_word_listener:

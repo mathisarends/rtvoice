@@ -27,11 +27,9 @@ class TimeoutState(IdleTimeoutMixin, AssistantState):
             on_timeout=VoiceAssistantEvent.TIMEOUT_OCCURRED,
             timeout_name="user_speech_timeout",
         )
-        await self._start_audio_detection(context)
 
     async def on_exit(self, context: VoiceAssistantContext) -> None:
         await self._stop_idle_timeout()
-        await self._stop_audio_detection(context)
 
         if self._state_machine.state.state_type == StateType.IDLE:
             context.event_bus.publish_sync(VoiceAssistantEvent.IDLE_TRANSITION)
@@ -56,11 +54,3 @@ class TimeoutState(IdleTimeoutMixin, AssistantState):
             "Timeout occurred - user did not start speaking within 10 seconds"
         )
         await self._transition_to_idle()
-
-    async def _start_audio_detection(self, context: VoiceAssistantContext) -> None:
-        self.logger.debug("Starting audio detection for speech detection")
-        await context.speech_detector.start_monitoring()
-
-    async def _stop_audio_detection(self, context: VoiceAssistantContext) -> None:
-        self.logger.debug("Stopping audio detection")
-        await context.speech_detector.stop_monitoring()

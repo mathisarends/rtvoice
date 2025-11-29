@@ -19,3 +19,9 @@ class VoiceAssistantContext:
     audio_player: AudioPlayer
     event_bus: EventBus
     realtime_client: RealtimeClient
+
+    async def start_audio_detection(self) -> None:
+        await self.speech_detector.start_monitoring()
+
+    async def stop_audio_detection(self) -> None:
+        await self.speech_detector.stop_monitoring()

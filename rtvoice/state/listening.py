@@ -1,5 +1,3 @@
-import asyncio
-
 from rtvoice.mic.inactivity_timer import UserSpeechInactivityTimer
 from rtvoice.state.base import AssistantState
 from rtvoice.state.context import VoiceAssistantContext
@@ -17,8 +15,8 @@ class ListeningState(AssistantState):
         )
         self._event_handlers = {
             VoiceAssistantEvent.USER_SPEECH_ENDED: self._handle_speech_ended,
+            VoiceAssistantEvent.IDLE_TRANSITION: self._handle_idle_transition,
         }
-        self._context: VoiceAssistantContext | None = None
 
     @property
     def state_type(self) -> StateType:
@@ -26,19 +24,18 @@ class ListeningState(AssistantState):
 
     async def on_enter(self, context: VoiceAssistantContext) -> None:
         self.logger.info("Entering Listening state - user is speaking")
-        self._context = context
         context.audio_player.clear_queue_and_stop_chunks()
 
         await self._state_machine.ensure_realtime_audio_channel_connected()
 
-        await self._user_speech_inactivity_timer.start(
-            context,
-            on_timeout=self._handle_idle_transition,
-        )
+        await self._user_speech_inactivity_timer.start(context)
 
     async def on_exit(self, context: VoiceAssistantContext) -> None:
         await self._user_speech_inactivity_timer.stop()
-        self._context = None
+
+        if self._state_machine.is_transitioning_to_idle_state():
+            self.logger.info("Closing realtime connection due to idle transition")
+            await self._state_machine.close_realtime_session()
 
     async def handle(
         self, event: VoiceAssistantEvent, context: VoiceAssistantContext
@@ -51,10 +48,5 @@ class ListeningState(AssistantState):
         self.logger.info("User finished speaking")
         await self._transition_to_responding()
 
-    def _handle_idle_transition(self) -> None:
-        self.logger.warning(
-            "Listening timeout - no speech detected within 10 seconds, returning to idle"
-        )
-        if self._context:
-            asyncio.create_task(self._context.realtime_client.close_connection())
-        asyncio.create_task(self._transition_to_idle())
+    async def _handle_idle_transition(self, context: VoiceAssistantContext) -> None:
+        await self._transition_to_idle()

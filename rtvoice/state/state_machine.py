@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 from rtvoice.shared.logging_mixin import LoggingMixin
 from rtvoice.state.base import VoiceAssistantEvent
 from rtvoice.state.context import VoiceAssistantContext
+from rtvoice.state.models import StateType
 
 if TYPE_CHECKING:
     from rtvoice.state.base import AssistantState
@@ -21,11 +22,9 @@ class VoiceAssistantStateMachine(LoggingMixin):
         self._realtime_task: asyncio.Task | None = None
         self._running = False
 
-        self._setup_event_subscriptions()
+        self._transitioning_to_state_type: StateType | None = None
 
-    @property
-    def state(self) -> AssistantState:
-        return self._state
+        self._setup_event_subscriptions()
 
     @property
     def context(self) -> VoiceAssistantContext:
@@ -55,10 +54,17 @@ class VoiceAssistantStateMachine(LoggingMixin):
             new_state.state_type,
         )
 
+        self._transitioning_to_state_type = new_state.state_type
+
         await self._state.on_exit(self._context)
         self._state = new_state
         self._state.set_state_machine(self)
         await self._state.on_enter(self._context)
+
+        self._transitioning_to_state_type = None
+
+    def is_transitioning_to_idle_state(self) -> bool:
+        return self._transitioning_to_state_type == StateType.IDLE
 
     def _setup_event_subscriptions(self) -> None:
         for event_type in VoiceAssistantEvent:

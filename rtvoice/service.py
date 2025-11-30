@@ -22,6 +22,7 @@ from rtvoice.sound.audio import AudioStrategy, PyAudioStrategy
 from rtvoice.state.context import VoiceAssistantContext
 from rtvoice.state.state_machine import VoiceAssistantStateMachine
 from rtvoice.tools import SpecialToolParameters, Tools
+from rtvoice.tools.mcp.server import MCPServer
 from rtvoice.tools.models import SpecialToolParameters as _SpecialToolParameters
 from rtvoice.wake_word import WakeWordListener
 from rtvoice.wake_word.models import PorcupineWakeWord
@@ -45,6 +46,7 @@ class Agent(LoggingMixin):
         wake_word: PorcupineWakeWord = PorcupineWakeWord.PICOVOICE,
         wake_word_sensitivity: float = 0.7,
         tools: Tools | None = None,
+        mcp_servers: list[MCPServer] | None = None,
         tool_calling_model: str | None = None,
         model_settings: ModelSettings | None = None,
         voice_settings: VoiceSettings | None = None,
@@ -53,6 +55,7 @@ class Agent(LoggingMixin):
         env: AgentEnv | None = None,
     ):
         self._env = env or AgentEnv()
+        self._mcp_servers = mcp_servers or []
 
         self._model_settings = model_settings or ModelSettings(
             model=model,
@@ -81,11 +84,15 @@ class Agent(LoggingMixin):
 
         self._tools = tools or Tools()
         self._tools.mcp_tools = self._model_settings.mcp_tools
+        self._register_mcp_tools()
 
         self._state_machine = self._create_state_machine()
-
         self._running = False
         self._shutdown_event = asyncio.Event()
+
+    def _register_mcp_tools(self) -> None:
+        for server in self._mcp_servers:
+            self._tools.add_mcp_tools(server.tools)
 
     async def start(self) -> None:
         if self._running:

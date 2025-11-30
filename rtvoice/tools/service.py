@@ -12,22 +12,22 @@ else:
 from rtvoice.shared.logging_mixin import LoggingMixin
 from rtvoice.sound import AudioPlayer
 from rtvoice.state.base import VoiceAssistantEvent
-from rtvoice.tools.models import MCPTool
+from rtvoice.tools.models import FunctionTool, MCPTool
 from rtvoice.tools.registry import ToolRegistry
 from rtvoice.tools.volume_adjustment.service import run_volume_adjustment_agent
 
 
 class Tools(LoggingMixin):
-    def __init__(
-        self,
-        mcp_tools: list[MCPTool] | None = None,
-    ):
+    def __init__(self, mcp_tools: list[MCPTool] | None = None):
         self.mcp_tools = mcp_tools
         self.registry = ToolRegistry(mcp_tools=mcp_tools)
         self._register_default_tools()
 
     def action(self, description: str, **kwargs):
         return self.registry.action(description, **kwargs)
+
+    def add_mcp_tools(self, tools: list[FunctionTool]) -> None:
+        self.registry.add_mcp_tools(tools)
 
     def _register_default_tools(self) -> None:
         @self.registry.action("Get the current local time")

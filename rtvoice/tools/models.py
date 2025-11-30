@@ -56,6 +56,12 @@ class MCPRequireApprovalMode(StrEnum):
 class FunctionParameterProperty(BaseModel):
     type: JsonType
     description: str | None = None
+    items: Self | None = None
+    enum: list[str] | None = None
+    properties: dict[str, Self] | None = None
+    required: list[str] | None = None
+    min_items: int | None = Field(None, alias="minItems")
+    default: Any | None = None
 
 
 class FunctionParameters(BaseModel):

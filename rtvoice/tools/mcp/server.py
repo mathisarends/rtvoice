@@ -1,230 +1,80 @@
-import asyncio
-import json
-from typing import Any
+from contextlib import AsyncExitStack
+from typing import TYPE_CHECKING, Self
+
+from mcp import ClientSession, StdioServerParameters, stdio_client
 
 from rtvoice.shared.logging_mixin import LoggingMixin
-from rtvoice.tools.mcp.models import MCPServerConfig, MCPServerType, MCPToolMetadata
+from rtvoice.tools.mcp.converter import MCPToolConverter
+from rtvoice.tools.models import FunctionTool
+
+if TYPE_CHECKING:
+    from rtvoice.tools.mcp.models import MCPServerConfig
 
 
 class MCPServer(LoggingMixin):
-    def __init__(self, config: MCPServerConfig):
+    def __init__(self, config: "MCPServerConfig"):
         self.config = config
-        self._process: asyncio.subprocess.Process | None = None
-        self._tools: dict[str, MCPToolMetadata] = {}
-        self._request_id = 0
+        self._session: ClientSession | None = None
+        self._tools: list[FunctionTool] = []
+        self._converter = MCPToolConverter()
+        self._exit_stack = AsyncExitStack()  # ✅ Verwaltet alle Context Manager
+
+    async def __aenter__(self) -> Self:
+        await self.start()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.stop()
 
     async def start(self) -> None:
-        if self.config.type != MCPServerType.STDIO:
-            raise ValueError(f"Only stdio servers supported, got {self.config.type}")
+        server_params = StdioServerParameters(
+            command=self.config.command,
+            args=self.config.args,
+            env=self.config.env,
+        )
 
-        self.config.validate_config()
+        read_stream, write_stream = await self._exit_stack.enter_async_context(
+            stdio_client(server_params)
+        )
+
+        self._session = await self._exit_stack.enter_async_context(
+            ClientSession(read_stream, write_stream)
+        )
+
+        await self._session.initialize()
+
+        self._tools = await self._converter.convert_from_session(
+            self._session, self.config.name
+        )
 
         self.logger.info(
-            "Starting MCP server '%s': %s %s",
-            self.config.name,
-            self.config.command,
-            " ".join(self.config.args),
+            f"MCP server '{self.config.name}' started with {len(self._tools)} tools"
         )
-
-        try:
-            self._process = await asyncio.create_subprocess_exec(
-                self.config.command,
-                *self.config.args,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=self.config.env or None,
-            )
-
-            await self._initialize()
-            await self._discover_tools()
-
-            self.logger.info(
-                "MCP server '%s' started with %d tools",
-                self.config.name,
-                len(self._tools),
-            )
-
-        except Exception as e:
-            self.logger.exception("Failed to start MCP server '%s'", self.config.name)
-            await self.stop()
-            raise RuntimeError(
-                f"Failed to start MCP server '{self.config.name}': {e}"
-            ) from e
 
     async def stop(self) -> None:
-        if not self._process:
-            return
+        # ✅ Schließt alle Context Manager in umgekehrter Reihenfolge
+        await self._exit_stack.aclose()
 
-        self.logger.info("Stopping MCP server '%s'", self.config.name)
-
-        try:
-            self._process.terminate()
-            await asyncio.wait_for(self._process.wait(), timeout=5.0)
-        except TimeoutError:
-            self.logger.warning(
-                "MCP server '%s' did not terminate, killing", self.config.name
-            )
-            self._process.kill()
-            await self._process.wait()
-        except Exception as e:
-            self.logger.exception(
-                "Error stopping MCP server '%s'", self.config.name, exc_info=e
-            )
-
-        self._process = None
-        self._tools.clear()
-
-    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
-        if tool_name not in self._tools:
-            raise ValueError(
-                f"Tool '{tool_name}' not found on server '{self.config.name}'"
-            )
-
-        request = {
-            "jsonrpc": "2.0",
-            "id": self._next_request_id(),
-            "method": "tools/call",
-            "params": {"name": tool_name, "arguments": arguments},
-        }
-
-        response = await self._send_request(request)
-
-        if "error" in response:
-            error = response["error"]
-            raise RuntimeError(
-                f"MCP tool error: {error.get('message', 'Unknown error')}"
-            )
-
-        return response.get("result")
-
-    async def _initialize(self) -> None:
-        request = {
-            "jsonrpc": "2.0",
-            "id": self._next_request_id(),
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {"tools": {}},
-                "clientInfo": {"name": "rtvoice", "version": "1.0.0"},
-            },
-        }
-
-        response = await self._send_request(request)
-
-        if "error" in response:
-            raise RuntimeError(f"Failed to initialize: {response['error']}")
-
-        # Send initialized notification
-        notification = {"jsonrpc": "2.0", "method": "notifications/initialized"}
-
-        await self._send_notification(notification)
-
-    async def _discover_tools(self) -> None:
-        request = {
-            "jsonrpc": "2.0",
-            "id": self._next_request_id(),
-            "method": "tools/list",
-        }
-
-        response = await self._send_request(request)
-
-        if "error" in response:
-            raise RuntimeError(f"Failed to list tools: {response['error']}")
-
-        tools = response.get("result", {}).get("tools", [])
-
-        for tool in tools:
-            metadata = MCPToolMetadata(
-                server_name=self.config.name,
-                tool_name=tool["name"],
-                description=tool.get("description", ""),
-                input_schema=tool.get("inputSchema", {}),
-            )
-            self._tools[tool["name"]] = metadata
-
-        self.logger.debug(
-            "Discovered tools from '%s': %s",
-            self.config.name,
-            list(self._tools.keys()),
-        )
-
-    async def _send_request(self, request: dict[str, Any]) -> dict[str, Any]:
-        if not self._process or not self._process.stdin or not self._process.stdout:
-            raise RuntimeError("MCP server not running")
-
-        request_line = json.dumps(request) + "\n"
-        self._process.stdin.write(request_line.encode())
-        await self._process.stdin.drain()
-
-        try:
-            response_line = await asyncio.wait_for(
-                self._process.stdout.readline(), timeout=self.config.timeout
-            )
-        except TimeoutError as e:
-            raise RuntimeError(
-                f"Timeout waiting for response from MCP server '{self.config.name}'"
-            ) from e
-
-        if not response_line:
-            raise RuntimeError(f"MCP server '{self.config.name}' closed connection")
-
-        return json.loads(response_line.decode())
-
-    async def _send_notification(self, notification: dict[str, Any]) -> None:
-        if not self._process or not self._process.stdin:
-            raise RuntimeError("MCP server not running")
-
-        notification_line = json.dumps(notification) + "\n"
-        self._process.stdin.write(notification_line.encode())
-        await self._process.stdin.drain()
-
-    def _next_request_id(self) -> int:
-        self._request_id += 1
-        return self._request_id
+        self.logger.info(f"MCP server '{self.config.name}' stopped")
 
     @property
-    def tools(self) -> dict[str, MCPToolMetadata]:
-        return self._tools.copy()
+    def tools(self) -> list[FunctionTool]:
+        return self._tools
 
+    async def call_tool(self, tool_name: str, arguments: dict) -> str:
+        if not self._session:
+            raise RuntimeError(f"MCP server '{self.config.name}' is not running")
 
-class MCPServerManager(LoggingMixin):
-    def __init__(self, configs: list[MCPServerConfig] | None = None):
-        self._configs = configs or []
-        self._servers: dict[str, MCPServer] = {}
+        # Remove server prefix from tool name
+        original_name = tool_name.replace(f"{self.config.name}__", "")
 
-    async def start_all(self) -> None:
-        for config in self._configs:
-            try:
-                server = MCPServer(config)
-                await server.start()
-                self._servers[config.name] = server
-            except Exception as e:
-                self.logger.exception(
-                    "Failed to start MCP server '%s', continuing with others",
-                    config.name,
-                    exc_info=e,
-                )
+        result = await self._session.call_tool(original_name, arguments)
 
-    async def stop_all(self) -> None:
-        tasks = [server.stop() for server in self._servers.values()]
-        await asyncio.gather(*tasks, return_exceptions=True)
-        self._servers.clear()
+        if result.content:
+            return str(
+                result.content[0].text
+                if hasattr(result.content[0], "text")
+                else result.content[0]
+            )
 
-    async def call_tool(
-        self, server_name: str, tool_name: str, arguments: dict[str, Any]
-    ) -> Any:
-        server = self._servers.get(server_name)
-        if not server:
-            raise ValueError(f"MCP server '{server_name}' not found")
-
-        return await server.call_tool(tool_name, arguments)
-
-    def get_all_tools(self) -> dict[str, MCPToolMetadata]:
-        all_tools = {}
-        for server in self._servers.values():
-            for tool_name, metadata in server.tools.items():
-                # Prefix with server name to avoid conflicts
-                qualified_name = f"{metadata.server_name}.{tool_name}"
-                all_tools[qualified_name] = metadata
-        return all_tools
+        return ""

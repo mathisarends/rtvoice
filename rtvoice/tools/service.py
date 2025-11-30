@@ -48,7 +48,6 @@ class Tools(LoggingMixin):
                 "internally retrieves the current speed and adjusts it relative "
                 "to the current rate."
             ),
-            loading_message="Adjusting response speed...",
             response_instruction=(
                 "State that the response speed has been adjusted and name the "
                 "new speed in percent (e.g. 1.5 = 150%)"

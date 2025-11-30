@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "aiohttp>=3.12.15",
+    "fastmcp>=2.13.1",
     "numpy>=2.3.5",
     "openai-agents>=0.2.11",
     "pvporcupine>=3.0.5",

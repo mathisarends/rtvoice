@@ -29,7 +29,7 @@ class AssistantState(ABC, LoggingMixin):
 
     @abstractmethod
     async def handle(
-        self, event: VoiceAssistantEvent, context: VoiceAssistantContext
+        self, event: VoiceAssistantEvent, context: VoiceAssistantContext | None = None
     ) -> None:
         pass
 

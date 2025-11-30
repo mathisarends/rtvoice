@@ -37,16 +37,14 @@ class ListeningState(AssistantState):
             self.logger.info("Closing realtime connection due to idle transition")
             await self._state_machine.close_realtime_session()
 
-    async def handle(
-        self, event: VoiceAssistantEvent, context: VoiceAssistantContext
-    ) -> None:
+    async def handle(self, event: VoiceAssistantEvent) -> None:
         handler = self._event_handlers.get(event)
         if handler:
-            await handler(context)
+            await handler()
 
-    async def _handle_speech_ended(self, context: VoiceAssistantContext) -> None:
+    async def _handle_speech_ended(self) -> None:
         self.logger.info("User finished speaking")
         await self._transition_to_responding()
 
-    async def _handle_idle_transition(self, context: VoiceAssistantContext) -> None:
+    async def _handle_idle_transition(self) -> None:
         await self._transition_to_idle()

@@ -30,6 +30,7 @@ class WebSocketManager(LoggingMixin):
         self._running = False
         self._event_bus = event_bus
         self._event_dispatcher = EventDispatcher(self._event_bus)
+        self._connection_lock = asyncio.Lock()
 
     @classmethod
     def from_model(
@@ -45,27 +46,35 @@ class WebSocketManager(LoggingMixin):
         return cls(ws_url, headers, event_bus)
 
     async def create_connection(self) -> None:
-        self.logger.info("Establishing connection to %s...", self._websocket_url)
+        async with self._connection_lock:
+            self.logger.info("Establishing connection to %s...", self._websocket_url)
 
-        self._ws = websocket.WebSocketApp(
-            self._websocket_url,
-            header=self._headers,
-            on_open=self._on_open,
-            on_message=self._on_message,
-            on_error=self._on_error,
-            on_close=self._on_close,
-        )
+            if self._ws:
+                self.logger.debug("Closing existing connection before creating new one")
+                await self._close_internal()
 
-        self._running = True
-        ws_thread = threading.Thread(target=self._ws.run_forever, daemon=True)
-        ws_thread.start()
+            self._connection_event.clear()
 
-        connected = await asyncio.get_event_loop().run_in_executor(
-            None, lambda: self._connection_event.wait(timeout=10)
-        )
+            self._ws = websocket.WebSocketApp(
+                self._websocket_url,
+                header=self._headers,
+                on_open=self._on_open,
+                on_message=self._on_message,
+                on_error=self._on_error,
+                on_close=self._on_close,
+            )
 
-        if not (connected and self._connected):
-            raise RuntimeError("Failed to establish connection within timeout")
+            self._running = True
+            ws_thread = threading.Thread(target=self._ws.run_forever, daemon=True)
+            ws_thread.start()
+
+            connected = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: self._connection_event.wait(timeout=10)
+            )
+
+            if not (connected and self._connected):
+                self._ws = None
+                raise RuntimeError("Failed to establish connection within timeout")
 
     async def send_message(self, message: dict[str, Any] | BaseModel) -> None:
         if not self._connected or not self._ws:
@@ -84,10 +93,15 @@ class WebSocketManager(LoggingMixin):
         )
 
     async def close(self) -> None:
+        async with self._connection_lock:
+            await self._close_internal()
+
+    async def _close_internal(self) -> None:
         if not self._ws:
             return
 
         self.logger.info("Closing connection...")
+
         self._running = False
         self._connected = False
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from typing import TYPE_CHECKING, Any
 
 from rtvoice.shared.logging_mixin import LoggingMixin
@@ -71,7 +72,42 @@ class VoiceAssistantStateMachine(LoggingMixin):
             self._context.event_bus.subscribe(event_type, self._handle_event)
 
     async def _handle_event(self, event: VoiceAssistantEvent, data: Any = None) -> None:
-        await self._state.handle(event, self._context)
+        result = self._call_handler_with_appropriate_args(
+            self._state.handle, event, self._context, data
+        )
+        if asyncio.iscoroutine(result):
+            await result
+
+    def _call_handler_with_appropriate_args(
+        self,
+        handler: Any,
+        event: VoiceAssistantEvent,
+        context: VoiceAssistantContext,
+        data: Any = None,
+    ) -> Any:
+        sig = inspect.signature(handler)
+        params = list(sig.parameters.values())
+
+        if params and params[0].name == "self":
+            params = params[1:]
+
+        param_count = len(params)
+
+        if param_count == 0:
+            return handler()
+        elif param_count == 1:
+            # Single parameter - prioritize event over context
+            return handler(event)
+        elif param_count == 2:
+            # Two parameters - event and context
+            return handler(event, context)
+        else:
+            # Three or more parameters - event, context, and data
+            return (
+                handler(event, context, data)
+                if data is not None
+                else handler(event, context)
+            )
 
     async def start_realtime_session(self) -> bool:
         if self._is_realtime_session_active():

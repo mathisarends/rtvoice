@@ -36,18 +36,14 @@ class TimeoutState(AssistantState):
             self.logger.info("Closing realtime connection due to timeout")
             await self._state_machine.close_realtime_session()
 
-    async def handle(
-        self, event: VoiceAssistantEvent, context: VoiceAssistantContext
-    ) -> None:
+    async def handle(self, event: VoiceAssistantEvent) -> None:
         handler = self._event_handlers.get(event)
         if handler:
-            await handler(context)
+            await handler()
 
-    async def _handle_user_started_speaking(
-        self, context: VoiceAssistantContext
-    ) -> None:
+    async def _handle_user_started_speaking(self) -> None:
         self.logger.info("User started speaking - transitioning to listening")
         await self._transition_to_listening()
 
-    async def _handle_idle_transition(self, context: VoiceAssistantContext) -> None:
+    async def _handle_idle_transition(self) -> None:
         await self._transition_to_idle()

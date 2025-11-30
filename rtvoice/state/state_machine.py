@@ -57,7 +57,7 @@ class VoiceAssistantStateMachine(LoggingMixin):
 
         await self._state.on_exit(self._context)
         self._state = new_state
-        self._state.set_state_machine(self)  # Set reference for new state
+        self._state.set_state_machine(self)
         await self._state.on_enter(self._context)
 
     def _setup_event_subscriptions(self) -> None:

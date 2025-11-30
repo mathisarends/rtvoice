@@ -6,33 +6,27 @@ from rtvoice.state.context import VoiceAssistantContext
 from rtvoice.state.events import VoiceAssistantEvent
 
 
-# TODO: Name should be somethin like UserInactivityTimeoutMixin
-class IdleTimeoutMixin(LoggingMixin):
-    _TIMEOUT_SECONDS = 10.0
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+class UserSpeechInactivityTimer(LoggingMixin):
+    def __init__(self, timeout_seconds: float = 10.0):
+        self._timeout_seconds = timeout_seconds
         self._timeout_task: asyncio.Task | None = None
 
-    async def _start_idle_timeout(
+    async def start(
         self,
         context: VoiceAssistantContext,
         on_timeout: Callable[[VoiceAssistantContext], None] | VoiceAssistantEvent,
-        timeout_name: str = "timeout",
     ) -> None:
-        self.logger.debug(
-            "Starting %s timer (%.1f seconds)", timeout_name, self._TIMEOUT_SECONDS
-        )
+        self.logger.debug("Starting timer (%.1f seconds)", self._timeout_seconds)
         self._timeout_task = asyncio.create_task(
-            self._timeout_loop(context, on_timeout, timeout_name),
-            name=f"{timeout_name}_timer",
+            self._timeout_loop(context, on_timeout),
+            name="user_speech_inactivity_timer",
         )
 
-    async def _stop_idle_timeout(self) -> None:
+    async def stop(self) -> None:
         if self._timeout_task is None or self._timeout_task.done():
             return
 
-        self.logger.debug("Stopping timeout timer")
+        self.logger.debug("Stopping timer")
         self._timeout_task.cancel()
         try:
             await self._timeout_task
@@ -45,11 +39,10 @@ class IdleTimeoutMixin(LoggingMixin):
         self,
         context: VoiceAssistantContext,
         on_timeout: Callable[[VoiceAssistantContext], None] | VoiceAssistantEvent,
-        timeout_name: str,
     ) -> None:
         try:
-            await asyncio.sleep(self._TIMEOUT_SECONDS)
-            self.logger.warning("%s timeout occurred", timeout_name.capitalize())
+            await asyncio.sleep(self._timeout_seconds)
+            self.logger.warning("Timeout occurred")
 
             if isinstance(on_timeout, VoiceAssistantEvent):
                 context.event_bus.publish_sync(on_timeout)
@@ -57,5 +50,5 @@ class IdleTimeoutMixin(LoggingMixin):
                 await on_timeout(context)
 
         except asyncio.CancelledError:
-            self.logger.debug("%s timeout cancelled", timeout_name.capitalize())
+            self.logger.debug("Timeout cancelled")
             raise

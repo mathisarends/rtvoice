@@ -1,13 +1,18 @@
+from rtvoice.mic.inactivity_timer import UserSpeechInactivityTimer
 from rtvoice.state.base import AssistantState
 from rtvoice.state.context import VoiceAssistantContext
 from rtvoice.state.events import VoiceAssistantEvent
-from rtvoice.state.mixins import IdleTimeoutMixin
 from rtvoice.state.models import StateType
 
 
-class ListeningState(IdleTimeoutMixin, AssistantState):
-    def __init__(self):
+class ListeningState(AssistantState):
+    def __init__(
+        self, user_speech_inactivity_timer: UserSpeechInactivityTimer | None = None
+    ):
         super().__init__()
+        self._user_speech_inactivity_timer = (
+            user_speech_inactivity_timer or UserSpeechInactivityTimer()
+        )
         self._event_handlers = {
             VoiceAssistantEvent.USER_SPEECH_ENDED: self._handle_speech_ended,
             VoiceAssistantEvent.IDLE_TRANSITION: self._handle_idle_transition,
@@ -23,14 +28,13 @@ class ListeningState(IdleTimeoutMixin, AssistantState):
 
         await self._state_machine.ensure_realtime_audio_channel_connected()
 
-        await self._start_idle_timeout(
+        await self._user_speech_inactivity_timer.start(
             context,
             on_timeout=VoiceAssistantEvent.IDLE_TRANSITION,
-            timeout_name="listening_timeout",
         )
 
     async def on_exit(self, context: VoiceAssistantContext) -> None:
-        await self._stop_idle_timeout()
+        await self._user_speech_inactivity_timer.stop()
 
     async def handle(
         self, event: VoiceAssistantEvent, context: VoiceAssistantContext

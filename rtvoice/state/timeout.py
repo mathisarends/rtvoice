@@ -1,12 +1,17 @@
+from rtvoice.mic.inactivity_timer import UserSpeechInactivityTimer
 from rtvoice.state.base import AssistantState, VoiceAssistantEvent
 from rtvoice.state.context import VoiceAssistantContext
-from rtvoice.state.mixins import IdleTimeoutMixin
 from rtvoice.state.models import StateType
 
 
-class TimeoutState(IdleTimeoutMixin, AssistantState):
-    def __init__(self):
+class TimeoutState(AssistantState):
+    def __init__(
+        self, user_speech_inactivity_timer: UserSpeechInactivityTimer | None = None
+    ):
         super().__init__()
+        self._user_speech_inactivity_timer = (
+            user_speech_inactivity_timer or UserSpeechInactivityTimer()
+        )
         self._event_handlers = {
             VoiceAssistantEvent.USER_STARTED_SPEAKING: self._handle_user_started_speaking,
             VoiceAssistantEvent.TIMEOUT_OCCURRED: self._handle_timeout,
@@ -22,14 +27,13 @@ class TimeoutState(IdleTimeoutMixin, AssistantState):
         )
         await self._state_machine.ensure_realtime_audio_channel_connected()
 
-        await self._start_idle_timeout(
+        await self._user_speech_inactivity_timer.start(
             context,
             on_timeout=VoiceAssistantEvent.TIMEOUT_OCCURRED,
-            timeout_name="user_speech_timeout",
         )
 
     async def on_exit(self, context: VoiceAssistantContext) -> None:
-        await self._stop_idle_timeout()
+        await self._user_speech_inactivity_timer.stop()
 
         if self._state_machine.state.state_type == StateType.IDLE:
             context.event_bus.publish_sync(VoiceAssistantEvent.IDLE_TRANSITION)

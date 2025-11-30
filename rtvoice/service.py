@@ -14,7 +14,7 @@ from rtvoice.events.schemas import (
     RealtimeModel,
     TranscriptionModel,
 )
-from rtvoice.mic import MicrophoneCapture, SpeechDetector
+from rtvoice.mic import MicrophoneCapture
 from rtvoice.realtime.reatlime_client import RealtimeClient
 from rtvoice.shared.logging_mixin import LoggingMixin
 from rtvoice.sound import AudioPlayer, SoundEventHandler
@@ -142,7 +142,6 @@ class Agent(LoggingMixin):
         event_bus = self._create_event_bus()
         audio_capture = self._create_audio_capture()
         audio_player = self._create_audio_player()
-        speech_detector = self._create_speech_detector(audio_capture, event_bus)
         wake_word_listener = self._create_wake_word_listener(event_bus)
         _ = self._create_sound_event_handler(audio_player, event_bus)
         realtime_client = self._create_realtime_client(
@@ -152,7 +151,6 @@ class Agent(LoggingMixin):
         context = VoiceAssistantContext(
             wake_word_listener=wake_word_listener,
             audio_capture=audio_capture,
-            speech_detector=speech_detector,
             audio_player=audio_player,
             event_bus=event_bus,
             realtime_client=realtime_client,
@@ -170,14 +168,6 @@ class Agent(LoggingMixin):
 
     def _create_audio_player(self) -> AudioPlayer:
         return AudioPlayer(self._voice_settings.playback_strategy)
-
-    def _create_speech_detector(
-        self, audio_capture: MicrophoneCapture, event_bus: EventBus
-    ) -> SpeechDetector:
-        return SpeechDetector(
-            audio_capture=audio_capture,
-            event_bus=event_bus,
-        )
 
     def _create_wake_word_listener(
         self, event_bus: EventBus

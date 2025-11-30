@@ -1,4 +1,4 @@
 from .capture import MicrophoneCapture
-from .detector import SpeechDetector
+from .inactivity_timer import UserSpeechInactivityTimer
 
-__all__ = ["MicrophoneCapture", "SpeechDetector"]
+__all__ = ["MicrophoneCapture", "UserSpeechInactivityTimer"]

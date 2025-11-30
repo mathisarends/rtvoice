@@ -14,7 +14,6 @@ class TimeoutState(AssistantState):
         )
         self._event_handlers = {
             VoiceAssistantEvent.USER_STARTED_SPEAKING: self._handle_user_started_speaking,
-            VoiceAssistantEvent.TIMEOUT_OCCURRED: self._handle_timeout,
         }
 
     @property
@@ -29,7 +28,7 @@ class TimeoutState(AssistantState):
 
         await self._user_speech_inactivity_timer.start(
             context,
-            on_timeout=VoiceAssistantEvent.TIMEOUT_OCCURRED,
+            on_timeout=self._handle_timeout,
         )
 
     async def on_exit(self, context: VoiceAssistantContext) -> None:
@@ -53,8 +52,12 @@ class TimeoutState(AssistantState):
         self.logger.info("User started speaking - transitioning to listening")
         await self._transition_to_listening()
 
-    async def _handle_timeout(self, context: VoiceAssistantContext) -> None:
+    def _handle_timeout(self) -> None:
+        """Called by timer when timeout occurs."""
         self.logger.info(
             "Timeout occurred - user did not start speaking within 10 seconds"
         )
-        await self._transition_to_idle()
+        # Schedule transition in event loop
+        import asyncio
+
+        asyncio.create_task(self._transition_to_idle())

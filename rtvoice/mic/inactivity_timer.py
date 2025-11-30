@@ -1,24 +1,36 @@
 import asyncio
 from collections.abc import Callable
 
+from rtvoice.mic.detector import SpeechDetector
 from rtvoice.shared.logging_mixin import LoggingMixin
 from rtvoice.state.context import VoiceAssistantContext
-from rtvoice.state.events import VoiceAssistantEvent
 
 
 class UserSpeechInactivityTimer(LoggingMixin):
-    def __init__(self, timeout_seconds: float = 10.0):
+    def __init__(
+        self,
+        timeout_seconds: float = 10.0,
+        speech_detector: SpeechDetector | None = None,
+    ):
         self._timeout_seconds = timeout_seconds
+        self._speech_detector = speech_detector
         self._timeout_task: asyncio.Task | None = None
 
     async def start(
         self,
         context: VoiceAssistantContext,
-        on_timeout: Callable[[VoiceAssistantContext], None] | VoiceAssistantEvent,
+        on_timeout: Callable[[], None],
     ) -> None:
         self.logger.debug("Starting timer (%.1f seconds)", self._timeout_seconds)
+
+        if self._speech_detector:
+            await self._speech_detector.start_monitoring(
+                audio_capture=context.audio_capture,
+                on_speech_detected=self._handle_speech_detected,
+            )
+
         self._timeout_task = asyncio.create_task(
-            self._timeout_loop(context, on_timeout),
+            self._timeout_loop(on_timeout),
             name="user_speech_inactivity_timer",
         )
 
@@ -27,6 +39,10 @@ class UserSpeechInactivityTimer(LoggingMixin):
             return
 
         self.logger.debug("Stopping timer")
+
+        if self._speech_detector:
+            await self._speech_detector.stop_monitoring()
+
         self._timeout_task.cancel()
         try:
             await self._timeout_task
@@ -35,19 +51,26 @@ class UserSpeechInactivityTimer(LoggingMixin):
         finally:
             self._timeout_task = None
 
+    def _handle_speech_detected(self) -> None:
+        if self._timeout_task and not self._timeout_task.done():
+            self.logger.debug("Speech detected, resetting timer")
+            self._timeout_task.cancel()
+            self._timeout_task = asyncio.create_task(
+                self._timeout_loop(self._on_timeout_callback),
+                name="user_speech_inactivity_timer",
+            )
+
     async def _timeout_loop(
         self,
-        context: VoiceAssistantContext,
-        on_timeout: Callable[[VoiceAssistantContext], None] | VoiceAssistantEvent,
+        on_timeout: Callable[[], None],
     ) -> None:
         try:
+            self._on_timeout_callback = on_timeout
+
             await asyncio.sleep(self._timeout_seconds)
             self.logger.warning("Timeout occurred")
 
-            if isinstance(on_timeout, VoiceAssistantEvent):
-                context.event_bus.publish_sync(on_timeout)
-            else:
-                await on_timeout(context)
+            on_timeout()
 
         except asyncio.CancelledError:
             self.logger.debug("Timeout cancelled")

@@ -55,7 +55,6 @@ class MicrophoneInput(AudioInputDevice):
             self._audio = None
 
     async def stream_chunks(self) -> AsyncIterator[bytes]:
-        """Yield audio chunks from microphone"""
         while self._active and self._stream:
             chunk = await asyncio.get_event_loop().run_in_executor(
                 None, self._stream.read, self._chunk_size

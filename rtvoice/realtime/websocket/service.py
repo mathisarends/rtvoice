@@ -10,7 +10,7 @@ from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import ConnectionClosed
 
 from rtvoice.events import EventBus
-from rtvoice.realtime.schemas import ServerEvent
+from rtvoice.realtime.schemas import ServerEventAdapter
 from rtvoice.shared.logging import LoggingMixin
 from rtvoice.views import RealtimeModel
 
@@ -100,14 +100,13 @@ class RealtimeWebSocket(LoggingMixin):
             async for message in self._ws:
                 try:
                     data = json.loads(message)
-                    event = ServerEvent.model_validate(data)
+                    event = ServerEventAdapter.validate_python(data)
                     await self._event_bus.dispatch(event)
                 except ValidationError:
                     self.logger.debug(
                         "Skipping unknown event type: %s",
                         data.get("type", "unknown"),
                     )
-                    # Continue with next message
         except ConnectionClosed as e:
             self._is_connected = False
             self.logger.info("Connection closed: %s", e)

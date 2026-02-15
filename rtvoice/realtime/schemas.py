@@ -2,7 +2,7 @@ import json
 from enum import StrEnum
 from typing import Annotated, Any, Literal, Self
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, TypeAdapter, field_validator, model_validator
 
 from rtvoice.views import RealtimeModel
 
@@ -605,3 +605,5 @@ ServerEvent = Annotated[
     | FunctionCallItem,
     Field(discriminator="type"),
 ]
+
+ServerEventAdapter = TypeAdapter(ServerEvent)

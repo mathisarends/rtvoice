@@ -31,5 +31,5 @@ class AudioOutputDevice(ABC):
         pass
 
     @abstractmethod
-    async def write_chunk(self, chunk: bytes) -> None:
+    async def play_chunk(self, chunk: bytes) -> None:
         pass

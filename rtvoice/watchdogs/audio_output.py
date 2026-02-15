@@ -30,4 +30,4 @@ class AudioOutputWatchdog(LoggingMixin):
 
     async def _on_audio_delta(self, event: ResponseOutputAudioDeltaEvent) -> None:
         audio_bytes = base64.b64decode(event.delta)
-        await self._device.write_chunk(audio_bytes)
+        await self._device.play_chunk(audio_bytes)

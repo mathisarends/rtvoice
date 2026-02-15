@@ -46,7 +46,7 @@ class SpeakerOutput(AudioOutputDevice):
             self._audio.terminate()
             self._audio = None
 
-    async def write_chunk(self, chunk: bytes) -> None:
+    async def play_chunk(self, chunk: bytes) -> None:
         if not self._active or not self._stream:
             return
 

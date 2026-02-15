@@ -19,7 +19,6 @@ from rtvoice.watchdogs import (
     MessageTruncationWatchdog,
     RealtimeWatchdog,
     RecordingWatchdog,
-    TranscriptionWatchdog,
     UserInactivityTimeoutWatchdog,
 )
 from rtvoice.websocket import RealtimeWebSocket
@@ -53,15 +52,8 @@ class Agent(LoggingMixin):
             self._event_bus
         )
 
-        # TODO: Write to file system or anything like that (maybe even stream it back?)
-        self._transcription_watchdog = TranscriptionWatchdog(self._event_bus)
-
-        is_recording_configured = recording_output_path is not None
-
-        self._recording_watchdog = (
-            RecordingWatchdog(self._event_bus, recording_output_path)
-            if is_recording_configured
-            else None
+        self._recording_watchdog = RecordingWatchdog(
+            self._event_bus, recording_output_path
         )
 
         # self._audio_watchdog = AudioWatchdog(self._event_bus)

@@ -5,11 +5,8 @@ from typing import Annotated, Any, ClassVar, Union, get_args, get_origin, get_ty
 
 from pydantic import BaseModel
 
-from rtvoice.tools.models import (
-    FunctionParameterProperty,
-    FunctionParameters,
-    SpecialToolParameters,
-)
+from rtvoice.realtime.schemas import FunctionParameterProperty, FunctionParameters
+from rtvoice.tools.views import SpecialToolParameters
 
 
 class ToolSchemaBuilder:

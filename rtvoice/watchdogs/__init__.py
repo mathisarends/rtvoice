@@ -4,7 +4,7 @@ from .mcp import MCPWatchdog
 from .message_truncation import MessageTruncationWatchdog
 from .realtime import RealtimeWatchdog
 from .recording import RecordingWatchdog
-from .tool import ToolWatchdog
+from .tool_calling import ToolCallingWatchdog
 from .transcription import TranscriptionWatchdog
 from .user_inactivity_timeout import UserInactivityTimeoutWatchdog
 
@@ -16,7 +16,7 @@ __all__ = [
     "MessageTruncationWatchdog",
     "RealtimeWatchdog",
     "RecordingWatchdog",
-    "ToolWatchdog",
+    "ToolCallingWatchdog",
     "TranscriptionWatchdog",
     "UserInactivityTimeoutWatchdog",
 ]

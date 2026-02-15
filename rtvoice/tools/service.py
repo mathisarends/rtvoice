@@ -2,8 +2,8 @@ from datetime import datetime
 from typing import Annotated
 
 from rtvoice.events import EventBus
+from rtvoice.realtime.schemas import FunctionTool, MCPTool
 from rtvoice.shared.logging import LoggingMixin
-from rtvoice.tools.models import FunctionTool, MCPTool
 from rtvoice.tools.registry import ToolRegistry
 
 
@@ -11,6 +11,7 @@ class Tools(LoggingMixin):
     def __init__(self, mcp_tools: list[MCPTool] | None = None):
         self.mcp_tools = mcp_tools
         self.registry = ToolRegistry(mcp_tools=mcp_tools)
+
         self._register_default_tools()
 
     def action(self, description: str, **kwargs):

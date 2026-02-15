@@ -10,7 +10,6 @@ from rtvoice.events.views import (
     UserStartedSpeakingEvent,
 )
 from rtvoice.shared.logging import LoggingMixin
-from rtvoice.state.base import VoiceAssistantEvent
 
 
 class UserInactivityTimeoutWatchdog(LoggingMixin):
@@ -25,15 +24,15 @@ class UserInactivityTimeoutWatchdog(LoggingMixin):
 
     def _setup_event_subscriptions(self) -> None:
         self.event_bus.subscribe(
-            VoiceAssistantEvent.USER_SPEECH_ENDED,
+            UserSpeechEndedEvent,
             self._handle_user_speech_ended,
         )
         self.event_bus.subscribe(
-            VoiceAssistantEvent.USER_STARTED_SPEAKING,
+            UserStartedSpeakingEvent,
             self._handle_user_started_speaking,
         )
 
-    def _handle_user_speech_ended(self, _: UserSpeechEndedEvent) -> None:
+    async def _handle_user_speech_ended(self, _: UserSpeechEndedEvent) -> None:
         self._last_speech_time = time.monotonic()
         self._is_monitoring = True
         self.logger.debug(
@@ -44,7 +43,7 @@ class UserInactivityTimeoutWatchdog(LoggingMixin):
         if self._check_task is None or self._check_task.done():
             self._check_task = asyncio.create_task(self._monitor_timeout())
 
-    def _handle_user_started_speaking(self, _: UserStartedSpeakingEvent) -> None:
+    async def _handle_user_started_speaking(self, _: UserStartedSpeakingEvent) -> None:
         self._is_monitoring = False
         self.logger.debug(
             "User started speaking, stopping inactivity timeout monitoring"
@@ -60,9 +59,8 @@ class UserInactivityTimeoutWatchdog(LoggingMixin):
                 "Inactivity timeout occurred after %.1f seconds",
                 self.timeout_seconds,
             )
-            self.event_bus.dispatch(
-                VoiceAssistantEvent.TIMEOUT_OCCURRED,
-                TimeoutOccurredEvent(timeout_seconds=self.timeout_seconds),
+            await self.event_bus.dispatch(
+                TimeoutOccurredEvent(timeout_seconds=self.timeout_seconds)
             )
             self._is_monitoring = False
             break

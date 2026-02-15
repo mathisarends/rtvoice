@@ -26,7 +26,8 @@ class SpeechSpeedUpdateRequestedEvent(BaseModel):
     speech_speed: float
 
 
-# TODO: AgentSpeecInterrupted
+class ConversationItemCreateRequestedEvent(BaseModel):
+    content: str
 
 
 class UserStartedSpeakingEvent(BaseModel):
@@ -91,15 +92,16 @@ class AssistantTranscriptCompletedEvent(BaseModel):
     content_index: int
 
 
-class AssistantStartedToolCallEvent(BaseModel):
-    call_id: str
-    name: str
-    arguments: str
-
-
 class AssistantReceivedToolCallResultEvent(BaseModel):
     call_id: str
     result: Any
+
+
+class ToolCallResultReadyEvent(BaseModel):
+    call_id: str
+    tool_name: str
+    output: str
+    response_instruction: str | None = None
 
 
 class AssistantStartedMCPToolCallEvent(BaseModel):

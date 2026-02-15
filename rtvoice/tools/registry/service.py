@@ -1,7 +1,7 @@
 from collections.abc import Callable
 
-from rtvoice.tools.models import FunctionTool, MCPTool
-from rtvoice.tools.registry.models import Tool
+from rtvoice.realtime.schemas import FunctionTool, MCPTool
+from rtvoice.tools.registry.views import Tool
 from rtvoice.tools.schema import ToolSchemaBuilder
 
 

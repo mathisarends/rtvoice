@@ -2,7 +2,7 @@ import inspect
 from collections.abc import Callable
 from typing import Any
 
-from rtvoice.tools.models import FunctionParameters, FunctionTool
+from rtvoice.realtime.schemas import FunctionParameters, FunctionTool
 
 
 class Tool:

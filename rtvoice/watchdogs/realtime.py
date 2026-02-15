@@ -4,18 +4,21 @@ from rtvoice.events.views import (
     AgentStoppedEvent,
     AssistantCompletedMCPToolCallResultEvent,
     AssistantFailedMCPToolCallEvent,
+    ConversationItemCreateRequestedEvent,
     MessageTruncationRequestedEvent,
     SpeechSpeedUpdateRequestedEvent,
+    ToolCallResultReadyEvent,
 )
 from rtvoice.realtime.schemas import (
+    ConversationItemCreateEvent,
     ConversationItemTruncateEvent,
     ConversationResponseCreateEvent,
     InputAudioBufferAppendEvent,
     RealtimeSessionConfig,
     SessionUpdateEvent,
 )
+from rtvoice.realtime.websocket.service import RealtimeWebSocket
 from rtvoice.shared.logging import LoggingMixin
-from rtvoice.websocket import RealtimeWebSocket
 
 
 class RealtimeWatchdog(LoggingMixin):
@@ -41,6 +44,14 @@ class RealtimeWatchdog(LoggingMixin):
         )
         self._event_bus.subscribe(
             SpeechSpeedUpdateRequestedEvent, self._on_speech_speed_update_requested
+        )
+
+        self._event_bus.subscribe(
+            ConversationItemCreateRequestedEvent,
+            self._on_conversation_item_create_requested,
+        )
+        self._event_bus.subscribe(
+            ToolCallResultReadyEvent, self._on_tool_call_result_ready
         )
 
     def _is_connected(self) -> bool:
@@ -83,8 +94,8 @@ class RealtimeWatchdog(LoggingMixin):
         self, _: AssistantCompletedMCPToolCallResultEvent
     ) -> None:
         self.logger.info("MCP tool call completed - sending response instruction")
-        response_event = ConversationResponseCreateEvent.with_instructions(
-            "MCP tool call has completed successfully. Please process the results "
+        response_event = ConversationResponseCreateEvent.from_instructions(
+            "MCP tool call has completed successfully. Process the results "
             "and provide a response to the user."
         )
         await self._websocket.send(response_event)
@@ -93,7 +104,7 @@ class RealtimeWatchdog(LoggingMixin):
         self, _: AssistantFailedMCPToolCallEvent
     ) -> None:
         self.logger.info("MCP tool call failed - sending error instruction")
-        response_event = ConversationResponseCreateEvent.with_instructions(
+        response_event = ConversationResponseCreateEvent.from_instructions(
             "Something went wrong with the MCP tool call. Please inform the user "
             "about the issue."
         )
@@ -140,3 +151,40 @@ class RealtimeWatchdog(LoggingMixin):
         session_update = SessionUpdateEvent(session=self._session_config)
         await self._websocket.send(session_update)
         self.logger.info("Speech speed updated to %.1f", rounded_speed)
+
+    async def _on_conversation_item_create_requested(
+        self, event: ConversationItemCreateRequestedEvent
+    ) -> None:
+        self.logger.info("Creating conversation item")
+
+        create_event = ConversationResponseCreateEvent.from_instructions(
+            text=event.content
+        )
+
+        await self._websocket.send(create_event)
+
+    async def _on_tool_call_result_ready(self, event: ToolCallResultReadyEvent) -> None:
+        self.logger.info(
+            "Tool call result ready: %s (call_id=%s)",
+            event.tool_name,
+            event.call_id,
+        )
+
+        create_event = ConversationItemCreateEvent.function_call_output(
+            call_id=event.call_id,
+            output=event.output,
+        )
+        await self._websocket.send(create_event)
+
+        if event.response_instruction:
+            response_event = ConversationResponseCreateEvent.from_instructions(
+                event.response_instruction
+            )
+            await self._websocket.send(response_event)
+        else:
+            response_event = ConversationResponseCreateEvent.from_instructions(
+                "The tool call has completed. Process the result and respond to the user."
+            )
+            await self._websocket.send(response_event)
+
+        self.logger.debug("Conversation item created successfully")

@@ -16,6 +16,7 @@ from rtvoice.realtime.schemas import (
     RealtimeSessionConfig,
     ToolChoiceMode,
 )
+from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.logging import LoggingMixin
 from rtvoice.tools import Tools
 from rtvoice.tools.mcp.server import MCPServer
@@ -30,10 +31,10 @@ from rtvoice.watchdogs import (
     MessageTruncationWatchdog,
     RealtimeWatchdog,
     RecordingWatchdog,
+    ToolCallingWatchdog,
     TranscriptionWatchdog,
     UserInactivityTimeoutWatchdog,
 )
-from rtvoice.websocket import RealtimeWebSocket
 
 
 class Agent(LoggingMixin):
@@ -47,6 +48,7 @@ class Agent(LoggingMixin):
         tools: Tools | None = None,
         mcp_servers: list[MCPServer] | None = None,
         recording_output_path: str | None = None,
+        api_key: str | None = None,
     ):
         self._instructions = instructions
         self._model = model
@@ -57,7 +59,9 @@ class Agent(LoggingMixin):
         self._mcp_servers = mcp_servers or []
 
         self._event_bus = EventBus()
-        self._websocket = RealtimeWebSocket()
+        self._websocket = RealtimeWebSocket(
+            model=self._model, event_bus=self._event_bus, api_key=api_key
+        )
 
         self._realtime_watchdog = RealtimeWatchdog(
             event_bus=self._event_bus, websocket=self._websocket
@@ -71,6 +75,10 @@ class Agent(LoggingMixin):
         self._transcription_watchdog = TranscriptionWatchdog(event_bus=self._event_bus)
         self._conversation_history_watchdog = ConversationHistoryWatchdog(
             event_bus=self._event_bus
+        )
+        self._tool_calling_watchdog = ToolCallingWatchdog(
+            event_bus=self._event_bus,
+            tool_registry=self._tools.registry,
         )
         self._recording_watchdog = RecordingWatchdog(
             event_bus=self._event_bus, output_path=recording_output_path

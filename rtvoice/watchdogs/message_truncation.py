@@ -8,7 +8,7 @@ from rtvoice.events.views import (
     AudioChunkReceivedEvent,
     MessageTruncationRequestedEvent,
 )
-from rtvoice.shared.logging_mixin import LoggingMixin
+from rtvoice.shared.logging import LoggingMixin
 
 
 class MessageTruncationWatchdog(LoggingMixin):

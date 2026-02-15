@@ -12,7 +12,7 @@ from rtvoice.realtime.schemas import (
     InputAudioBufferAppendEvent,
     SessionUpdateEvent,
 )
-from rtvoice.shared.logging_mixin import LoggingMixin
+from rtvoice.shared.logging import LoggingMixin
 from rtvoice.websocket import RealtimeWebSocket
 
 

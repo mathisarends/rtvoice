@@ -1,6 +1,6 @@
 from mcp import ClientSession, Tool
 
-from rtvoice.shared.logging_mixin import LoggingMixin
+from rtvoice.shared.logging import LoggingMixin
 from rtvoice.tools.models import (
     FunctionParameterProperty,
     FunctionParameters,

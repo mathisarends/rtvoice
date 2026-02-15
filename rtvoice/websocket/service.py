@@ -11,7 +11,7 @@ from websockets.exceptions import ConnectionClosed
 
 from rtvoice.events import EventBus
 from rtvoice.realtime.schemas import ServerEvent
-from rtvoice.shared.logging_mixin import LoggingMixin
+from rtvoice.shared.logging import LoggingMixin
 from rtvoice.views import RealtimeModel
 
 load_dotenv(override=True)

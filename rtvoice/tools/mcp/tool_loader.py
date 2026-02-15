@@ -2,7 +2,7 @@ from typing import Any
 
 from mcp import ClientSession, StdioServerParameters, Tool, stdio_client
 
-from rtvoice.shared.logging_mixin import LoggingMixin
+from rtvoice.shared.logging import LoggingMixin
 from rtvoice.tools.mcp.models import MCPServerConfig
 from rtvoice.tools.models import (
     FunctionParameterProperty,

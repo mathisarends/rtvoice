@@ -4,7 +4,7 @@ import asyncio
 import inspect
 from typing import TYPE_CHECKING, Any
 
-from rtvoice.shared.logging_mixin import LoggingMixin
+from rtvoice.shared.logging import LoggingMixin
 from rtvoice.state.base import VoiceAssistantEvent
 from rtvoice.state.context import VoiceAssistantContext
 from rtvoice.state.models import StateType

@@ -4,7 +4,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
-from rtvoice.shared.logging_mixin import LoggingMixin
+from rtvoice.shared.logging import LoggingMixin
 
 T = TypeVar("T", bound=BaseModel)
 EventHandler = Callable[[T], Awaitable[None]]

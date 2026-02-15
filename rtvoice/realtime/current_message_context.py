@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import time
 
-from rtvoice.events import EventBus
 from rtvoice.events.schemas import ResponseOutputAudioDeltaEvent
-from rtvoice.shared.logging_mixin import LoggingMixin
+
+from rtvoice.events import EventBus
+from rtvoice.shared.logging import LoggingMixin
 from rtvoice.state.base import VoiceAssistantEvent
 
 

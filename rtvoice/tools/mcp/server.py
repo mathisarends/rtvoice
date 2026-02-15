@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Self
 
 from mcp import ClientSession, StdioServerParameters, stdio_client
 
-from rtvoice.shared.logging_mixin import LoggingMixin
+from rtvoice.shared.logging import LoggingMixin
 from rtvoice.tools.mcp.converter import MCPToolConverter
 from rtvoice.tools.models import FunctionTool
 

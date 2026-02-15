@@ -3,7 +3,6 @@ from collections import deque
 from collections.abc import Callable
 
 from rtvoice.config.models import ModelSettings, VoiceSettings
-from rtvoice.events import EventBus
 from rtvoice.events.schemas import (
     AudioConfig,
     AudioFormat,
@@ -15,9 +14,11 @@ from rtvoice.events.schemas import (
     RealtimeSessionConfig,
     SessionUpdateEvent,
 )
-from rtvoice.realtime.current_message_context import CurrentMessageContext
 from rtvoice.realtime.websocket.websocket_manager import WebSocketManager
-from rtvoice.shared.logging_mixin import LoggingMixin
+
+from rtvoice.events import EventBus
+from rtvoice.realtime.current_message_context import CurrentMessageContext
+from rtvoice.shared.logging import LoggingMixin
 from rtvoice.state.base import VoiceAssistantEvent
 from rtvoice.tools.models import FunctionCallResult
 from rtvoice.tools.registry.service import ToolRegistry

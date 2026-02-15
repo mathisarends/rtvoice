@@ -14,7 +14,12 @@ class AgentStartedEvent(BaseModel):
     session_config: RealtimeSessionConfig
 
 
-class AgentStoppedEvent(BaseModel): ...
+class AgentStoppedEvent(BaseModel):
+    pass
+
+
+class StopAgentCommand(BaseModel):
+    pass
 
 
 class ConversationHistoryResponseEvent(BaseModel):
@@ -23,6 +28,10 @@ class ConversationHistoryResponseEvent(BaseModel):
 
 class SpeechSpeedUpdateRequestedEvent(BaseModel):
     speech_speed: float
+
+
+class VolumeUpdateRequestedEvent(BaseModel):
+    volume: float
 
 
 class UserTranscriptChunkReceivedEvent(BaseModel):
@@ -45,5 +54,5 @@ class AssistantTranscriptCompletedEvent(BaseModel):
     content_index: int
 
 
-class TimeoutOccurredEvent(BaseModel):
+class UserInactivityTimeoutEvent(BaseModel):
     timeout_seconds: float

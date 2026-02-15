@@ -1,14 +1,12 @@
 from collections.abc import Callable
 
-from rtvoice.realtime.schemas import FunctionTool, MCPTool
+from rtvoice.realtime.schemas import FunctionTool
 from rtvoice.tools.registry.schema_builder import ToolSchemaBuilder
 from rtvoice.tools.registry.views import Tool
 
 
 class ToolRegistry:
-    def __init__(self, mcp_tools: list[MCPTool] | None = None):
-        self.mcp_tools = mcp_tools or []
-        self._local_mcp_tools: list[FunctionTool] = []
+    def __init__(self):
         self._tools: dict[str, Tool] = {}
         self._schema_builder = ToolSchemaBuilder()
 
@@ -35,12 +33,8 @@ class ToolRegistry:
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
 
-    def add_mcp_tools(self, tools: list[FunctionTool]) -> None:
-        self._local_mcp_tools.extend(tools)
-
-    def get_schema(self) -> list[FunctionTool | MCPTool]:
-        python_tools = [tool.to_pydantic() for tool in self._tools.values()]
-        return python_tools + self._local_mcp_tools + self.mcp_tools
+    def get_schema(self) -> list[FunctionTool]:
+        return [tool.to_pydantic() for tool in self._tools.values()]
 
     def _build_tool(
         self,

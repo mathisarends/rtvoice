@@ -1,13 +1,13 @@
-from __future__ import annotations
-
 import asyncio
 import time
 
 from rtvoice.events import EventBus
-from rtvoice.events.views import TimeoutOccurredEvent
+from rtvoice.events.views import UserInactivityTimeoutEvent
 from rtvoice.realtime.schemas import (
     InputAudioBufferSpeechStartedEvent,
     InputAudioBufferSpeechStoppedEvent,
+    ResponseCreatedEvent,
+    ResponseDoneEvent,
 )
 from rtvoice.shared.logging import LoggingMixin
 
@@ -19,6 +19,8 @@ class UserInactivityTimeoutWatchdog(LoggingMixin):
         self._last_speech_time: float | None = None
         self._is_monitoring = False
         self._check_task: asyncio.Task | None = None
+        self._assistant_is_speaking = False
+        self._user_has_stopped_speaking = False
 
         self.event_bus.subscribe(
             InputAudioBufferSpeechStoppedEvent,
@@ -28,29 +30,61 @@ class UserInactivityTimeoutWatchdog(LoggingMixin):
             InputAudioBufferSpeechStartedEvent,
             self._handle_user_started_speaking,
         )
+        self.event_bus.subscribe(
+            ResponseCreatedEvent,
+            self._handle_assistant_started,
+        )
+        self.event_bus.subscribe(
+            ResponseDoneEvent,
+            self._handle_assistant_done,
+        )
 
     async def _handle_user_speech_ended(
         self, event: InputAudioBufferSpeechStoppedEvent
     ) -> None:
-        self._last_speech_time = time.monotonic()
-        self._is_monitoring = True
+        self._user_has_stopped_speaking = True
         self.logger.debug(
-            "User stopped speaking at %d ms, starting inactivity timeout monitoring (%.1fs)",
+            "User stopped speaking at %d ms",
             event.audio_end_ms,
-            self.timeout_seconds,
         )
 
-        if self._check_task is None or self._check_task.done():
-            self._check_task = asyncio.create_task(self._monitor_timeout())
+        self._try_start_monitoring()
 
     async def _handle_user_started_speaking(
         self, event: InputAudioBufferSpeechStartedEvent
     ) -> None:
+        self._user_has_stopped_speaking = False
         self._is_monitoring = False
         self.logger.debug(
             "User started speaking at %d ms, stopping inactivity timeout monitoring",
             event.audio_start_ms,
         )
+
+    async def _handle_assistant_started(self, event: ResponseCreatedEvent) -> None:
+        self._assistant_is_speaking = True
+        self._is_monitoring = False  # Stop monitoring while assistant speaks
+        self.logger.debug("Assistant started speaking")
+
+    async def _handle_assistant_done(self, event: ResponseDoneEvent) -> None:
+        self._assistant_is_speaking = False
+        self.logger.debug("Assistant finished speaking")
+
+        # Nur Timer starten, wenn User auch fertig ist
+        self._try_start_monitoring()
+
+    def _try_start_monitoring(self) -> None:
+        if not self._user_has_stopped_speaking or self._assistant_is_speaking:
+            return
+
+        self._last_speech_time = time.monotonic()
+        self._is_monitoring = True
+        self.logger.debug(
+            "Both user and assistant finished - starting inactivity timeout monitoring (%.1fs)",
+            self.timeout_seconds,
+        )
+
+        if self._check_task is None or self._check_task.done():
+            self._check_task = asyncio.create_task(self._monitor_timeout())
 
     async def _monitor_timeout(self) -> None:
         while self._is_monitoring:
@@ -63,9 +97,10 @@ class UserInactivityTimeoutWatchdog(LoggingMixin):
                 self.timeout_seconds,
             )
             await self.event_bus.dispatch(
-                TimeoutOccurredEvent(timeout_seconds=self.timeout_seconds)
+                UserInactivityTimeoutEvent(timeout_seconds=self.timeout_seconds)
             )
             self._is_monitoring = False
+            self._user_has_stopped_speaking = False
             break
 
     def _has_timed_out(self) -> bool:
@@ -73,8 +108,3 @@ class UserInactivityTimeoutWatchdog(LoggingMixin):
             return False
         elapsed = time.monotonic() - self._last_speech_time
         return elapsed > self.timeout_seconds
-
-    def stop(self) -> None:
-        self._is_monitoring = False
-        if self._check_task and not self._check_task.done():
-            self._check_task.cancel()

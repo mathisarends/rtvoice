@@ -12,6 +12,8 @@ from rtvoice.events.views import (
     AgentStartedEvent,
     AgentStoppedEvent,
     ConversationHistoryResponseEvent,
+    StopAgentCommand,
+    UserInactivityTimeoutEvent,
 )
 from rtvoice.realtime.schemas import (
     AudioConfig,
@@ -76,6 +78,23 @@ class Agent(LoggingMixin):
         audio_input_device = audio_input or MicrophoneInput()
         audio_output_device = audio_output or SpeakerOutput()
 
+        self._setup_shutdown_handlers()
+        self._setup_watchdogs(
+            audio_input_device, audio_output_device, recording_output_path
+        )
+
+    def _setup_shutdown_handlers(self) -> None:
+        self._event_bus.subscribe(StopAgentCommand, self._on_stop_command)
+        self._event_bus.subscribe(
+            UserInactivityTimeoutEvent, self._on_inactivity_timeout
+        )
+
+    def _setup_watchdogs(
+        self,
+        audio_input_device: AudioInputDevice,
+        audio_output_device: AudioOutputDevice,
+        recording_output_path: str | None,
+    ) -> None:
         self._audio_input_watchdog = AudioInputWatchdog(
             event_bus=self._event_bus,
             device=audio_input_device,
@@ -109,6 +128,17 @@ class Agent(LoggingMixin):
             event_bus=self._event_bus, output_path=recording_output_path
         )
 
+    async def _on_stop_command(self, event: StopAgentCommand) -> None:
+        self.logger.info("Received stop command - triggering shutdown")
+        self._stopped.set()
+
+    async def _on_inactivity_timeout(self, event: UserInactivityTimeoutEvent) -> None:
+        self.logger.info(
+            "User inactivity timeout after %.1f seconds - triggering shutdown",
+            event.timeout_seconds,
+        )
+        self._stopped.set()
+
     def _clip_speech_speed(self, speed: float) -> float:
         clipped = max(0.5, min(speed, 1.5))
 
@@ -141,7 +171,7 @@ class Agent(LoggingMixin):
         await self._event_bus.dispatch(event)
         self.logger.info("Agent started successfully")
 
-        # Blockiert bis stop() aufgerufen wird
+        # blocked till stop gets called or inactivity timeout occurs
         await self._stopped.wait()
 
     def _build_session_config(self) -> RealtimeSessionConfig:

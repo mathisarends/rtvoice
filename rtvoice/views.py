@@ -61,3 +61,8 @@ class TranscriptionModel(StrEnum):
 
 class AgentHistory(BaseModel):
     conversation_turns: list[ConversationTurn]
+
+
+class ActionResult(BaseModel):
+    success: bool = True
+    message: str | None = None

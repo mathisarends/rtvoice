@@ -1,11 +1,13 @@
 import asyncio
+import struct
 
 import pyaudio
 
 from rtvoice.audio.devices import AudioOutputDevice
+from rtvoice.shared.logging import LoggingMixin
 
 
-class SpeakerOutput(AudioOutputDevice):
+class SpeakerOutput(AudioOutputDevice, LoggingMixin):
     def __init__(
         self,
         device_index: int | None = None,
@@ -16,6 +18,7 @@ class SpeakerOutput(AudioOutputDevice):
         self._audio: pyaudio.PyAudio | None = None
         self._stream = None
         self._active = False
+        self._volume = 1.0
 
     async def start(self) -> None:
         if self._active:
@@ -50,4 +53,36 @@ class SpeakerOutput(AudioOutputDevice):
         if not self._active or not self._stream:
             return
 
-        await asyncio.get_event_loop().run_in_executor(None, self._stream.write, chunk)
+        scaled_chunk = self._apply_volume(chunk)
+        await asyncio.get_event_loop().run_in_executor(
+            None, self._stream.write, scaled_chunk
+        )
+
+    async def set_volume(self, volume: float) -> None:
+        self._volume = max(0.0, min(1.0, volume))
+        self.logger.debug("Volume set to %.2f", self._volume)
+
+    def _apply_volume(self, chunk: bytes) -> bytes:
+        if self._volume == 1.0:
+            return chunk
+
+        sample_count = len(chunk) // 2
+        samples = struct.unpack(f"<{sample_count}h", chunk)
+        scaled_samples = [int(sample * self._volume) for sample in samples]
+        return struct.pack(f"<{sample_count}h", *scaled_samples)
+
+    async def clear_buffer(self) -> None:
+        """Clear PyAudio's internal buffer by stopping and restarting the stream."""
+        if not self._active or not self._stream:
+            return
+
+        try:
+            await asyncio.get_event_loop().run_in_executor(
+                None, self._stream.stop_stream
+            )
+
+            await asyncio.get_event_loop().run_in_executor(
+                None, self._stream.start_stream
+            )
+        except Exception as e:
+            self.logger.warning(f"Error clearing audio buffer: {e}")

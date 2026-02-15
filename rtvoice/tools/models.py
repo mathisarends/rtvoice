@@ -1,9 +1,6 @@
-from __future__ import annotations
-
 import json
 from enum import StrEnum
 from typing import (
-    TYPE_CHECKING,
     Any,
     Literal,
     Self,
@@ -14,10 +11,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from rtvoice.events import EventBus
 from rtvoice.events.schemas.base import RealtimeServerEvent
 from rtvoice.events.schemas.conversation import ConversationItemCreateEvent
-from rtvoice.sound.player import AudioPlayer
-
-if TYPE_CHECKING:
-    from rtvoice.config.models import VoiceSettings
 
 
 class JsonType(StrEnum):
@@ -166,7 +159,5 @@ class FunctionCallResult(BaseModel):
 class SpecialToolParameters(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    audio_player: AudioPlayer
     event_bus: EventBus
-    voice_settings: VoiceSettings
     tool_calling_model_name: str | None = None

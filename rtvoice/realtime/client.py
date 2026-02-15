@@ -2,11 +2,12 @@ import asyncio
 import base64
 
 from rtvoice.config.models import ModelSettings, VoiceSettings
-from rtvoice.events import EventBus
 from rtvoice.events.schemas.audio import (
     InputAudioBufferAppendEvent,
 )
 from rtvoice.mic import MicrophoneCapture
+
+from rtvoice.events import EventBus
 from rtvoice.realtime.messaging.message_manager import RealtimeMessageManager
 from rtvoice.realtime.websocket.websocket_manager import WebSocketManager
 from rtvoice.shared.logging_mixin import LoggingMixin

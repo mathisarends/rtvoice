@@ -1,5 +1,12 @@
+import asyncio
 from typing import Self
 
+from rtvoice.audio import (
+    AudioInputDevice,
+    AudioOutputDevice,
+    MicrophoneInput,
+    SpeakerOutput,
+)
 from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentStartedEvent,
@@ -19,7 +26,6 @@ from rtvoice.realtime.schemas import (
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.logging import LoggingMixin
 from rtvoice.tools import Tools
-from rtvoice.tools.mcp.server import MCPServer
 from rtvoice.views import (
     AgentHistory,
     AssistantVoice,
@@ -27,6 +33,8 @@ from rtvoice.views import (
     TranscriptionModel,
 )
 from rtvoice.watchdogs import (
+    AudioInputWatchdog,
+    AudioOutputWatchdog,
     ConversationHistoryWatchdog,
     MessageTruncationWatchdog,
     RealtimeWatchdog,
@@ -46,9 +54,10 @@ class Agent(LoggingMixin):
         speech_speed: float = 1.0,
         transcription_model: TranscriptionModel | None = None,
         tools: Tools | None = None,
-        mcp_servers: list[MCPServer] | None = None,
         recording_output_path: str | None = None,
         api_key: str | None = None,
+        audio_input: AudioInputDevice | None = None,
+        audio_output: AudioOutputDevice | None = None,
     ):
         self._instructions = instructions
         self._model = model
@@ -56,13 +65,24 @@ class Agent(LoggingMixin):
         self._voice = voice
         self._speech_speed = self._clip_speech_speed(speech_speed)
         self._tools = tools or Tools()
-        self._mcp_servers = mcp_servers or []
+        self._stopped = asyncio.Event()
 
         self._event_bus = EventBus()
         self._websocket = RealtimeWebSocket(
             model=self._model, event_bus=self._event_bus, api_key=api_key
         )
 
+        audio_input_device = audio_input or MicrophoneInput()
+        audio_output_device = audio_output or SpeakerOutput()
+
+        self._audio_input_watchdog = AudioInputWatchdog(
+            event_bus=self._event_bus,
+            device=audio_input_device,
+        )
+        self._audio_output_watchdog = AudioOutputWatchdog(
+            event_bus=self._event_bus,
+            device=audio_output_device,
+        )
         self._realtime_watchdog = RealtimeWatchdog(
             event_bus=self._event_bus, websocket=self._websocket
         )
@@ -107,10 +127,6 @@ class Agent(LoggingMixin):
     def event_bus(self) -> EventBus:
         return self._event_bus
 
-    @property
-    def conversation_history(self):
-        return self._conversation_history_watchdog.conversation_history
-
     async def start(self) -> None:
         self.logger.info("Starting agent...")
 
@@ -119,6 +135,9 @@ class Agent(LoggingMixin):
 
         await self._event_bus.dispatch(event)
         self.logger.info("Agent started successfully")
+
+        # Blockiert bis stop() aufgerufen wird
+        await self._stopped.wait()
 
     def _build_session_config(self) -> RealtimeSessionConfig:
         input_config = AudioInputConfig(
@@ -160,6 +179,8 @@ class Agent(LoggingMixin):
         agent_history = AgentHistory(
             conversation_turns=history_event.conversation_turns
         )
+
+        self._stopped.set()
 
         self.logger.info("Agent stopped successfully")
         return agent_history

@@ -5,6 +5,7 @@ description = "Real-time voice assistant built on OpenAI's Realtime API"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "pyaudio>=0.2.14",
     "pydantic>=2.11.7",
     "python-dotenv>=1.2.1",
     "websockets>=15.0.1",

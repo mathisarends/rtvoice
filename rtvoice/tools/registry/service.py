@@ -1,8 +1,8 @@
 from collections.abc import Callable
 
 from rtvoice.realtime.schemas import FunctionTool, MCPTool
+from rtvoice.tools.registry.schema_builder import ToolSchemaBuilder
 from rtvoice.tools.registry.views import Tool
-from rtvoice.tools.schema import ToolSchemaBuilder
 
 
 class ToolRegistry:

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Annotated
 
 from rtvoice.events import EventBus
-from rtvoice.shared.logging_mixin import LoggingMixin
+from rtvoice.shared.logging import LoggingMixin
 from rtvoice.tools.models import FunctionTool, MCPTool
 from rtvoice.tools.registry import ToolRegistry
 
@@ -18,6 +18,9 @@ class Tools(LoggingMixin):
 
     def add_mcp_tools(self, tools: list[FunctionTool]) -> None:
         self.registry.add_mcp_tools(tools)
+
+    def get_schema(self) -> list[FunctionTool | MCPTool]:
+        return self.registry.get_schema()
 
     # TODO: Hier alles nur über den event bus als special param (andererseits kann ich den auch einfach hier injecten (- special param logic aber schon nice))
     def _register_default_tools(self) -> None:

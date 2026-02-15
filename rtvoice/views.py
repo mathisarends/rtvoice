@@ -1,9 +1,14 @@
+from __future__ import annotations
+
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    from rtvoice.watchdogs.conversation_history import ConversationTurn
 
 
-# TODO: Restrucure this here
 class RealtimeModel(StrEnum):
     GPT_REALTIME = "gpt-realtime"
     GPT_REALTIME_MINI = "gpt-realtime-mini"
@@ -52,38 +57,7 @@ class AssistantVoice(StrEnum):
 
 class TranscriptionModel(StrEnum):
     WHISPER_1 = "whisper-1"
-    GPT_4O_TRANSCRIBE = "gpt-4o-transcribe"
-    GPT_4O_MINI_TRANSCRIBE = "gpt-4o-mini-transcribe"
 
 
-class NoiseReductionType(StrEnum):
-    NEAR_FIELD = "near_field"
-    FAR_FIELD = "far_field"
-
-
-class TranscriptionSettings(BaseModel):
-    enabled: bool = False
-    model: TranscriptionModel = TranscriptionModel.WHISPER_1
-    language: str | None = None
-    prompt: str | None = None
-    noise_reduction_mode: NoiseReductionType | None = None
-
-    @field_validator("language")
-    @classmethod
-    def validate_language_code(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-
-        if not isinstance(value, str):
-            raise ValueError("Language code must be a string")
-
-        lang = value.strip().lower()
-        if not lang:
-            return None
-
-        if len(lang) in (2, 3) and lang.isalpha():
-            return lang
-
-        raise ValueError(
-            f"Invalid language code: {value!r}. Expected ISO-639-1 format (e.g., 'en', 'de')"
-        )
+class AgentHistory(BaseModel):
+    conversation_turns: list[ConversationTurn]

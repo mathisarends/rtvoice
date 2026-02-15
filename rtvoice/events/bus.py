@@ -45,3 +45,35 @@ class EventBus(LoggingMixin):
                 )
 
         return event
+
+    async def wait_for_event(
+        self,
+        event_type: type[T],
+        timeout: float | None = None,
+        predicate: Callable[[T], bool] | None = None,
+    ) -> T:
+        future: asyncio.Future[T] = asyncio.Future()
+
+        self.logger.debug(f"Waiting for {event_type.__name__} (timeout={timeout}s)")
+
+        async def handler(event: T) -> None:
+            if (predicate is None or predicate(event)) and not future.done():
+                future.set_result(event)
+
+        self.subscribe(event_type, handler)
+
+        try:
+            if timeout:
+                result = await asyncio.wait_for(future, timeout=timeout)
+            else:
+                result = await future
+
+            self.logger.debug(f"Received {event_type.__name__}")
+            return result
+        except TimeoutError:
+            self.logger.warning(
+                f"Timeout waiting for {event_type.__name__} after {timeout}s"
+            )
+            raise
+        finally:
+            self.unsubscribe(event_type, handler)

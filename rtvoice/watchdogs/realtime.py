@@ -5,11 +5,13 @@ from rtvoice.events.views import (
     AssistantCompletedMCPToolCallResultEvent,
     AssistantFailedMCPToolCallEvent,
     MessageTruncationRequestedEvent,
+    SpeechSpeedUpdateRequestedEvent,
 )
 from rtvoice.realtime.schemas import (
     ConversationItemTruncateEvent,
     ConversationResponseCreateEvent,
     InputAudioBufferAppendEvent,
+    RealtimeSessionConfig,
     SessionUpdateEvent,
 )
 from rtvoice.shared.logging import LoggingMixin
@@ -20,6 +22,7 @@ class RealtimeWatchdog(LoggingMixin):
     def __init__(self, event_bus: EventBus, websocket: RealtimeWebSocket):
         self._event_bus = event_bus
         self._websocket = websocket
+        self._session_config: RealtimeSessionConfig | None = None
 
         self._event_bus.subscribe(AgentStartedEvent, self._on_agent_started)
         self._event_bus.subscribe(AgentStoppedEvent, self._on_agent_stopped)
@@ -35,6 +38,9 @@ class RealtimeWatchdog(LoggingMixin):
         )
         self._event_bus.subscribe(
             MessageTruncationRequestedEvent, self._on_truncation_requested
+        )
+        self._event_bus.subscribe(
+            SpeechSpeedUpdateRequestedEvent, self._on_speech_speed_update_requested
         )
 
     def _is_connected(self) -> bool:
@@ -58,7 +64,8 @@ class RealtimeWatchdog(LoggingMixin):
             self.logger.info("WebSocket connection established successfully")
 
         self.logger.info("Initializing session with configuration...")
-        session_update = SessionUpdateEvent(session=event.session_config)
+        self._session_config = event.session_config
+        session_update = SessionUpdateEvent(session=self._session_config)
         await self._websocket.send(session_update)
         self.logger.info("Session initialized successfully")
 
@@ -109,3 +116,27 @@ class RealtimeWatchdog(LoggingMixin):
 
         await self._websocket.send(truncate_event)
         self.logger.debug("Truncation event sent to WebSocket")
+
+    async def _on_speech_speed_update_requested(
+        self, event: SpeechSpeedUpdateRequestedEvent
+    ) -> None:
+        if not self._session_config:
+            self.logger.warning(
+                "Cannot update speech speed - session config not initialized"
+            )
+            return
+
+        clipped_speed = max(0.5, min(event.speech_speed, 1.5))
+        rounded_speed = round(clipped_speed * 10) / 10
+
+        if event.speech_speed != rounded_speed:
+            self.logger.info(
+                "Speech speed %.2f adjusted to %.1f",
+                event.speech_speed,
+                rounded_speed,
+            )
+
+        self._session_config.audio.output.speed = rounded_speed
+        session_update = SessionUpdateEvent(session=self._session_config)
+        await self._websocket.send(session_update)
+        self.logger.info("Speech speed updated to %.1f", rounded_speed)

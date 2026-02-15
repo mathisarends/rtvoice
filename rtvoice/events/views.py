@@ -1,8 +1,13 @@
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
 from rtvoice.realtime.schemas import RealtimeSessionConfig
+
+if TYPE_CHECKING:
+    from rtvoice.watchdogs.conversation_history import ConversationTurn
 
 
 # has to be send by agent
@@ -13,7 +18,13 @@ class AgentStartedEvent(BaseModel):
 class AgentStoppedEvent(BaseModel): ...
 
 
-# TODO: AgentSpeechSpeedChanged
+class ConversationHistoryResponseEvent(BaseModel):
+    conversation_turns: list[ConversationTurn]
+
+
+class SpeechSpeedUpdateRequestedEvent(BaseModel):
+    speech_speed: float
+
 
 # TODO: AgentSpeecInterrupted
 

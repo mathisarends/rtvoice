@@ -98,13 +98,16 @@ class RealtimeWebSocket(LoggingMixin):
     async def _receive_loop(self) -> None:
         try:
             async for message in self._ws:
-                data = json.loads(message)
-
-                event = ServerEvent.model_validate(data)
-                await self._event_bus.dispatch(event)
-
-        except ValidationError as e:
-            self.logger.warning("Invalid event received: %s", e)
+                try:
+                    data = json.loads(message)
+                    event = ServerEvent.model_validate(data)
+                    await self._event_bus.dispatch(event)
+                except ValidationError:
+                    self.logger.debug(
+                        "Skipping unknown event type: %s",
+                        data.get("type", "unknown"),
+                    )
+                    # Continue with next message
         except ConnectionClosed as e:
             self._is_connected = False
             self.logger.info("Connection closed: %s", e)

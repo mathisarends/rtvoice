@@ -1,24 +1,36 @@
 from typing import Self
 
 from rtvoice.events import EventBus
-from rtvoice.events.views import AgentStartedEvent, AgentStoppedEvent
+from rtvoice.events.views import (
+    AgentStartedEvent,
+    AgentStoppedEvent,
+    ConversationHistoryResponseEvent,
+)
 from rtvoice.realtime.schemas import (
     AudioConfig,
     AudioFormat,
     AudioFormatConfig,
     AudioInputConfig,
     AudioOutputConfig,
+    InputAudioTranscriptionConfig,
     RealtimeSessionConfig,
     ToolChoiceMode,
 )
 from rtvoice.shared.logging import LoggingMixin
 from rtvoice.tools import Tools
 from rtvoice.tools.mcp.server import MCPServer
-from rtvoice.views import AssistantVoice, RealtimeModel
+from rtvoice.views import (
+    AgentHistory,
+    AssistantVoice,
+    RealtimeModel,
+    TranscriptionModel,
+)
 from rtvoice.watchdogs import (
+    ConversationHistoryWatchdog,
     MessageTruncationWatchdog,
     RealtimeWatchdog,
     RecordingWatchdog,
+    TranscriptionWatchdog,
     UserInactivityTimeoutWatchdog,
 )
 from rtvoice.websocket import RealtimeWebSocket
@@ -31,42 +43,47 @@ class Agent(LoggingMixin):
         model: RealtimeModel = RealtimeModel.GPT_REALTIME_MINI,
         voice: AssistantVoice = AssistantVoice.MARIN,
         speech_speed: float = 1.0,
+        transcription_model: TranscriptionModel | None = None,
         tools: Tools | None = None,
         mcp_servers: list[MCPServer] | None = None,
         recording_output_path: str | None = None,
     ):
         self._instructions = instructions
         self._model = model
+        self._transcription_model = transcription_model
         self._voice = voice
         self._speech_speed = self._clip_speech_speed(speech_speed)
         self._tools = tools or Tools()
         self._mcp_servers = mcp_servers or []
 
-        # Initialize infrastructure
         self._event_bus = EventBus()
         self._websocket = RealtimeWebSocket()
 
-        self._realtime_watchdog = RealtimeWatchdog(self._event_bus, self._websocket)
-        self._message_truncation_watchdog = MessageTruncationWatchdog(self._event_bus)
+        self._realtime_watchdog = RealtimeWatchdog(
+            event_bus=self._event_bus, websocket=self._websocket
+        )
+        self._message_truncation_watchdog = MessageTruncationWatchdog(
+            event_bus=self._event_bus
+        )
         self._user_inactivity_timeout_watchdog = UserInactivityTimeoutWatchdog(
-            self._event_bus
+            event_bus=self._event_bus
         )
-
+        self._transcription_watchdog = TranscriptionWatchdog(event_bus=self._event_bus)
+        self._conversation_history_watchdog = ConversationHistoryWatchdog(
+            event_bus=self._event_bus
+        )
         self._recording_watchdog = RecordingWatchdog(
-            self._event_bus, recording_output_path
+            event_bus=self._event_bus, output_path=recording_output_path
         )
-
-        # self._audio_watchdog = AudioWatchdog(self._event_bus)
-        # self._mcp_watchdog = MCPWatchdog(self._event_bus)
-        # self._timeout_watchdog = TimeoutWatchdog(self._event_bus)
-        # self._tool_watchdog = ToolWatchdog(self._event_bus)
 
     def _clip_speech_speed(self, speed: float) -> float:
         clipped = max(0.5, min(speed, 1.5))
 
         if speed != clipped:
             self.logger.warning(
-                f"Speech speed {speed} is out of range [0.5, 1.5], clipping to {clipped}"
+                "Speech speed %.2f is out of range [0.5, 1.5], clipping to %.2f",
+                speed,
+                clipped,
             )
 
         return clipped
@@ -78,6 +95,14 @@ class Agent(LoggingMixin):
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.stop()
 
+    @property
+    def event_bus(self) -> EventBus:
+        return self._event_bus
+
+    @property
+    def conversation_history(self):
+        return self._conversation_history_watchdog.conversation_history
+
     async def start(self) -> None:
         self.logger.info("Starting agent...")
 
@@ -88,13 +113,21 @@ class Agent(LoggingMixin):
         self.logger.info("Agent started successfully")
 
     def _build_session_config(self) -> RealtimeSessionConfig:
+        input_config = AudioInputConfig(
+            transcription=(
+                InputAudioTranscriptionConfig(model=self._transcription_model)
+                if self._transcription_model
+                else None
+            )
+        )
+
         audio_config = AudioConfig(
             output=AudioOutputConfig(
                 format=AudioFormatConfig(type=AudioFormat.PCM16),
                 speed=self._speech_speed,
                 voice=self._voice.value,
             ),
-            input=AudioInputConfig(),
+            input=input_config,
         )
 
         return RealtimeSessionConfig(
@@ -103,13 +136,22 @@ class Agent(LoggingMixin):
             voice=self._voice,
             audio=audio_config,
             tool_choice=ToolChoiceMode.AUTO,
-            tools=self._tools.registry.get_openai_schema(),
+            tools=self._tools.get_schema(),
         )
 
-    async def stop(self) -> None:
+    async def stop(self) -> AgentHistory:
         self.logger.info("Stopping agent...")
 
         event = AgentStoppedEvent()
         await self._event_bus.dispatch(event)
 
+        history_event = await self._event_bus.wait_for_event(
+            ConversationHistoryResponseEvent, timeout=5.0
+        )
+
+        agent_history = AgentHistory(
+            conversation_turns=history_event.conversation_turns
+        )
+
         self.logger.info("Agent stopped successfully")
+        return agent_history

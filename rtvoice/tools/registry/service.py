@@ -38,7 +38,7 @@ class ToolRegistry:
     def add_mcp_tools(self, tools: list[FunctionTool]) -> None:
         self._local_mcp_tools.extend(tools)
 
-    def get_openai_schema(self) -> list[FunctionTool | MCPTool]:
+    def get_schema(self) -> list[FunctionTool | MCPTool]:
         python_tools = [tool.to_pydantic() for tool in self._tools.values()]
         return python_tools + self._local_mcp_tools + self.mcp_tools
 

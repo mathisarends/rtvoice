@@ -1,10 +1,17 @@
 from rtvoice.events import EventBus
+from rtvoice.events.views import (
+    AssistantTranscriptChunkReceivedEvent,
+    AssistantTranscriptCompletedEvent,
+    UserTranscriptChunkReceivedEvent,
+    UserTranscriptCompletedEvent,
+)
 from rtvoice.realtime.schemas import (
     InputAudioTranscriptionCompleted,
+    InputAudioTranscriptionDelta,
+    ResponseOutputAudioTranscriptDelta,
     ResponseOutputAudioTranscriptDone,
 )
 from rtvoice.shared.logging import LoggingMixin
-from rtvoice.state.base import VoiceAssistantEvent
 
 
 class TranscriptionWatchdog(LoggingMixin):
@@ -12,31 +19,77 @@ class TranscriptionWatchdog(LoggingMixin):
         self._event_bus = event_bus
 
         self._event_bus.subscribe(
-            VoiceAssistantEvent.USER_TRANSCRIPT_COMPLETED,
-            self._on_user_transcript_completed,
+            InputAudioTranscriptionDelta,
+            self._on_user_transcript_chunk,
         )
         self._event_bus.subscribe(
-            VoiceAssistantEvent.ASSISTANT_TRANSCRIPT_COMPLETED,
+            InputAudioTranscriptionCompleted,
+            self._on_user_transcript_completed,
+        )
+
+        self._event_bus.subscribe(
+            ResponseOutputAudioTranscriptDelta,
+            self._on_assistant_transcript_chunk,
+        )
+        self._event_bus.subscribe(
+            ResponseOutputAudioTranscriptDone,
             self._on_assistant_transcript_completed,
         )
 
+    async def _on_user_transcript_chunk(
+        self, event: InputAudioTranscriptionDelta
+    ) -> None:
+        self.logger.debug(
+            "User transcript chunk: '%s' (item_id=%s)",
+            event.delta,
+            event.item_id,
+        )
+
+        chunk_event = UserTranscriptChunkReceivedEvent(chunk=event.delta)
+        await self._event_bus.dispatch(chunk_event)
+
     async def _on_user_transcript_completed(
-        self, data: InputAudioTranscriptionCompleted
+        self, event: InputAudioTranscriptionCompleted
     ) -> None:
         self.logger.info(
             "User transcript completed: '%s' (item_id=%s)",
-            data.transcript,
-            data.item_id,
+            event.transcript,
+            event.item_id,
         )
 
-        if data.usage:
-            self.logger.debug("Transcription usage: %s", data.usage)
+        if event.usage:
+            self.logger.debug("Transcription usage: %s", event.usage)
+
+        completed_event = UserTranscriptCompletedEvent(
+            transcript=event.transcript, item_id=event.item_id
+        )
+        await self._event_bus.dispatch(completed_event)
+
+    async def _on_assistant_transcript_chunk(
+        self, event: ResponseOutputAudioTranscriptDelta
+    ) -> None:
+        self.logger.debug(
+            "Assistant transcript chunk: '%s' (response_id=%s)",
+            event.delta,
+            event.response_id,
+        )
+
+        chunk_event = AssistantTranscriptChunkReceivedEvent(chunk=event.delta)
+        await self._event_bus.dispatch(chunk_event)
 
     async def _on_assistant_transcript_completed(
-        self, data: ResponseOutputAudioTranscriptDone
+        self, event: ResponseOutputAudioTranscriptDone
     ) -> None:
         self.logger.info(
             "Assistant transcript completed: '%s' (response_id=%s)",
-            data.transcript,
-            data.response_id,
+            event.transcript,
+            event.response_id,
         )
+
+        completed_event = AssistantTranscriptCompletedEvent(
+            transcript=event.transcript,
+            item_id=event.item_id,
+            output_index=event.output_index,
+            content_index=event.content_index,
+        )
+        await self._event_bus.dispatch(completed_event)

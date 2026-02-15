@@ -227,10 +227,6 @@ class InputAudioBufferAppendEvent(BaseModel):
     event_id: str | None = None
     audio: str
 
-    @classmethod
-    def from_audio(cls, audio_base64: str) -> Self:
-        return cls(audio=audio_base64)
-
 
 class ConversationItemCreateEvent(BaseModel):
     type: Literal[RealtimeClientEvent.CONVERSATION_ITEM_CREATE]

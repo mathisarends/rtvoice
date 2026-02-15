@@ -2,6 +2,21 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from rtvoice.realtime.schemas import RealtimeSessionConfig
+
+
+# has to be send by agent
+class AgentStartedEvent(BaseModel):
+    session_config: RealtimeSessionConfig
+
+
+class AgentStoppedEvent(BaseModel): ...
+
+
+# TODO: AgentSpeechSpeedChanged
+
+# TODO: AgentSpeecInterrupted
+
 
 class UserStartedSpeakingEvent(BaseModel):
     pass
@@ -37,6 +52,11 @@ class AssistantResponseCompletedEvent(BaseModel):
 
 
 class AssistantSpeechInterruptedEvent(BaseModel):
+    item_id: str
+    audio_end_ms: int
+
+
+class MessageTruncationRequestedEvent(BaseModel):
     item_id: str
     audio_end_ms: int
 

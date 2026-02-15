@@ -1,6 +1,7 @@
 from .audio_input import AudioInputWatchdog
 from .audio_output import AudioOutputWatchdog
 from .conversation_history import ConversationHistoryWatchdog, ConversationTurn
+from .interruption import InterruptionWatchdog
 from .message_truncation import MessageTruncationWatchdog
 from .realtime import RealtimeWatchdog
 from .recording import RecordingWatchdog
@@ -13,6 +14,7 @@ __all__ = [
     "AudioOutputWatchdog",
     "ConversationHistoryWatchdog",
     "ConversationTurn",
+    "InterruptionWatchdog",
     "MessageTruncationWatchdog",
     "RealtimeWatchdog",
     "RecordingWatchdog",

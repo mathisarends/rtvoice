@@ -36,6 +36,7 @@ from rtvoice.watchdogs import (
     AudioInputWatchdog,
     AudioOutputWatchdog,
     ConversationHistoryWatchdog,
+    InterruptionWatchdog,
     MessageTruncationWatchdog,
     RealtimeWatchdog,
     RecordingWatchdog,
@@ -87,7 +88,10 @@ class Agent(LoggingMixin):
             event_bus=self._event_bus, websocket=self._websocket
         )
         self._message_truncation_watchdog = MessageTruncationWatchdog(
-            event_bus=self._event_bus
+            event_bus=self._event_bus, websocket=self._websocket
+        )
+        self._interruption_watchdog = InterruptionWatchdog(
+            event_bus=self._event_bus, websocket=self._websocket
         )
         self._user_inactivity_timeout_watchdog = UserInactivityTimeoutWatchdog(
             event_bus=self._event_bus
@@ -99,6 +103,7 @@ class Agent(LoggingMixin):
         self._tool_calling_watchdog = ToolCallingWatchdog(
             event_bus=self._event_bus,
             tool_registry=self._tools.registry,
+            websocket=self._websocket,
         )
         self._recording_watchdog = RecordingWatchdog(
             event_bus=self._event_bus, output_path=recording_output_path

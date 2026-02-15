@@ -412,6 +412,20 @@ class SessionUpdateEvent(BaseModel):
     session: RealtimeSessionConfig
 
 
+class ResponseCancelEvent(BaseModel):
+    type: Literal[RealtimeClientEvent.RESPONSE_CANCEL] = (
+        RealtimeClientEvent.RESPONSE_CANCEL
+    )
+    event_id: str | None = None
+
+
+class OutputAudioBufferClearEvent(BaseModel):
+    type: Literal[RealtimeClientEvent.OUTPUT_AUDIO_BUFFER_CLEAR] = (
+        RealtimeClientEvent.OUTPUT_AUDIO_BUFFER_CLEAR
+    )
+    event_id: str | None = None
+
+
 # ============================================================================
 # Server Events (received from OpenAI)
 # ============================================================================

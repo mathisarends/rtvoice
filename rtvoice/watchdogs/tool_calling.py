@@ -4,17 +4,27 @@ from collections.abc import Callable
 from typing import Any
 
 from rtvoice.events import EventBus
-from rtvoice.events.views import ToolCallResultReadyEvent
-from rtvoice.realtime.schemas import FunctionCallItem
+from rtvoice.realtime.schemas import (
+    ConversationItemCreateEvent,
+    ConversationResponseCreateEvent,
+    FunctionCallItem,
+)
+from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.logging import LoggingMixin
 from rtvoice.tools.registry import ToolRegistry
 from rtvoice.tools.registry.views import Tool
 
 
 class ToolCallingWatchdog(LoggingMixin):
-    def __init__(self, event_bus: EventBus, tool_registry: ToolRegistry):
+    def __init__(
+        self,
+        event_bus: EventBus,
+        tool_registry: ToolRegistry,
+        websocket: RealtimeWebSocket,
+    ):
         self._event_bus = event_bus
         self._tool_registry = tool_registry
+        self._websocket = websocket
 
         self._event_bus.subscribe(
             FunctionCallItem,
@@ -56,13 +66,22 @@ class ToolCallingWatchdog(LoggingMixin):
         result = await tool.execute(arguments)
         output = self._serialize_result(result)
 
-        result_event = ToolCallResultReadyEvent(
+        create_event = ConversationItemCreateEvent.function_call_output(
             call_id=call_data.call_id,
-            tool_name=call_data.name,
             output=output,
-            response_instruction=tool.response_instruction,
         )
-        await self._event_bus.dispatch(result_event)
+        await self._websocket.send(create_event)
+
+        if tool.response_instruction:
+            response_event = ConversationResponseCreateEvent.from_instructions(
+                tool.response_instruction
+            )
+        else:
+            response_event = ConversationResponseCreateEvent.from_instructions(
+                "The tool call has completed. Process the result and respond to the user."
+            )
+
+        await self._websocket.send(response_event)
 
     def _prepare_arguments(
         self,

@@ -4,10 +4,10 @@ import asyncio
 import time
 
 from rtvoice.events import EventBus
-from rtvoice.events.views import (
-    TimeoutOccurredEvent,
-    UserSpeechEndedEvent,
-    UserStartedSpeakingEvent,
+from rtvoice.events.views import TimeoutOccurredEvent
+from rtvoice.realtime.schemas import (
+    InputAudioBufferSpeechStartedEvent,
+    InputAudioBufferSpeechStoppedEvent,
 )
 from rtvoice.shared.logging import LoggingMixin
 
@@ -20,33 +20,36 @@ class UserInactivityTimeoutWatchdog(LoggingMixin):
         self._is_monitoring = False
         self._check_task: asyncio.Task | None = None
 
-        self._setup_event_subscriptions()
-
-    def _setup_event_subscriptions(self) -> None:
         self.event_bus.subscribe(
-            UserSpeechEndedEvent,
+            InputAudioBufferSpeechStoppedEvent,
             self._handle_user_speech_ended,
         )
         self.event_bus.subscribe(
-            UserStartedSpeakingEvent,
+            InputAudioBufferSpeechStartedEvent,
             self._handle_user_started_speaking,
         )
 
-    async def _handle_user_speech_ended(self, _: UserSpeechEndedEvent) -> None:
+    async def _handle_user_speech_ended(
+        self, event: InputAudioBufferSpeechStoppedEvent
+    ) -> None:
         self._last_speech_time = time.monotonic()
         self._is_monitoring = True
         self.logger.debug(
-            "User stopped speaking, starting inactivity timeout monitoring (%.1fs)",
+            "User stopped speaking at %d ms, starting inactivity timeout monitoring (%.1fs)",
+            event.audio_end_ms,
             self.timeout_seconds,
         )
 
         if self._check_task is None or self._check_task.done():
             self._check_task = asyncio.create_task(self._monitor_timeout())
 
-    async def _handle_user_started_speaking(self, _: UserStartedSpeakingEvent) -> None:
+    async def _handle_user_started_speaking(
+        self, event: InputAudioBufferSpeechStartedEvent
+    ) -> None:
         self._is_monitoring = False
         self.logger.debug(
-            "User started speaking, stopping inactivity timeout monitoring"
+            "User started speaking at %d ms, stopping inactivity timeout monitoring",
+            event.audio_start_ms,
         )
 
     async def _monitor_timeout(self) -> None:

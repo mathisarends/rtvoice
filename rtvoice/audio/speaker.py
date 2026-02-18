@@ -1,5 +1,6 @@
-import asyncio
+import queue
 import struct
+import threading
 
 import pyaudio
 
@@ -8,17 +9,16 @@ from rtvoice.shared.logging import LoggingMixin
 
 
 class SpeakerOutput(AudioOutputDevice, LoggingMixin):
-    def __init__(
-        self,
-        device_index: int | None = None,
-        sample_rate: int = 24000,
-    ):
+    def __init__(self, device_index: int | None = None, sample_rate: int = 24000):
         self._device_index = device_index
         self._sample_rate = sample_rate
         self._audio: pyaudio.PyAudio | None = None
         self._stream = None
         self._active = False
         self._volume = 1.0
+
+        self._queue: queue.Queue[bytes | None] = queue.Queue()
+        self._playback_thread: threading.Thread | None = None
 
     async def start(self) -> None:
         if self._active:
@@ -34,55 +34,58 @@ class SpeakerOutput(AudioOutputDevice, LoggingMixin):
         )
         self._active = True
 
+        self._playback_thread = threading.Thread(
+            target=self._playback_loop, daemon=True
+        )
+        self._playback_thread.start()
+
     async def stop(self) -> None:
         if not self._active:
             return
 
         self._active = False
+        self._queue.put(None)  # sentinel
+
+        if self._playback_thread:
+            self._playback_thread.join(timeout=2.0)
 
         if self._stream:
             self._stream.stop_stream()
             self._stream.close()
-            self._stream = None
-
         if self._audio:
             self._audio.terminate()
-            self._audio = None
+
+    def _playback_loop(self) -> None:
+        while True:
+            chunk = self._queue.get()
+            if chunk is None:  # stop sentinel
+                break
+            if self._stream and self._active:
+                scaled = self._apply_volume(chunk)
+                self._stream.write(scaled)
 
     async def play_chunk(self, chunk: bytes) -> None:
-        if not self._active or not self._stream:
+        if not self._active:
             return
+        self._queue.put(chunk)
 
-        scaled_chunk = self._apply_volume(chunk)
-        await asyncio.get_event_loop().run_in_executor(
-            None, self._stream.write, scaled_chunk
-        )
+    async def clear_buffer(self) -> None:
+        cleared = 0
+        while not self._queue.empty():
+            try:
+                self._queue.get_nowait()
+                cleared += 1
+            except queue.Empty:
+                break
+        self.logger.debug("Cleared %d audio chunks from queue", cleared)
 
     async def set_volume(self, volume: float) -> None:
         self._volume = max(0.0, min(1.0, volume))
-        self.logger.debug("Volume set to %.2f", self._volume)
 
     def _apply_volume(self, chunk: bytes) -> bytes:
         if self._volume == 1.0:
             return chunk
-
         sample_count = len(chunk) // 2
         samples = struct.unpack(f"<{sample_count}h", chunk)
-        scaled_samples = [int(sample * self._volume) for sample in samples]
-        return struct.pack(f"<{sample_count}h", *scaled_samples)
-
-    async def clear_buffer(self) -> None:
-        """Clear PyAudio's internal buffer by stopping and restarting the stream."""
-        if not self._active or not self._stream:
-            return
-
-        try:
-            await asyncio.get_event_loop().run_in_executor(
-                None, self._stream.stop_stream
-            )
-
-            await asyncio.get_event_loop().run_in_executor(
-                None, self._stream.start_stream
-            )
-        except Exception as e:
-            self.logger.warning(f"Error clearing audio buffer: {e}")
+        scaled = [int(s * self._volume) for s in samples]
+        return struct.pack(f"<{sample_count}h", *scaled)

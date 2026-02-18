@@ -56,3 +56,8 @@ class AssistantTranscriptCompletedEvent(BaseModel):
 
 class UserInactivityTimeoutEvent(BaseModel):
     timeout_seconds: float
+
+
+class AssistantInterruptedEvent(BaseModel):
+    item_id: str | None
+    played_ms: int | None

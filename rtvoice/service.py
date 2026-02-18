@@ -4,6 +4,7 @@ from typing import Self
 from rtvoice.audio import (
     AudioInputDevice,
     AudioOutputDevice,
+    AudioSession,
     MicrophoneInput,
     SpeakerOutput,
 )
@@ -39,12 +40,10 @@ from rtvoice.views import (
     TranscriptListener,
 )
 from rtvoice.watchdogs import (
-    AudioInputWatchdog,
-    AudioOutputWatchdog,
+    AudioWatchdog,
     ConversationHistoryWatchdog,
     ErrorWatchdog,
     InterruptionWatchdog,
-    MessageTruncationWatchdog,
     RealtimeWatchdog,
     RecordingWatchdog,
     ToolCallingWatchdog,
@@ -84,13 +83,13 @@ class Agent(LoggingMixin):
             model=self._model, event_bus=self._event_bus, api_key=api_key
         )
 
-        audio_input_device = audio_input or MicrophoneInput()
-        audio_output_device = audio_output or SpeakerOutput()
+        audio_session = AudioSession(
+            input_device=audio_input or MicrophoneInput(),
+            output_device=audio_output or SpeakerOutput(),
+        )
 
         self._setup_shutdown_handlers()
-        self._setup_watchdogs(
-            audio_input_device, audio_output_device, recording_output_path
-        )
+        self._setup_watchdogs(audio_session, recording_output_path)
         self._setup_transcript_listener()
 
     def _clip_speech_speed(self, speed: float) -> float:
@@ -113,22 +112,14 @@ class Agent(LoggingMixin):
 
     def _setup_watchdogs(
         self,
-        audio_input_device: AudioInputDevice,
-        audio_output_device: AudioOutputDevice,
+        audio_session: AudioSession,
         recording_output_path: str | None,
     ) -> None:
-        self._audio_input_watchdog = AudioInputWatchdog(
+        self._audio_watchdog = AudioWatchdog(
             event_bus=self._event_bus,
-            device=audio_input_device,
-        )
-        self._audio_output_watchdog = AudioOutputWatchdog(
-            event_bus=self._event_bus,
-            device=audio_output_device,
+            session=audio_session,
         )
         self._realtime_watchdog = RealtimeWatchdog(
-            event_bus=self._event_bus, websocket=self._websocket
-        )
-        self._message_truncation_watchdog = MessageTruncationWatchdog(
             event_bus=self._event_bus, websocket=self._websocket
         )
         self._interruption_watchdog = InterruptionWatchdog(
@@ -181,10 +172,6 @@ class Agent(LoggingMixin):
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.stop()
-
-    @property
-    def event_bus(self) -> EventBus:
-        return self._event_bus
 
     async def start(self) -> None:
         self.logger.info("Starting agent...")

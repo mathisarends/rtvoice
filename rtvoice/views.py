@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from pydantic import BaseModel
 
@@ -66,3 +66,10 @@ class AgentHistory(BaseModel):
 class ActionResult(BaseModel):
     success: bool = True
     message: str | None = None
+
+
+class TranscriptListener(Protocol):
+    async def on_user_chunk(self, chunk: str) -> None: ...
+    async def on_user_completed(self, transcript: str) -> None: ...
+    async def on_assistant_chunk(self, chunk: str) -> None: ...
+    async def on_assistant_completed(self, transcript: str) -> None: ...

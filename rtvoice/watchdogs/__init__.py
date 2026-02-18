@@ -3,7 +3,6 @@ from .conversation_history import ConversationHistoryWatchdog, ConversationTurn
 from .error import ErrorWatchdog
 from .interruption import InterruptionWatchdog
 from .realtime import RealtimeWatchdog
-from .recording import RecordingWatchdog
 from .tool_calling import ToolCallingWatchdog
 from .transcription import TranscriptionWatchdog
 from .user_inactivity_timeout import UserInactivityTimeoutWatchdog
@@ -15,7 +14,6 @@ __all__ = [
     "ErrorWatchdog",
     "InterruptionWatchdog",
     "RealtimeWatchdog",
-    "RecordingWatchdog",
     "ToolCallingWatchdog",
     "TranscriptionWatchdog",
     "UserInactivityTimeoutWatchdog",

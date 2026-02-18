@@ -47,14 +47,13 @@ from rtvoice.watchdogs import (
     ErrorWatchdog,
     InterruptionWatchdog,
     RealtimeWatchdog,
-    RecordingWatchdog,
     ToolCallingWatchdog,
     TranscriptionWatchdog,
     UserInactivityTimeoutWatchdog,
 )
 
 
-class Agent(LoggingMixin):
+class RealtimeAgent(LoggingMixin):
     def __init__(
         self,
         instructions: str = "",
@@ -64,7 +63,6 @@ class Agent(LoggingMixin):
         transcription_model: TranscriptionModel | None = None,
         tools: Tools | None = None,
         mcp_servers: list[MCPServer] | None = None,
-        recording_output_path: str | None = None,
         api_key: str | None = None,
         audio_input: AudioInputDevice | None = None,
         audio_output: AudioOutputDevice | None = None,
@@ -82,6 +80,7 @@ class Agent(LoggingMixin):
         self._agent_listener = agent_listener
 
         self._stopped = asyncio.Event()
+        self._stop_called = False
 
         self._event_bus = EventBus()
         self._websocket = RealtimeWebSocket(
@@ -94,7 +93,7 @@ class Agent(LoggingMixin):
         )
 
         self._setup_shutdown_handlers()
-        self._setup_watchdogs(audio_session, recording_output_path)
+        self._setup_watchdogs(audio_session)
         self._setup_transcript_listener()
         self._setup_agent_listener()
 
@@ -119,7 +118,6 @@ class Agent(LoggingMixin):
     def _setup_watchdogs(
         self,
         audio_session: AudioSession,
-        recording_output_path: str | None,
     ) -> None:
         self._audio_watchdog = AudioWatchdog(
             event_bus=self._event_bus,
@@ -145,9 +143,7 @@ class Agent(LoggingMixin):
             tool_registry=self._tools.registry,
             websocket=self._websocket,
         )
-        self._recording_watchdog = RecordingWatchdog(
-            event_bus=self._event_bus, output_path=recording_output_path
-        )
+
         self._error_watchdog = ErrorWatchdog(event_bus=self._event_bus)
 
     def _setup_transcript_listener(self) -> None:
@@ -170,16 +166,16 @@ class Agent(LoggingMixin):
         self._event_bus.subscribe(AgentStartedEvent, self._on_agent_started)
         self._event_bus.subscribe(AssistantInterruptedEvent, self._on_agent_interrupted)
 
-    async def _on_stop_command(self, event: StopAgentCommand) -> None:
+    async def _on_stop_command(self, _: StopAgentCommand) -> None:
         self.logger.info("Received stop command - triggering shutdown")
-        self._stopped.set()
+        asyncio.ensure_future(self.stop())
 
     async def _on_inactivity_timeout(self, event: UserInactivityTimeoutEvent) -> None:
         self.logger.info(
             "User inactivity timeout after %.1f seconds - triggering shutdown",
             event.timeout_seconds,
         )
-        self._stopped.set()
+        asyncio.ensure_future(self.stop())
 
     async def __aenter__(self) -> Self:
         await self.start()
@@ -194,12 +190,9 @@ class Agent(LoggingMixin):
         await self._connect_mcp_servers()
 
         session_config = self._build_session_config()
-        event = AgentStartedEvent(session_config=session_config)
-
-        await self._event_bus.dispatch(event)
+        await self._event_bus.dispatch(AgentStartedEvent(session_config=session_config))
         self.logger.info("Agent started successfully")
 
-        # blocked till stop gets called or inactivity timeout occurs
         await self._stopped.wait()
 
     async def _connect_mcp_servers(self) -> None:
@@ -235,14 +228,17 @@ class Agent(LoggingMixin):
             tools=self._tools.get_tool_schema(),
         )
 
-    async def stop(self) -> AgentHistory:
+    async def stop(self) -> AgentHistory | None:
+        if self._stop_called:
+            return None
+        self._stop_called = True
+
         self.logger.info("Stopping agent...")
 
         for server in self._mcp_servers:
             await server.cleanup()
 
-        event = AgentStoppedEvent()
-        await self._event_bus.dispatch(event)
+        await self._event_bus.dispatch(AgentStoppedEvent())
 
         history_event = await self._event_bus.wait_for_event(
             ConversationHistoryResponseEvent, timeout=5.0
@@ -253,7 +249,6 @@ class Agent(LoggingMixin):
         )
 
         self._stopped.set()
-
         self.logger.info("Agent stopped successfully")
 
         if self._agent_listener:

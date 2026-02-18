@@ -1,6 +1,12 @@
 from .mcp import MCPServerStdio
-from .service import Agent
+from .service import RealtimeAgent
 from .tools import Tools
 from .views import AssistantVoice, RealtimeModel
 
-__all__ = ["Agent", "AssistantVoice", "MCPServerStdio", "RealtimeModel", "Tools"]
+__all__ = [
+    "AssistantVoice",
+    "MCPServerStdio",
+    "RealtimeAgent",
+    "RealtimeModel",
+    "Tools",
+]

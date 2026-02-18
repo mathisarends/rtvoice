@@ -12,6 +12,7 @@ from rtvoice.realtime.schemas import (
 from rtvoice.shared.logging import LoggingMixin
 
 
+# TODO: Hier zuverlässiger austimen (erst wenn das playback hier wirklich keine frames mehr liefert)
 class UserInactivityTimeoutWatchdog(LoggingMixin):
     def __init__(self, event_bus: EventBus, timeout_seconds: float = 10.0):
         self.event_bus = event_bus

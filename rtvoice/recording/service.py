@@ -1,6 +1,5 @@
 import asyncio
 
-from rtvoice.realtime.schemas import AudioFormat
 from rtvoice.shared.logging import LoggingMixin
 
 
@@ -8,23 +7,23 @@ class AudioRecorder(LoggingMixin):
     def __init__(
         self,
         output_file: str,
-        audio_format: AudioFormat = AudioFormat.PCM16,
+        ffmpeg_format: str,
         sample_rate: int = 24000,
         channels: int = 1,
+        input_codec: str | None = None,
     ):
         self._output_file = output_file
-        self._audio_format = audio_format
+        self._ffmpeg_format = ffmpeg_format
         self._sample_rate = sample_rate
         self._channels = channels
+        self._input_codec = input_codec
         self._process: asyncio.subprocess.Process | None = None
 
     async def start(self) -> None:
-        format_params = self._get_format_params(self._audio_format)
-
         cmd = [
             "ffmpeg",
             "-f",
-            format_params["format"],
+            self._ffmpeg_format,
             "-ar",
             str(self._sample_rate),
             "-ac",
@@ -33,8 +32,8 @@ class AudioRecorder(LoggingMixin):
             "pipe:0",
         ]
 
-        if "input_codec" in format_params:
-            cmd.extend(["-acodec:0", format_params["input_codec"]])
+        if self._input_codec:
+            cmd.extend(["-acodec:0", self._input_codec])
 
         cmd.extend(["-acodec", "libmp3lame", "-b:a", "128k", self._output_file])
 
@@ -44,26 +43,7 @@ class AudioRecorder(LoggingMixin):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        self.logger.info(
-            "Started recording (format=%s, rate=%d) to %s",
-            self._audio_format,
-            self._sample_rate,
-            self._output_file,
-        )
-
-    def _get_format_params(self, audio_format: AudioFormat) -> dict[str, str]:
-        match audio_format:
-            case AudioFormat.PCM16:
-                return {"format": "s16le"}
-
-            case AudioFormat.G711_ULAW:
-                return {"format": "mulaw", "input_codec": "pcm_mulaw"}
-
-            case AudioFormat.G711_ALAW:
-                return {"format": "alaw", "input_codec": "pcm_alaw"}
-
-            case _:
-                raise ValueError(f"Unsupported audio format: {audio_format}")
+        self.logger.info("Started recording to %s", self._output_file)
 
     async def write_chunk(self, audio_data: bytes) -> None:
         if self._process and self._process.stdin:
@@ -75,5 +55,4 @@ class AudioRecorder(LoggingMixin):
             self._process.stdin.close()
             await self._process.wait()
             self.logger.info("Recording saved to %s", self._output_file)
-
         return self._output_file

@@ -18,8 +18,6 @@ from rtvoice.events.views import (
 from rtvoice.mcp import MCPServer
 from rtvoice.realtime.schemas import (
     AudioConfig,
-    AudioFormat,
-    AudioFormatConfig,
     AudioInputConfig,
     AudioOutputConfig,
     InputAudioTranscriptionConfig,
@@ -200,20 +198,15 @@ class Agent(LoggingMixin):
 
         audio_config = AudioConfig(
             output=AudioOutputConfig(
-                format=AudioFormatConfig(type=AudioFormat.PCM16),
                 speed=self._speech_speed,
                 voice=self._voice.value,
             ),
             input=input_config,
         )
 
-        tool_schema = self._tools.get_tool_schema()
-        print("Tool schema for session config: %s", tool_schema)
-
         return RealtimeSessionConfig(
             model=self._model,
             instructions=self._instructions,
-            voice=self._voice,
             audio=audio_config,
             tool_choice=ToolChoiceMode.AUTO,
             tools=self._tools.get_tool_schema(),

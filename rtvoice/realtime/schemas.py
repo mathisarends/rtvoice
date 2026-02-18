@@ -100,7 +100,13 @@ class NoiseReductionType(StrEnum):
     FAR_FIELD = "far_field"
 
 
-class AudioFormat(StrEnum):
+class AudioInputFormat(StrEnum):
+    PCM = "audio/pcm"
+    ULAW = "audio/pcmu"
+    ALAW = "audio/pcma"
+
+
+class AudioOutputFormat(StrEnum):
     PCM16 = "pcm16"
     G711_ULAW = "g711_ulaw"
     G711_ALAW = "g711_alaw"
@@ -156,7 +162,13 @@ class MCPRequireApprovalMode(StrEnum):
 
 
 class AudioFormatConfig(BaseModel):
-    type: AudioFormat = AudioFormat.PCM16
+    type: AudioInputFormat = AudioInputFormat.PCM
+    rate: int = 24000
+
+
+class AudioOutputFormatConfig(BaseModel):
+    type: AudioInputFormat = AudioInputFormat.PCM
+    rate: int = 24000
 
 
 class InputAudioNoiseReductionConfig(BaseModel):
@@ -175,7 +187,7 @@ class InputAudioTranscriptionConfig(BaseModel):
 
 
 class AudioOutputConfig(BaseModel):
-    format: AudioFormatConfig = Field(default_factory=AudioFormatConfig)
+    format: AudioOutputFormatConfig = Field(default_factory=AudioOutputFormatConfig)
     speed: float = 1.0
     voice: str | None = None
 
@@ -340,7 +352,6 @@ class RealtimeSessionConfig(BaseModel):
     type: Literal["realtime"] = "realtime"
     model: RealtimeModel = RealtimeModel.GPT_REALTIME
     instructions: str | None = None
-    voice: str | None = None
     audio: AudioConfig = Field(default_factory=AudioConfig)
     include: list[str] | None = None
     max_output_tokens: int | Literal["inf"] = "inf"

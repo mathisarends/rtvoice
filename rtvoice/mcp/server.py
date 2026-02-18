@@ -63,7 +63,7 @@ class MCPServerStdio(MCPServer):
         cache_tools_list: bool = True,
     ):
         self.command = command
-        self.args = args if args is not None else []
+        self.args = args if args else []
         self.env = env
         self.cache_tools_list = cache_tools_list
 

@@ -1,11 +1,10 @@
-from rtvoice import Agent, RealtimeModel
+from rtvoice import Agent
 
 
 async def main():
-    instructions = """Du bist Jarvis. Nutze immer die verfügbaren Tools wenn du gefragt wirst
-    was die aktuelle Uhrzeit ist - rate sie niemals."""
+    instructions = """Du bist Jarvis. Antworte kurz und bündig. Wenn du eine Frage nicht beantworten kannst, sage "Das weiß ich leider nicht"."""
 
-    agent = Agent(instructions=instructions, model=RealtimeModel.GPT_REALTIME)
+    agent = Agent(instructions=instructions)
     await agent.start()
 
 

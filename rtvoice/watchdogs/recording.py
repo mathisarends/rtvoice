@@ -4,12 +4,18 @@ from pathlib import Path
 from rtvoice.events import EventBus
 from rtvoice.events.views import AgentStartedEvent, AgentStoppedEvent
 from rtvoice.realtime.schemas import (
-    AudioFormat,
+    AudioOutputFormat,
     InputAudioBufferAppendEvent,
     ResponseOutputAudioDeltaEvent,
 )
 from rtvoice.recording import AudioRecorder
 from rtvoice.shared.logging import LoggingMixin
+
+_FFMPEG_PARAMS: dict[AudioOutputFormat, dict[str, str]] = {
+    AudioOutputFormat.PCM16: {"ffmpeg_format": "s16le"},
+    AudioOutputFormat.G711_ULAW: {"ffmpeg_format": "mulaw", "input_codec": "pcm_mulaw"},
+    AudioOutputFormat.G711_ALAW: {"ffmpeg_format": "alaw", "input_codec": "pcm_alaw"},
+}
 
 
 class RecordingWatchdog(LoggingMixin):
@@ -17,7 +23,7 @@ class RecordingWatchdog(LoggingMixin):
         self,
         event_bus: EventBus,
         output_path: str | None,
-        audio_format: AudioFormat = AudioFormat.PCM16,
+        audio_format: AudioOutputFormat = AudioOutputFormat.PCM16,
     ):
         self._event_bus = event_bus
         self._output_path = output_path
@@ -46,15 +52,14 @@ class RecordingWatchdog(LoggingMixin):
         if not self._output_path:
             return
 
-        output_file = Path(self._output_path)
-        output_file.parent.mkdir(parents=True, exist_ok=True)
+        Path(self._output_path).parent.mkdir(parents=True, exist_ok=True)
+        params = _FFMPEG_PARAMS[self._audio_format]
 
         self._recorder = AudioRecorder(
             output_file=self._output_path,
-            audio_format=self._audio_format,
+            **params,
         )
         await self._recorder.start()
-        self.logger.info("Recording started to %s", self._output_path)
 
     async def _on_agent_stopped(self, _: AgentStoppedEvent) -> None:
         if not self.is_recording:

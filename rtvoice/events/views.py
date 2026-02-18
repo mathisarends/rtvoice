@@ -59,5 +59,4 @@ class UserInactivityTimeoutEvent(BaseModel):
 
 
 class AssistantInterruptedEvent(BaseModel):
-    item_id: str | None
-    played_ms: int | None
+    pass

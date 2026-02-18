@@ -19,6 +19,11 @@ class SpeakerOutput(AudioOutputDevice, LoggingMixin):
 
         self._queue: queue.Queue[bytes | None] = queue.Queue()
         self._playback_thread: threading.Thread | None = None
+        self._playing = False
+
+    @property
+    def is_playing(self) -> bool:
+        return self._playing or not self._queue.empty()
 
     async def start(self) -> None:
         if self._active:
@@ -60,9 +65,10 @@ class SpeakerOutput(AudioOutputDevice, LoggingMixin):
             chunk = self._queue.get()
             if chunk is None:  # stop sentinel
                 break
+            self._playing = True
             if self._stream and self._active:
-                scaled = self._apply_volume(chunk)
-                self._stream.write(scaled)
+                self._stream.write(self._apply_volume(chunk))
+            self._playing = False
 
     async def play_chunk(self, chunk: bytes) -> None:
         if not self._active:

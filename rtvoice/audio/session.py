@@ -31,3 +31,7 @@ class AudioSession:
 
     async def clear_output_buffer(self) -> None:
         await self._output.clear_buffer()
+
+    @property
+    def is_playing(self) -> bool:
+        return self._output.is_playing

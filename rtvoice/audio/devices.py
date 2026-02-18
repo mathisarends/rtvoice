@@ -34,6 +34,11 @@ class AudioOutputDevice(ABC):
     async def play_chunk(self, chunk: bytes) -> None:
         pass
 
+    @property
+    @abstractmethod
+    def is_playing(self) -> bool:
+        pass
+
     @abstractmethod
     async def set_volume(self, volume: float) -> None:
         """Set the output volume level (0.0 to 1.0)."""

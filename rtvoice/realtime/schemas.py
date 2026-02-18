@@ -556,18 +556,29 @@ class InputAudioBufferSpeechStoppedEvent(BaseModel):
     audio_end_ms: int
 
 
+class RealtimeResponseObject(BaseModel):
+    id: str
+    status: str | None = None
+
+
 class ResponseCreatedEvent(BaseModel):
-    type: Literal[RealtimeServerEvent.RESPONSE_CREATED] = (
-        RealtimeServerEvent.RESPONSE_CREATED
-    )
+    type: Literal[RealtimeServerEvent.RESPONSE_CREATED]
     event_id: str
-    response_id: str
+    response: RealtimeResponseObject
+
+    @property
+    def response_id(self) -> str:
+        return self.response.id
 
 
 class ResponseDoneEvent(BaseModel):
-    type: Literal[RealtimeServerEvent.RESPONSE_DONE] = RealtimeServerEvent.RESPONSE_DONE
+    type: Literal[RealtimeServerEvent.RESPONSE_DONE]
     event_id: str
-    response_id: str
+    response: RealtimeResponseObject
+
+    @property
+    def response_id(self) -> str:
+        return self.response.id
 
 
 class FunctionCallItem(BaseModel):

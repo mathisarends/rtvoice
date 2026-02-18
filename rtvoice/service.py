@@ -12,6 +12,7 @@ from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentStartedEvent,
     AgentStoppedEvent,
+    AssistantInterruptedEvent,
     AssistantTranscriptChunkReceivedEvent,
     AssistantTranscriptCompletedEvent,
     ConversationHistoryResponseEvent,
@@ -34,6 +35,7 @@ from rtvoice.shared.logging import LoggingMixin
 from rtvoice.tools import Tools
 from rtvoice.views import (
     AgentHistory,
+    AgentListener,
     AssistantVoice,
     RealtimeModel,
     TranscriptionModel,
@@ -67,6 +69,7 @@ class Agent(LoggingMixin):
         audio_input: AudioInputDevice | None = None,
         audio_output: AudioOutputDevice | None = None,
         transcript_listener: TranscriptListener | None = None,
+        agent_listener: AgentListener | None = None,
     ):
         self._instructions = instructions
         self._model = model
@@ -76,6 +79,8 @@ class Agent(LoggingMixin):
         self._tools = tools or Tools()
         self._mcp_servers = mcp_servers or []
         self._transcript_listener = transcript_listener
+        self._agent_listener = agent_listener
+
         self._stopped = asyncio.Event()
 
         self._event_bus = EventBus()
@@ -91,6 +96,7 @@ class Agent(LoggingMixin):
         self._setup_shutdown_handlers()
         self._setup_watchdogs(audio_session, recording_output_path)
         self._setup_transcript_listener()
+        self._setup_agent_listener()
 
     def _clip_speech_speed(self, speed: float) -> float:
         clipped = max(0.5, min(speed, 1.5))
@@ -123,7 +129,9 @@ class Agent(LoggingMixin):
             event_bus=self._event_bus, websocket=self._websocket
         )
         self._interruption_watchdog = InterruptionWatchdog(
-            event_bus=self._event_bus, websocket=self._websocket
+            event_bus=self._event_bus,
+            websocket=self._websocket,
+            session=audio_session,
         )
         self._user_inactivity_timeout_watchdog = UserInactivityTimeoutWatchdog(
             event_bus=self._event_bus
@@ -154,6 +162,13 @@ class Agent(LoggingMixin):
         self._event_bus.subscribe(
             AssistantTranscriptCompletedEvent, self._on_assistant_completed
         )
+
+    def _setup_agent_listener(self) -> None:
+        if not self._agent_listener:
+            return
+
+        self._event_bus.subscribe(AgentStartedEvent, self._on_agent_started)
+        self._event_bus.subscribe(AssistantInterruptedEvent, self._on_agent_interrupted)
 
     async def _on_stop_command(self, event: StopAgentCommand) -> None:
         self.logger.info("Received stop command - triggering shutdown")
@@ -240,6 +255,10 @@ class Agent(LoggingMixin):
         self._stopped.set()
 
         self.logger.info("Agent stopped successfully")
+
+        if self._agent_listener:
+            await self._agent_listener.on_agent_stopped(agent_history)
+
         return agent_history
 
     async def _on_user_chunk(self, event: UserTranscriptChunkReceivedEvent) -> None:
@@ -257,3 +276,9 @@ class Agent(LoggingMixin):
         self, event: AssistantTranscriptCompletedEvent
     ) -> None:
         await self._transcript_listener.on_assistant_completed(event.transcript)
+
+    async def _on_agent_started(self, _: AgentStartedEvent) -> None:
+        await self._agent_listener.on_agent_started()
+
+    async def _on_agent_interrupted(self, _: AssistantInterruptedEvent) -> None:
+        await self._agent_listener.on_agent_interrupted()

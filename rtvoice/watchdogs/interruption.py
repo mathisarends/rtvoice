@@ -1,5 +1,6 @@
 import time
 
+from rtvoice.audio.session import AudioSession
 from rtvoice.events import EventBus
 from rtvoice.events.views import AssistantInterruptedEvent
 from rtvoice.realtime.schemas import (
@@ -19,9 +20,15 @@ class InterruptionWatchdog(LoggingMixin):
     """Handles barge-in: cancels the running response, clears the audio buffer,
     and truncates the conversation item to what was actually played."""
 
-    def __init__(self, event_bus: EventBus, websocket: RealtimeWebSocket):
+    def __init__(
+        self,
+        event_bus: EventBus,
+        websocket: RealtimeWebSocket,
+        session: AudioSession,
+    ):
         self._event_bus = event_bus
         self._websocket = websocket
+        self._session = session
 
         self._response_id: str | None = None
         self._item_id: str | None = None
@@ -63,7 +70,7 @@ class InterruptionWatchdog(LoggingMixin):
     async def _on_user_started_speaking(
         self, _: InputAudioBufferSpeechStartedEvent
     ) -> None:
-        if not self._assistant_is_speaking:
+        if not self._assistant_is_speaking and not self._session.is_playing:
             return
 
         self.logger.info("Barge-in detected - cancelling response")

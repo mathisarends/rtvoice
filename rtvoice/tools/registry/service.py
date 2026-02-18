@@ -1,5 +1,6 @@
 from collections.abc import Callable
 
+from rtvoice.mcp import MCPServer
 from rtvoice.realtime.schemas import FunctionTool
 from rtvoice.tools.registry.schema_builder import ToolSchemaBuilder
 from rtvoice.tools.registry.views import Tool
@@ -33,7 +34,7 @@ class ToolRegistry:
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
 
-    def get_schema(self) -> list[FunctionTool]:
+    def get_tool_schema(self) -> list[FunctionTool]:
         return [tool.to_pydantic() for tool in self._tools.values()]
 
     def _build_tool(
@@ -60,3 +61,17 @@ class ToolRegistry:
         if tool.name in self._tools:
             raise ValueError(f"Tool '{tool.name}' already registered")
         self._tools[tool.name] = tool
+
+    def register_mcp(self, tool: FunctionTool, server: MCPServer) -> None:
+        async def handler(**arguments):
+            return await server.call_tool(tool.name, arguments)
+
+        handler.__name__ = tool.name
+
+        mcp_tool = Tool(
+            name=tool.name,
+            description=tool.description or "",
+            function=handler,
+            schema=tool.parameters,
+        )
+        self._register_tool(mcp_tool)

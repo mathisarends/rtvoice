@@ -2,7 +2,14 @@ import json
 from enum import StrEnum
 from typing import Annotated, Any, Literal, Self
 
-from pydantic import BaseModel, Field, TypeAdapter, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    TypeAdapter,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 from rtvoice.views import RealtimeModel
 
@@ -205,9 +212,13 @@ class FunctionParameterProperty(BaseModel):
 
 class FunctionParameters(BaseModel):
     type: str = "object"
-    strict: bool = True
     properties: dict[str, FunctionParameterProperty] = Field(default_factory=dict)
     required: list[str] = Field(default_factory=list)
+
+    @computed_field
+    @property
+    def strict(self) -> bool:
+        return len(self.properties) > 0
 
 
 class FunctionTool(BaseModel):

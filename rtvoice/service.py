@@ -15,6 +15,7 @@ from rtvoice.events.views import (
     StopAgentCommand,
     UserInactivityTimeoutEvent,
 )
+from rtvoice.mcp import MCPServer
 from rtvoice.realtime.schemas import (
     AudioConfig,
     AudioFormat,
@@ -38,6 +39,7 @@ from rtvoice.watchdogs import (
     AudioInputWatchdog,
     AudioOutputWatchdog,
     ConversationHistoryWatchdog,
+    ErrorWatchdog,
     InterruptionWatchdog,
     MessageTruncationWatchdog,
     RealtimeWatchdog,
@@ -57,6 +59,7 @@ class Agent(LoggingMixin):
         speech_speed: float = 1.0,
         transcription_model: TranscriptionModel | None = None,
         tools: Tools | None = None,
+        mcp_servers: list[MCPServer] | None = None,
         recording_output_path: str | None = None,
         api_key: str | None = None,
         audio_input: AudioInputDevice | None = None,
@@ -68,6 +71,7 @@ class Agent(LoggingMixin):
         self._voice = voice
         self._speech_speed = self._clip_speech_speed(speech_speed)
         self._tools = tools or Tools()
+        self._mcp_servers = mcp_servers or []
         self._stopped = asyncio.Event()
 
         self._event_bus = EventBus()
@@ -82,6 +86,18 @@ class Agent(LoggingMixin):
         self._setup_watchdogs(
             audio_input_device, audio_output_device, recording_output_path
         )
+
+    def _clip_speech_speed(self, speed: float) -> float:
+        clipped = max(0.5, min(speed, 1.5))
+
+        if speed != clipped:
+            self.logger.warning(
+                "Speech speed %.2f is out of range [0.5, 1.5], clipping to %.2f",
+                speed,
+                clipped,
+            )
+
+        return clipped
 
     def _setup_shutdown_handlers(self) -> None:
         self._event_bus.subscribe(StopAgentCommand, self._on_stop_command)
@@ -127,6 +143,7 @@ class Agent(LoggingMixin):
         self._recording_watchdog = RecordingWatchdog(
             event_bus=self._event_bus, output_path=recording_output_path
         )
+        self._error_watchdog = ErrorWatchdog(event_bus=self._event_bus)
 
     async def _on_stop_command(self, event: StopAgentCommand) -> None:
         self.logger.info("Received stop command - triggering shutdown")
@@ -138,18 +155,6 @@ class Agent(LoggingMixin):
             event.timeout_seconds,
         )
         self._stopped.set()
-
-    def _clip_speech_speed(self, speed: float) -> float:
-        clipped = max(0.5, min(speed, 1.5))
-
-        if speed != clipped:
-            self.logger.warning(
-                "Speech speed %.2f is out of range [0.5, 1.5], clipping to %.2f",
-                speed,
-                clipped,
-            )
-
-        return clipped
 
     async def __aenter__(self) -> Self:
         await self.start()
@@ -165,6 +170,8 @@ class Agent(LoggingMixin):
     async def start(self) -> None:
         self.logger.info("Starting agent...")
 
+        await self._connect_mcp_servers()
+
         session_config = self._build_session_config()
         event = AgentStartedEvent(session_config=session_config)
 
@@ -173,6 +180,14 @@ class Agent(LoggingMixin):
 
         # blocked till stop gets called or inactivity timeout occurs
         await self._stopped.wait()
+
+    async def _connect_mcp_servers(self) -> None:
+        for server in self._mcp_servers:
+            await server.connect()
+            tools = await server.list_tools()
+            for tool in tools:
+                self._tools.register_mcp(tool, server)
+            self.logger.info("MCP server connected: %d tools loaded", len(tools))
 
     def _build_session_config(self) -> RealtimeSessionConfig:
         input_config = AudioInputConfig(
@@ -192,17 +207,23 @@ class Agent(LoggingMixin):
             input=input_config,
         )
 
+        tool_schema = self._tools.get_tool_schema()
+        print("Tool schema for session config: %s", tool_schema)
+
         return RealtimeSessionConfig(
             model=self._model,
             instructions=self._instructions,
             voice=self._voice,
             audio=audio_config,
             tool_choice=ToolChoiceMode.AUTO,
-            tools=self._tools.get_schema(),
+            tools=self._tools.get_tool_schema(),
         )
 
     async def stop(self) -> AgentHistory:
         self.logger.info("Stopping agent...")
+
+        for server in self._mcp_servers:
+            await server.cleanup()
 
         event = AgentStoppedEvent()
         await self._event_bus.dispatch(event)

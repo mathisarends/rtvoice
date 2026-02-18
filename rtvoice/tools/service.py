@@ -6,6 +6,7 @@ from rtvoice.events.views import (
     StopAgentCommand,
     VolumeUpdateRequestedEvent,
 )
+from rtvoice.mcp.server import MCPServer
 from rtvoice.realtime.schemas import FunctionTool
 from rtvoice.shared.logging import LoggingMixin
 from rtvoice.tools.registry import ToolRegistry
@@ -21,8 +22,11 @@ class Tools(LoggingMixin):
     def action(self, description: str, **kwargs):
         return self.registry.action(description, **kwargs)
 
-    def get_schema(self) -> list[FunctionTool]:
-        return self.registry.get_schema()
+    def register_mcp(self, tool: FunctionTool, server: MCPServer) -> None:
+        self.registry.register_mcp(tool, server)
+
+    def get_tool_schema(self) -> list[FunctionTool]:
+        return self.registry.get_tool_schema()
 
     def _register_default_tools(self) -> None:
         @self.registry.action("Get the current local time")

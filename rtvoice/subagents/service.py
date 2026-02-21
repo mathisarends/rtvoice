@@ -26,7 +26,8 @@ class SubAgent:
     async def run(self, task: str) -> str:
         await self._connect_mcp_servers()
 
-        tool_schema = self._tools.get_tool_schema()
+        tool_schema = self._tools.get_json_tool_schema()
+
         messages = [
             SystemMessage(self._instructions),
             UserMessage(task),

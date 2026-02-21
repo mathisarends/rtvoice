@@ -12,15 +12,18 @@ from rtvoice.realtime.schemas import FunctionTool
 from rtvoice.shared.logging import LoggingMixin
 from rtvoice.tools.registry import ToolRegistry
 from rtvoice.tools.registry.views import Tool
+from rtvoice.tools.views import SpecialToolParameters
 from rtvoice.views import ActionResult
 
 
 class Tools(LoggingMixin):
-    def __init__(self, event_bus: EventBus):
-        self._event_bus = event_bus
+    def __init__(self):
         self._registry = ToolRegistry()
-
+        self._context: SpecialToolParameters = SpecialToolParameters()
         self._register_default_tools()
+
+    def set_context(self, context: SpecialToolParameters) -> None:
+        self._context = context
 
     def action(self, description: str, **kwargs):
         return self._registry.action(description, **kwargs)
@@ -31,29 +34,45 @@ class Tools(LoggingMixin):
     def get_tool_schema(self) -> list[FunctionTool]:
         return self._registry.get_tool_schema()
 
+    def get_json_tool_schema(self) -> list[dict]:
+        return [
+            {
+                "type": "function",
+                "function": tool.model_dump(exclude={"type"}, exclude_none=True),
+            }
+            for tool in self._registry.get_tool_schema()
+        ]
+
     def get(self, name: str) -> Tool | None:
         return self._registry.get(name)
 
-    async def execute(self, name: str, arguments: dict[str, Any]) -> Any:
+    async def execute(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+    ) -> Any:
         tool = self._registry.get(name)
         if not tool:
             raise KeyError(f"Tool '{name}' not found in registry")
 
-        prepared = self._prepare_arguments(tool, arguments)
+        prepared = self._prepare_arguments(tool, arguments, self._context)
         return await tool.execute(prepared)
 
     def _prepare_arguments(
-        self, tool: Tool, llm_arguments: dict[str, Any]
+        self,
+        tool: Tool,
+        llm_arguments: dict[str, Any],
+        context: SpecialToolParameters,
     ) -> dict[str, Any]:
         signature = inspect.signature(tool.function)
         arguments = llm_arguments.copy()
-        injectable = self._injectable_params()
+        injectable = self._injectable_from_context(context)
 
         for param_name, param in signature.parameters.items():
             if param_name in arguments or param_name in ("self", "cls"):
                 continue
 
-            if param_name in injectable:
+            if param_name in injectable and injectable[param_name] is not None:
                 arguments[param_name] = injectable[param_name]
             elif param.default is inspect.Parameter.empty:
                 raise ValueError(
@@ -62,10 +81,10 @@ class Tools(LoggingMixin):
 
         return arguments
 
-    def _injectable_params(self) -> dict[str, Any]:
-        return {
-            "event_bus": self._event_bus,
-        }
+    def _injectable_from_context(
+        self, context: SpecialToolParameters
+    ) -> dict[str, Any]:
+        return {field: getattr(context, field) for field in context.model_fields}
 
     def _register_default_tools(self) -> None:
         @self.action("Get the current local time")

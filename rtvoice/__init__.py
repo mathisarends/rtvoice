@@ -1,5 +1,6 @@
 from .mcp import MCPServerStdio
 from .service import RealtimeAgent
+from .subagents import SubAgent
 from .tools import Tools
 from .views import AssistantVoice, RealtimeModel
 
@@ -8,5 +9,6 @@ __all__ = [
     "MCPServerStdio",
     "RealtimeAgent",
     "RealtimeModel",
+    "SubAgent",
     "Tools",
 ]

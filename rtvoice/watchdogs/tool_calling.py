@@ -44,6 +44,18 @@ class ToolCallingWatchdog(LoggingMixin):
             )
         )
 
+        await self._websocket.send(
+            ConversationItemCreateEvent.function_call_output(
+                call_id=event.call_id,
+                output=self._serialize(result),
+            )
+        )
+        await self._websocket.send(
+            ConversationResponseCreateEvent.from_instructions(
+                tool.response_instruction or _DEFAULT_RESPONSE_INSTRUCTION
+            )
+        )
+
     def _serialize(self, result: Any) -> str:
         if result is None:
             return "Success"

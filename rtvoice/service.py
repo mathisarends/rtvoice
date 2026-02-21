@@ -1,5 +1,5 @@
 import asyncio
-from typing import Self
+from typing import Generic, Self, TypeVar
 
 from rtvoice.audio import (
     AudioInputDevice,
@@ -35,7 +35,7 @@ from rtvoice.realtime.schemas import (
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.logging import LoggingMixin
-from rtvoice.tools import Tools
+from rtvoice.tools import SpecialToolParameters, Tools
 from rtvoice.views import (
     AgentHistory,
     AgentListener,
@@ -57,8 +57,10 @@ from rtvoice.watchdogs import (
     UserInactivityTimeoutWatchdog,
 )
 
+T = TypeVar("T")
 
-class RealtimeAgent(LoggingMixin):
+
+class RealtimeAgent(LoggingMixin, Generic[T]):
     def __init__(
         self,
         instructions: str = "",
@@ -75,6 +77,7 @@ class RealtimeAgent(LoggingMixin):
         audio_output: AudioOutputDevice | None = None,
         transcript_listener: TranscriptListener | None = None,
         agent_listener: AgentListener | None = None,
+        context: T | None = None,
     ):
         self._instructions = instructions
         self._model = model
@@ -84,7 +87,13 @@ class RealtimeAgent(LoggingMixin):
         self._noise_reduction = noise_reduction
         self._turn_detection = turn_detection or TurnDetection()
         self._event_bus = EventBus()
-        self._tools = tools or Tools(event_bus=self._event_bus)
+        self._tools = tools or Tools()
+        self._tools.set_context(
+            SpecialToolParameters(
+                event_bus=self._event_bus,
+                context=context,
+            )
+        )
         self._mcp_servers = mcp_servers or []
         self._transcript_listener = transcript_listener
         self._agent_listener = agent_listener

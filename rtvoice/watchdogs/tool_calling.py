@@ -1,6 +1,4 @@
-import inspect
 import json
-from collections.abc import Callable
 from typing import Any
 
 from rtvoice.events import EventBus
@@ -11,115 +9,46 @@ from rtvoice.realtime.schemas import (
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.logging import LoggingMixin
-from rtvoice.tools.registry import ToolRegistry
-from rtvoice.tools.registry.views import Tool
+from rtvoice.tools import Tools
+
+_DEFAULT_RESPONSE_INSTRUCTION = (
+    "The tool call has completed. Process the result and respond to the user."
+)
 
 
 class ToolCallingWatchdog(LoggingMixin):
-    def __init__(
-        self,
-        event_bus: EventBus,
-        tool_registry: ToolRegistry,
-        websocket: RealtimeWebSocket,
-    ):
+    def __init__(self, event_bus: EventBus, tools: Tools, websocket: RealtimeWebSocket):
         self._event_bus = event_bus
-        self._tool_registry = tool_registry
+        self._tools = tools
         self._websocket = websocket
 
-        self._event_bus.subscribe(
-            FunctionCallItem,
-            self._handle_tool_call,
-        )
+        self._event_bus.subscribe(FunctionCallItem, self._handle_tool_call)
 
     async def _handle_tool_call(self, event: FunctionCallItem) -> None:
-        self.logger.info(
-            "Tool call received: %s (call_id=%s)",
-            event.name,
-            event.call_id,
-        )
-
-        tool = self._tool_registry.get(event.name)
+        tool = self._tools.get(event.name)
         if not tool:
-            self.logger.error("Tool '%s' not found in registry", event.name)
+            self.logger.error("Tool '%s' not found", event.name)
             return
 
-        try:
-            await self._execute_and_dispatch(tool, event)
-            self.logger.info(
-                "Tool call completed: %s (call_id=%s)",
-                event.name,
-                event.call_id,
-            )
-        except Exception as e:
-            self.logger.error(
-                "Tool execution failed: %s (call_id=%s) - %s",
-                event.name,
-                event.call_id,
-                e,
-                exc_info=True,
-            )
+        result = await self._tools.execute(event.name, event.arguments or {})
 
-    async def _execute_and_dispatch(
-        self, tool: Tool, call_data: FunctionCallItem
-    ) -> None:
-        arguments = self._prepare_arguments(tool.function, call_data.arguments or {})
-        result = await tool.execute(arguments)
-        output = self._serialize_result(result)
-
-        create_event = ConversationItemCreateEvent.function_call_output(
-            call_id=call_data.call_id,
-            output=output,
+        await self._websocket.send(
+            ConversationItemCreateEvent.function_call_output(
+                call_id=event.call_id,
+                output=self._serialize(result),
+            )
         )
-        await self._websocket.send(create_event)
-
-        if tool.response_instruction:
-            response_event = ConversationResponseCreateEvent.from_instructions(
-                tool.response_instruction
+        await self._websocket.send(
+            ConversationResponseCreateEvent.from_instructions(
+                tool.response_instruction or _DEFAULT_RESPONSE_INSTRUCTION
             )
-        else:
-            response_event = ConversationResponseCreateEvent.from_instructions(
-                "The tool call has completed. Process the result and respond to the user."
-            )
+        )
 
-        await self._websocket.send(response_event)
-
-    def _prepare_arguments(
-        self,
-        func: Callable[..., Any],
-        llm_arguments: dict[str, Any],
-    ) -> dict[str, Any]:
-        signature = inspect.signature(func)
-        arguments = llm_arguments.copy()
-        available_special_params = self._get_available_special_params()
-
-        for param_name, param in signature.parameters.items():
-            if self._is_managed_parameter(param_name, arguments):
-                continue
-
-            if param_name in available_special_params:
-                arguments[param_name] = available_special_params[param_name]
-            elif param.default == inspect.Parameter.empty:
-                raise ValueError(
-                    f"Missing required parameter '{param_name}' for tool '{func.__name__}'"
-                )
-
-        return arguments
-
-    def _get_available_special_params(self) -> dict[str, Any]:
-        return {
-            "event_bus": self._event_bus,
-        }
-
-    def _is_managed_parameter(self, param_name: str, arguments: dict[str, Any]) -> bool:
-        return param_name in arguments or param_name in ("self", "cls")
-
-    def _serialize_result(self, result: Any) -> str:
+    def _serialize(self, result: Any) -> str:
         if result is None:
             return "Success"
-
         if isinstance(result, str):
             return result
-
         try:
             return json.dumps(result)
         except (TypeError, ValueError):

@@ -1,5 +1,6 @@
+import inspect
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from rtvoice.events import EventBus
 from rtvoice.events.views import (
@@ -10,30 +11,68 @@ from rtvoice.mcp.server import MCPServer
 from rtvoice.realtime.schemas import FunctionTool
 from rtvoice.shared.logging import LoggingMixin
 from rtvoice.tools.registry import ToolRegistry
+from rtvoice.tools.registry.views import Tool
 from rtvoice.views import ActionResult
 
 
 class Tools(LoggingMixin):
-    def __init__(self):
-        self.registry = ToolRegistry()
+    def __init__(self, event_bus: EventBus):
+        self._event_bus = event_bus
+        self._registry = ToolRegistry()
 
         self._register_default_tools()
 
     def action(self, description: str, **kwargs):
-        return self.registry.action(description, **kwargs)
+        return self._registry.action(description, **kwargs)
 
     def register_mcp(self, tool: FunctionTool, server: MCPServer) -> None:
-        self.registry.register_mcp(tool, server)
+        self._registry.register_mcp(tool, server)
 
     def get_tool_schema(self) -> list[FunctionTool]:
-        return self.registry.get_tool_schema()
+        return self._registry.get_tool_schema()
+
+    def get(self, name: str) -> Tool | None:
+        return self._registry.get(name)
+
+    async def execute(self, name: str, arguments: dict[str, Any]) -> Any:
+        tool = self._registry.get(name)
+        if not tool:
+            raise KeyError(f"Tool '{name}' not found in registry")
+
+        prepared = self._prepare_arguments(tool, arguments)
+        return await tool.execute(prepared)
+
+    def _prepare_arguments(
+        self, tool: Tool, llm_arguments: dict[str, Any]
+    ) -> dict[str, Any]:
+        signature = inspect.signature(tool.function)
+        arguments = llm_arguments.copy()
+        injectable = self._injectable_params()
+
+        for param_name, param in signature.parameters.items():
+            if param_name in arguments or param_name in ("self", "cls"):
+                continue
+
+            if param_name in injectable:
+                arguments[param_name] = injectable[param_name]
+            elif param.default is inspect.Parameter.empty:
+                raise ValueError(
+                    f"Missing required parameter '{param_name}' for tool '{tool.name}'"
+                )
+
+        return arguments
+
+    def _injectable_params(self) -> dict[str, Any]:
+        return {
+            "event_bus": self._event_bus,
+        }
 
     def _register_default_tools(self) -> None:
-        @self.registry.action("Get the current local time")
+        @self.action("Get the current local time")
         def get_current_time() -> str:
             return datetime.now().strftime("%H:%M:%S")
 
-        @self.registry.action("Adjust volume level.")
+        @self.action("Adjust volume level.")
         async def adjust_volume(
             level: Annotated[float, "Volume level from 0.0 (0%) to 1.0 (100%)"],
             event_bus: EventBus,
@@ -55,8 +94,8 @@ class Tools(LoggingMixin):
                 success=True, message=f"Volume adjusted to {percentage}%"
             )
 
-        @self.registry.action("Stop the current realtime session.")
-        async def stop_realtime_session(event_bus: EventBus) -> ActionResult:
+        @self.action("Stop the current realtime session.")
+        async def stop_session(event_bus: EventBus) -> ActionResult:
             self.logger.info("Stop command received - dispatching stop event")
 
             stop_event = StopAgentCommand()

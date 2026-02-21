@@ -83,7 +83,8 @@ class RealtimeAgent(LoggingMixin):
         self._speech_speed = self._clip_speech_speed(speech_speed)
         self._noise_reduction = noise_reduction
         self._turn_detection = turn_detection or TurnDetection()
-        self._tools = tools or Tools()
+        self._event_bus = EventBus()
+        self._tools = tools or Tools(event_bus=self._event_bus)
         self._mcp_servers = mcp_servers or []
         self._transcript_listener = transcript_listener
         self._agent_listener = agent_listener
@@ -91,7 +92,6 @@ class RealtimeAgent(LoggingMixin):
         self._stopped = asyncio.Event()
         self._stop_called = False
 
-        self._event_bus = EventBus()
         self._websocket = RealtimeWebSocket(
             model=self._model, event_bus=self._event_bus, api_key=api_key
         )
@@ -149,7 +149,7 @@ class RealtimeAgent(LoggingMixin):
         )
         self._tool_calling_watchdog = ToolCallingWatchdog(
             event_bus=self._event_bus,
-            tool_registry=self._tools.registry,
+            tools=self._tools,
             websocket=self._websocket,
         )
 

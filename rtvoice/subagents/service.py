@@ -7,9 +7,12 @@ from rtvoice.views import ActionResult
 # TODO: initial state loading time oder so (brauchen aber alle tools)
 # gerne auch tools unterstützen die generatoren sind und schrittweise ergebnisse liefern (damit man auch weiß was hier schrittweise passiert für die beste ux)
 
-
 # der soll hier ja einen multi call tool loop haben udn dann semantisch entscheiden ob er ein done tool aufrufen wollte oder nicht | momentan nimmt der ja immer nur ein
 # Tool das ist ja nciht so wie das gewollt ist actually
+
+# tool um den user zu informierne, done tool
+
+
 class SubAgent:
     def __init__(
         self,
@@ -20,6 +23,7 @@ class SubAgent:
         mcp_servers: list[MCPServer] | None = None,
         llm: BaseChatModel | None = None,
         max_iterations: int = 10,
+        pending_message: str | None = None,
     ):
         self.name = name
         self.description = description
@@ -28,6 +32,8 @@ class SubAgent:
         self._mcp_servers = mcp_servers or []
         self._llm = llm
         self._max_iterations = max_iterations
+
+        self.pending_message = pending_message
 
     async def run(self, task: str) -> ActionResult:
         await self._connect_mcp_servers()

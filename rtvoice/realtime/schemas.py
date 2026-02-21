@@ -389,7 +389,6 @@ class ConversationItemCreateEvent(BaseModel):
     def assistant_message(cls, text: str) -> Self:
         return cls(
             item=MessageConversationItem(
-                type="message",
                 role=MessageRole.ASSISTANT,
                 content=[ConversationContent(type="output_text", text=text)],
             ),

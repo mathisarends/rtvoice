@@ -12,7 +12,7 @@ from rtvoice.shared.logging import LoggingMixin
 from rtvoice.tools import Tools
 
 _DEFAULT_RESPONSE_INSTRUCTION = (
-    "The tool call has completed. Process the result and respond to the user."
+    "The tool call has completed. Respond directly with the result."
 )
 
 
@@ -30,8 +30,14 @@ class ToolCallingWatchdog(LoggingMixin):
             self.logger.error("Tool '%s' not found", event.name)
             return
 
+        self.logger.info(
+            "Tool call started: '%s' | args: %s",
+            event.name,
+            json.dumps(event.arguments or {}, ensure_ascii=False),
+        )
+
+        # gerne pending results hier sprechen lassen:
         result = await self._tools.execute(event.name, event.arguments or {})
-        print("haha haha result", result)
 
         await self._websocket.send(
             ConversationItemCreateEvent.function_call_output(
@@ -41,7 +47,7 @@ class ToolCallingWatchdog(LoggingMixin):
         )
         await self._websocket.send(
             ConversationResponseCreateEvent.from_instructions(
-                tool.response_instruction or _DEFAULT_RESPONSE_INSTRUCTION
+                tool.result_instruction or _DEFAULT_RESPONSE_INSTRUCTION
             )
         )
 

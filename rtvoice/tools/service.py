@@ -39,12 +39,19 @@ class Tools(LoggingMixin):
 
     def register_subagent(self, agent: SubAgent) -> None:
         async def _handoff(
-            task: Annotated[str, "The task or question to delegate to this agent"],
+            task: Annotated[
+                str,
+                "The task or question to delegate to this agent. Be specific and add enough context for the agent to complete the task without further clarification.",
+            ],
         ) -> str:
             return await agent.run(task)
 
-        _handoff.__name__ = agent.name
-        self._registry.action(agent.description)(_handoff)
+        safe_name = agent.name.replace(" ", "_")
+        _handoff.__name__ = safe_name
+        self._registry.action(
+            agent.description,
+            pending_message=agent.pending_message,
+        )(_handoff)
 
     def get_tool_schema(self) -> list[FunctionTool]:
         return self._registry.get_tool_schema()
@@ -99,7 +106,10 @@ class Tools(LoggingMixin):
     def _injectable_from_context(
         self, context: SpecialToolParameters
     ) -> dict[str, Any]:
-        return {field: getattr(context, field) for field in context.model_fields}
+        return {
+            field: getattr(context, field)
+            for field in SpecialToolParameters.model_fields
+        }
 
     def _register_default_tools(self) -> None:
         @self.action("Get the current local time")

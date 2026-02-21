@@ -60,3 +60,7 @@ class UserInactivityTimeoutEvent(BaseModel):
 
 class AssistantInterruptedEvent(BaseModel):
     pass
+
+
+class AudioPlaybackCompletedEvent(BaseModel):
+    pass

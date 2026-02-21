@@ -15,16 +15,16 @@ class ToolRegistry:
         self,
         description: str,
         name: str | None = None,
-        response_instruction: str | None = None,
-        loading_message: str | None = None,
+        result_instruction: str | None = None,
+        pending_message: str | None = None,
     ):
         def decorator(func: Callable) -> Callable:
             tool = self._build_tool(
                 func=func,
                 name=name or func.__name__,
                 description=description,
-                response_instruction=response_instruction,
-                loading_message=loading_message,
+                result_instruction=result_instruction,
+                pending_message=pending_message,
             )
             self._register_tool(tool)
             return func
@@ -42,8 +42,8 @@ class ToolRegistry:
         func: Callable,
         name: str,
         description: str,
-        response_instruction: str | None,
-        loading_message: str | None,
+        result_instruction: str | None,
+        pending_message: str | None,
     ) -> Tool:
         bound_func = getattr(self, func.__name__, func)
         schema = self._schema_builder.build(func)
@@ -53,8 +53,8 @@ class ToolRegistry:
             description=description,
             function=bound_func,
             schema=schema,
-            response_instruction=response_instruction,
-            loading_message=loading_message,
+            result_instruction=result_instruction,
+            pending_message=pending_message,
         )
 
     def _register_tool(self, tool: Tool) -> None:

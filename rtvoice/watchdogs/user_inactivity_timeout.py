@@ -2,12 +2,11 @@ import asyncio
 import time
 
 from rtvoice.events import EventBus
-from rtvoice.events.views import UserInactivityTimeoutEvent
+from rtvoice.events.views import AudioPlaybackCompletedEvent, UserInactivityTimeoutEvent
 from rtvoice.realtime.schemas import (
     InputAudioBufferSpeechStartedEvent,
     InputAudioBufferSpeechStoppedEvent,
     ResponseCreatedEvent,
-    ResponseDoneEvent,
 )
 from rtvoice.shared.logging import LoggingMixin
 
@@ -36,7 +35,7 @@ class UserInactivityTimeoutWatchdog(LoggingMixin):
             self._handle_assistant_started,
         )
         self.event_bus.subscribe(
-            ResponseDoneEvent,
+            AudioPlaybackCompletedEvent,
             self._handle_assistant_done,
         )
 
@@ -66,7 +65,7 @@ class UserInactivityTimeoutWatchdog(LoggingMixin):
         self._is_monitoring = False  # Stop monitoring while assistant speaks
         self.logger.debug("Assistant started speaking")
 
-    async def _handle_assistant_done(self, event: ResponseDoneEvent) -> None:
+    async def _handle_assistant_done(self, event: AudioPlaybackCompletedEvent) -> None:
         self._assistant_is_speaking = False
         self.logger.debug("Assistant finished speaking")
 

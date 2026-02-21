@@ -7,11 +7,13 @@ from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentStartedEvent,
     AgentStoppedEvent,
+    AudioPlaybackCompletedEvent,
     VolumeUpdateRequestedEvent,
 )
 from rtvoice.realtime.schemas import (
     InputAudioBufferAppendEvent,
     InputAudioBufferSpeechStartedEvent,
+    ResponseDoneEvent,
     ResponseOutputAudioDeltaEvent,
 )
 from rtvoice.shared.logging import LoggingMixin
@@ -32,6 +34,7 @@ class AudioWatchdog(LoggingMixin):
         self._event_bus.subscribe(
             VolumeUpdateRequestedEvent, self._on_volume_update_requested
         )
+        self._event_bus.subscribe(ResponseDoneEvent, self._on_response_done)
 
     async def _on_agent_started(self, _: AgentStartedEvent) -> None:
         await self._session.start()
@@ -72,3 +75,8 @@ class AudioWatchdog(LoggingMixin):
     ) -> None:
         await self._session.set_volume(event.volume)
         self.logger.info("Volume set to %d%%", int(event.volume * 100))
+
+    async def _on_response_done(self, _: ResponseDoneEvent) -> None:
+        while self._session.is_playing:
+            await asyncio.sleep(0.05)
+        await self._event_bus.dispatch(AudioPlaybackCompletedEvent())

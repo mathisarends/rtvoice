@@ -59,6 +59,18 @@ class TranscriptionModel(StrEnum):
     WHISPER_1 = "whisper-1"
 
 
+class NoiseReduction(StrEnum):
+    """
+    Noise reduction filter type for audio input.
+
+    - NEAR_FIELD: Optimized for close-range audio (e.g., headset microphone)
+    - FAR_FIELD: Optimized for distant audio sources (e.g., room microphone)
+    """
+
+    NEAR_FIELD = "near_field"
+    FAR_FIELD = "far_field"
+
+
 class AgentHistory(BaseModel):
     conversation_turns: list[ConversationTurn]
 

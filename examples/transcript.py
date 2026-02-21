@@ -1,4 +1,4 @@
-from rtvoice import Agent
+from rtvoice import RealtimeAgent
 from rtvoice.views import TranscriptListener
 
 
@@ -19,7 +19,7 @@ class ConsolePrinter(TranscriptListener):
 async def main():
     instructions = """Du bist Jarvis. Antworte kurz und bündig."""
 
-    agent = Agent(
+    agent = RealtimeAgent(
         instructions=instructions,
         transcript_listener=ConsolePrinter(),
     )

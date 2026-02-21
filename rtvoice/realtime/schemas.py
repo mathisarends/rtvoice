@@ -198,7 +198,11 @@ class AudioInputConfig(BaseModel):
         default_factory=TurnDetectionConfig
     )
     transcription: InputAudioTranscriptionConfig | None = None
-    noise_reduction: InputAudioNoiseReductionConfig | None = None
+    noise_reduction: InputAudioNoiseReductionConfig | None = Field(
+        default_factory=lambda: InputAudioNoiseReductionConfig(
+            type=NoiseReductionType.FAR_FIELD
+        )
+    )
 
 
 class AudioConfig(BaseModel):
@@ -355,7 +359,6 @@ class RealtimeSessionConfig(BaseModel):
     audio: AudioConfig = Field(default_factory=AudioConfig)
     include: list[str] | None = None
     max_output_tokens: int | Literal["inf"] = "inf"
-    input_audio_noise_reduction: InputAudioNoiseReductionConfig | None = None
     output_modalities: list[OutputModality] = Field(
         default_factory=lambda: [OutputModality.AUDIO]
     )

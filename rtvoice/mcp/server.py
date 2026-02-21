@@ -61,11 +61,15 @@ class MCPServerStdio(MCPServer):
         args: list[str] | None = None,
         env: dict | None = None,
         cache_tools_list: bool = True,
+        allowed_tools: list[str] | None = None,
     ):
         self.command = command
         self.args = args if args else []
         self.env = env
         self.cache_tools_list = cache_tools_list
+        self._allowed_tools: set[str] | None = (
+            set(allowed_tools) if allowed_tools is not None else None
+        )
 
         self._process: asyncio.subprocess.Process | None = None
         self._msg_id = 0
@@ -94,7 +98,13 @@ class MCPServerStdio(MCPServer):
         if self.cache_tools_list and self._tools_cache is not None:
             return self._tools_cache
         result = await self._request("tools/list", {})
-        self._tools_cache = [_parse_tool(t) for t in result.get("tools", [])]
+
+        tools = [_parse_tool(t) for t in result.get("tools", [])]
+
+        if self._allowed_tools is not None:
+            tools = [t for t in tools if t.name in self._allowed_tools]
+
+        self._tools_cache = tools
         return self._tools_cache
 
     async def call_tool(

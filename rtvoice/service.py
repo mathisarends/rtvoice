@@ -26,7 +26,9 @@ from rtvoice.realtime.schemas import (
     AudioConfig,
     AudioInputConfig,
     AudioOutputConfig,
+    InputAudioNoiseReductionConfig,
     InputAudioTranscriptionConfig,
+    NoiseReductionType,
     RealtimeSessionConfig,
     ToolChoiceMode,
 )
@@ -37,6 +39,7 @@ from rtvoice.views import (
     AgentHistory,
     AgentListener,
     AssistantVoice,
+    NoiseReduction,
     RealtimeModel,
     TranscriptionModel,
     TranscriptListener,
@@ -61,6 +64,7 @@ class RealtimeAgent(LoggingMixin):
         voice: AssistantVoice = AssistantVoice.MARIN,
         speech_speed: float = 1.0,
         transcription_model: TranscriptionModel | None = None,
+        noise_reduction: NoiseReduction = NoiseReduction.FAR_FIELD,
         tools: Tools | None = None,
         mcp_servers: list[MCPServer] | None = None,
         api_key: str | None = None,
@@ -74,6 +78,7 @@ class RealtimeAgent(LoggingMixin):
         self._transcription_model = transcription_model
         self._voice = voice
         self._speech_speed = self._clip_speech_speed(speech_speed)
+        self._noise_reduction = noise_reduction
         self._tools = tools or Tools()
         self._mcp_servers = mcp_servers or []
         self._transcript_listener = transcript_listener
@@ -209,7 +214,10 @@ class RealtimeAgent(LoggingMixin):
                 InputAudioTranscriptionConfig(model=self._transcription_model)
                 if self._transcription_model
                 else None
-            )
+            ),
+            noise_reduction=InputAudioNoiseReductionConfig(
+                type=NoiseReductionType(self._noise_reduction)
+            ),
         )
 
         audio_config = AudioConfig(

@@ -31,18 +31,7 @@ class ToolCallingWatchdog(LoggingMixin):
             return
 
         result = await self._tools.execute(event.name, event.arguments or {})
-
-        await self._websocket.send(
-            ConversationItemCreateEvent.function_call_output(
-                call_id=event.call_id,
-                output=self._serialize(result),
-            )
-        )
-        await self._websocket.send(
-            ConversationResponseCreateEvent.from_instructions(
-                tool.response_instruction or _DEFAULT_RESPONSE_INSTRUCTION
-            )
-        )
+        print("haha haha result", result)
 
         await self._websocket.send(
             ConversationItemCreateEvent.function_call_output(

@@ -2,8 +2,14 @@ from llmify import BaseChatModel, SystemMessage, ToolResultMessage, UserMessage
 
 from rtvoice.mcp import MCPServer
 from rtvoice.tools import Tools
+from rtvoice.views import ActionResult
+
+# TODO: initial state loading time oder so (brauchen aber alle tools)
+# gerne auch tools unterstützen die generatoren sind und schrittweise ergebnisse liefern (damit man auch weiß was hier schrittweise passiert für die beste ux)
 
 
+# der soll hier ja einen multi call tool loop haben udn dann semantisch entscheiden ob er ein done tool aufrufen wollte oder nicht | momentan nimmt der ja immer nur ein
+# Tool das ist ja nciht so wie das gewollt ist actually
 class SubAgent:
     def __init__(
         self,
@@ -23,7 +29,7 @@ class SubAgent:
         self._llm = llm
         self._max_iterations = max_iterations
 
-    async def run(self, task: str) -> str:
+    async def run(self, task: str) -> ActionResult:
         await self._connect_mcp_servers()
 
         tool_schema = self._tools.get_json_tool_schema()
@@ -37,7 +43,7 @@ class SubAgent:
             response = await self._llm.invoke(messages, tools=tool_schema)
 
             if not response.has_tool_calls:
-                return response.content
+                return ActionResult(content=response.content)
 
             messages.append(response.to_message())
 
@@ -47,7 +53,10 @@ class SubAgent:
                     ToolResultMessage(tool_call_id=tool_call.id, content=str(result))
                 )
 
-        return "Max iterations reached without completing the task."
+        return ActionResult(
+            content="Max iterations reached without a final answer.",
+            success=False,
+        )
 
     async def _connect_mcp_servers(self) -> None:
         for server in self._mcp_servers:

@@ -3,10 +3,10 @@ from typing import Annotated
 
 from llmify import ChatOpenAI
 
-from rtvoice import SubAgent, Tools
+from rtvoice import RealtimeAgent, SubAgent, Tools
 
 
-def build_tools() -> Tools:
+def build_weather_tools() -> Tools:
     tools = Tools()
 
     @tools.action("Add two numbers together")
@@ -17,9 +17,7 @@ def build_tools() -> Tools:
         return a + b
 
     @tools.action("Fetch the weather for a given city (mocked)")
-    def get_weather(
-        city: Annotated[str, "City name"],
-    ) -> str:
+    def get_weather(city: Annotated[str, "City name"]) -> str:
         mock_data = {
             "berlin": "12°C, partly cloudy",
             "munich": "8°C, sunny",
@@ -33,24 +31,20 @@ def build_tools() -> Tools:
 async def main() -> None:
     llm = ChatOpenAI(model="gpt-4o", temperature=0.2)
 
-    agent = SubAgent(
+    assistant_agent = SubAgent(
         name="assistant",
-        description="A helpful assistant that can do math and check the weather.",
-        instructions="You are a helpful assistant. Use the available tools to answer the user's question accurately.",
-        tools=build_tools(),
+        description="Handles math calculations and weather lookups",
+        instructions="You are a helpful assistant. Use the available tools to answer accurately.",
+        tools=build_weather_tools(),
         llm=llm,
     )
 
-    tasks = [
-        "What is 123 + 456?",
-        "What's the weather like in Berlin?",
-        "What is the weather in Munich and Hamburg? Also calculate 99 + 1.",
-    ]
+    agent = RealtimeAgent(
+        instructions="You are a voice assistant. Delegate math and weather questions to your assistant agent.",
+        subagents=[assistant_agent],
+    )
 
-    for task in tasks:
-        print(f"\nTask: {task}")
-        result = await agent.run(task)
-        print(f"Result: {result}")
+    await agent.start()
 
 
 if __name__ == "__main__":

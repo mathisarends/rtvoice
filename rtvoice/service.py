@@ -35,6 +35,7 @@ from rtvoice.realtime.schemas import (
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.logging import LoggingMixin
+from rtvoice.subagents import SubAgent
 from rtvoice.tools import SpecialToolParameters, Tools
 from rtvoice.views import (
     AgentHistory,
@@ -72,6 +73,7 @@ class RealtimeAgent(LoggingMixin, Generic[T]):
         turn_detection: TurnDetection | None = None,
         tools: Tools | None = None,
         mcp_servers: list[MCPServer] | None = None,
+        subagents: list[SubAgent] | None = None,
         api_key: str | None = None,
         audio_input: AudioInputDevice | None = None,
         audio_output: AudioOutputDevice | None = None,
@@ -95,6 +97,8 @@ class RealtimeAgent(LoggingMixin, Generic[T]):
             )
         )
         self._mcp_servers = mcp_servers or []
+        for subagent in subagents or []:
+            self._tools.register_subagent(subagent)
         self._transcript_listener = transcript_listener
         self._agent_listener = agent_listener
 

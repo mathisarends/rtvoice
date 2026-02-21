@@ -1,8 +1,14 @@
+from __future__ import annotations
+
 import inspect
 from datetime import datetime
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from rtvoice.events import EventBus
+
+if TYPE_CHECKING:
+    from rtvoice.subagents import SubAgent
+
 from rtvoice.events.views import (
     StopAgentCommand,
     VolumeUpdateRequestedEvent,
@@ -30,6 +36,15 @@ class Tools(LoggingMixin):
 
     def register_mcp(self, tool: FunctionTool, server: MCPServer) -> None:
         self._registry.register_mcp(tool, server)
+
+    def register_subagent(self, agent: SubAgent) -> None:
+        async def _handoff(
+            task: Annotated[str, "The task or question to delegate to this agent"],
+        ) -> str:
+            return await agent.run(task)
+
+        _handoff.__name__ = agent.name
+        self._registry.action(agent.description)(_handoff)
 
     def get_tool_schema(self) -> list[FunctionTool]:
         return self._registry.get_tool_schema()

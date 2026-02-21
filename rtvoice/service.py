@@ -31,6 +31,7 @@ from rtvoice.realtime.schemas import (
     NoiseReductionType,
     RealtimeSessionConfig,
     ToolChoiceMode,
+    TurnDetectionConfig,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.logging import LoggingMixin
@@ -43,6 +44,7 @@ from rtvoice.views import (
     RealtimeModel,
     TranscriptionModel,
     TranscriptListener,
+    TurnDetection,
 )
 from rtvoice.watchdogs import (
     AudioWatchdog,
@@ -65,6 +67,7 @@ class RealtimeAgent(LoggingMixin):
         speech_speed: float = 1.0,
         transcription_model: TranscriptionModel | None = None,
         noise_reduction: NoiseReduction = NoiseReduction.FAR_FIELD,
+        turn_detection: TurnDetection | None = None,
         tools: Tools | None = None,
         mcp_servers: list[MCPServer] | None = None,
         api_key: str | None = None,
@@ -79,6 +82,7 @@ class RealtimeAgent(LoggingMixin):
         self._voice = voice
         self._speech_speed = self._clip_speech_speed(speech_speed)
         self._noise_reduction = noise_reduction
+        self._turn_detection = turn_detection or TurnDetection()
         self._tools = tools or Tools()
         self._mcp_servers = mcp_servers or []
         self._transcript_listener = transcript_listener
@@ -217,6 +221,11 @@ class RealtimeAgent(LoggingMixin):
             ),
             noise_reduction=InputAudioNoiseReductionConfig(
                 type=NoiseReductionType(self._noise_reduction)
+            ),
+            turn_detection=TurnDetectionConfig(
+                threshold=self._turn_detection.threshold,
+                prefix_padding_ms=self._turn_detection.prefix_padding_ms,
+                silence_duration_ms=self._turn_detection.silence_duration_ms,
             ),
         )
 

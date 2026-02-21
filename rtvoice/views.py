@@ -71,6 +71,12 @@ class NoiseReduction(StrEnum):
     FAR_FIELD = "far_field"
 
 
+class TurnDetection(BaseModel):
+    threshold: float = 0.5
+    prefix_padding_ms: int = 300
+    silence_duration_ms: int = 500
+
+
 class AgentHistory(BaseModel):
     conversation_turns: list[ConversationTurn]
 

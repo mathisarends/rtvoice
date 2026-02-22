@@ -85,6 +85,9 @@ class ActionResult(BaseModel):
     success: bool = True
     message: str | None = None
 
+    def __str__(self) -> str:
+        return self.message or ("Success" if self.success else "Failed")
+
 
 class TranscriptListener(Protocol):
     async def on_user_chunk(self, chunk: str) -> None: ...

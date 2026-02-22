@@ -52,7 +52,7 @@ from rtvoice.watchdogs import (
     ConversationHistoryWatchdog,
     ErrorWatchdog,
     InterruptionWatchdog,
-    RealtimeWatchdog,
+    LifecycleWatchdog,
     ToolCallingWatchdog,
     TranscriptionWatchdog,
     UserInactivityTimeoutWatchdog,
@@ -145,7 +145,7 @@ class RealtimeAgent(LoggingMixin, Generic[T]):
             event_bus=self._event_bus,
             session=audio_session,
         )
-        self._realtime_watchdog = RealtimeWatchdog(
+        self._lifecycle_watchdog = LifecycleWatchdog(
             event_bus=self._event_bus, websocket=self._websocket
         )
         self._interruption_watchdog = InterruptionWatchdog(

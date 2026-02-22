@@ -1,6 +1,8 @@
 import json
 from typing import Any
 
+from pydantic import BaseModel
+
 from rtvoice.events import EventBus
 from rtvoice.realtime.schemas import (
     ConversationItemCreateEvent,
@@ -36,8 +38,18 @@ class ToolCallingWatchdog(LoggingMixin):
             json.dumps(event.arguments or {}, ensure_ascii=False),
         )
 
-        # gerne pending results hier sprechen lassen:
+        # if tool.pending_message:
+        #     await self._websocket.send(
+        #         ConversationItemCreateEvent.assistant_message(tool.pending_message)
+        #     )
+
         result = await self._tools.execute(event.name, event.arguments or {})
+
+        self.logger.info(
+            "Tool call result: '%s' | result: %s",
+            event.name,
+            self._serialize(result),
+        )
 
         await self._websocket.send(
             ConversationItemCreateEvent.function_call_output(
@@ -56,6 +68,8 @@ class ToolCallingWatchdog(LoggingMixin):
             return "Success"
         if isinstance(result, str):
             return result
+        if isinstance(result, BaseModel):
+            return result.model_dump_json(exclude_none=True)
         try:
             return json.dumps(result)
         except (TypeError, ValueError):

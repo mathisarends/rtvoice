@@ -142,7 +142,7 @@ Specialized watchdogs monitor and react to specific events:
 |----------|---------------|
 | **AudioInputWatchdog** | Streams microphone audio to the API |
 | **AudioOutputWatchdog** | Plays assistant audio responses |
-| **RealtimeWatchdog** | Manages WebSocket communication with OpenAI |
+| **LifecycleWatchdog** | Manages WebSocket communication with OpenAI |
 | **InterruptionWatchdog** | Handles user interruptions during responses |
 | **TruncationWatchdog** | Manages conversation state during interruptions |
 | **ToolCallingWatchdog** | Executes function calls from the assistant |

@@ -77,6 +77,9 @@ class AudioWatchdog(LoggingMixin):
         self.logger.info("Volume set to %d%%", int(event.volume * 100))
 
     async def _on_response_done(self, _: ResponseDoneEvent) -> None:
+        asyncio.create_task(self._wait_for_playback_completion())
+
+    async def _wait_for_playback_completion(self) -> None:
         while self._session.is_playing:
             await asyncio.sleep(0.05)
         await self._event_bus.dispatch(AudioPlaybackCompletedEvent())

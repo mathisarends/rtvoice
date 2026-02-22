@@ -26,10 +26,6 @@ class ConversationHistoryResponseEvent(BaseModel):
     conversation_turns: list[ConversationTurn]
 
 
-class SpeechSpeedUpdateRequestedEvent(BaseModel):
-    speech_speed: float
-
-
 class VolumeUpdateRequestedEvent(BaseModel):
     volume: float
 

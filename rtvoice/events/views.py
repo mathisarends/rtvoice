@@ -1,13 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from pydantic import BaseModel
 
 from rtvoice.realtime.schemas import RealtimeSessionConfig
-
-if TYPE_CHECKING:
-    from rtvoice.watchdogs.conversation_history import ConversationTurn
 
 
 class AgentStartedEvent(BaseModel):
@@ -20,10 +15,6 @@ class AgentStoppedEvent(BaseModel):
 
 class StopAgentCommand(BaseModel):
     pass
-
-
-class ConversationHistoryResponseEvent(BaseModel):
-    conversation_turns: list[ConversationTurn]
 
 
 class VolumeUpdateRequestedEvent(BaseModel):

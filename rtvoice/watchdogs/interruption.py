@@ -7,7 +7,6 @@ from rtvoice.events.views import AssistantInterruptedEvent
 from rtvoice.realtime.schemas import (
     ConversationItemTruncateEvent,
     InputAudioBufferSpeechStartedEvent,
-    OutputAudioBufferClearEvent,
     ResponseCancelEvent,
     ResponseCreatedEvent,
     ResponseDoneEvent,
@@ -77,8 +76,8 @@ class InterruptionWatchdog:
 
         logger.info("Barge-in detected - cancelling response")
 
-        await self._websocket.send(ResponseCancelEvent())
-        await self._websocket.send(OutputAudioBufferClearEvent())
+        if self._assistant_is_speaking:
+            await self._websocket.send(ResponseCancelEvent())
 
         if self._item_id and self._elapsed_ms is not None:
             logger.debug("Truncating item %s at %d ms", self._item_id, self._elapsed_ms)

@@ -321,7 +321,7 @@ class ConversationContent(BaseModel):
 
 
 class MessageConversationItem(BaseModel):
-    type: Literal["message"]
+    type: Literal["message"] = "message"
     role: MessageRole
     content: list[ConversationContent]
 
@@ -342,6 +342,7 @@ ConversationItem = MessageConversationItem | FunctionCallOutputConversationItem
 
 class ResponseInstructions(BaseModel):
     instructions: str | None = None
+    tool_choice: ToolChoiceMode = ToolChoiceMode.AUTO
 
 
 class ErrorDetails(BaseModel):
@@ -422,9 +423,11 @@ class ConversationResponseCreateEvent(BaseModel):
     response: ResponseInstructions | None = None
 
     @classmethod
-    def from_instructions(cls, text: str) -> Self:
+    def from_instructions(
+        cls, text: str, tool_choice: ToolChoiceMode = ToolChoiceMode.AUTO
+    ) -> Self:
         return cls(
-            response=ResponseInstructions(instructions=text),
+            response=ResponseInstructions(instructions=text, tool_choice=tool_choice),
         )
 
 

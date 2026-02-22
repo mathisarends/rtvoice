@@ -16,7 +16,6 @@ from rtvoice.events.views import (
     AssistantInterruptedEvent,
     AssistantTranscriptChunkReceivedEvent,
     AssistantTranscriptCompletedEvent,
-    ConversationHistoryResponseEvent,
     StopAgentCommand,
     UserInactivityTimeoutEvent,
     UserTranscriptChunkReceivedEvent,
@@ -38,7 +37,6 @@ from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.subagents import SubAgent
 from rtvoice.tools import SpecialToolParameters, Tools
 from rtvoice.views import (
-    AgentHistory,
     AgentListener,
     AssistantVoice,
     NoiseReduction,
@@ -49,7 +47,6 @@ from rtvoice.views import (
 )
 from rtvoice.watchdogs import (
     AudioWatchdog,
-    ConversationHistoryWatchdog,
     ErrorWatchdog,
     InterruptionWatchdog,
     LifecycleWatchdog,
@@ -74,39 +71,44 @@ class RealtimeAgent(Generic[T]):
         noise_reduction: NoiseReduction = NoiseReduction.FAR_FIELD,
         turn_detection: TurnDetection | None = None,
         tools: Tools | None = None,
-        mcp_servers: list[MCPServer] | None = None,
         subagents: list[SubAgent] | None = None,
-        api_key: str | None = None,
+        mcp_servers: list[MCPServer] | None = None,
         audio_input: AudioInputDevice | None = None,
         audio_output: AudioOutputDevice | None = None,
         transcript_listener: TranscriptListener | None = None,
         agent_listener: AgentListener | None = None,
         context: T | None = None,
+        inactivity_timeout_seconds: float = 10.0,
+        api_key: str | None = None,
     ):
         self._instructions = instructions
         self._model = model
-        self._transcription_model = transcription_model
         self._voice = voice
         self._speech_speed = self._clip_speech_speed(speech_speed)
+        self._transcription_model = transcription_model
         self._noise_reduction = noise_reduction
         self._turn_detection = turn_detection or TurnDetection()
-        self._event_bus = EventBus()
+
         self._tools = tools or Tools()
+        self._mcp_servers = mcp_servers or []
+        for subagent in subagents or []:
+            self._tools.register_subagent(subagent)
+
+        self._transcript_listener = transcript_listener
+        self._agent_listener = agent_listener
+        self._inactivity_timeout_seconds = inactivity_timeout_seconds
+        self._context = context
+
+        self._stopped = asyncio.Event()
+        self._stop_called = False
+
+        self._event_bus = EventBus()
         self._tools.set_context(
             SpecialToolParameters(
                 event_bus=self._event_bus,
                 context=context,
             )
         )
-        self._mcp_servers = mcp_servers or []
-        for subagent in subagents or []:
-            self._tools.register_subagent(subagent)
-        self._transcript_listener = transcript_listener
-        self._agent_listener = agent_listener
-
-        self._stopped = asyncio.Event()
-        self._stop_called = False
-
         self._websocket = RealtimeWebSocket(
             model=self._model, event_bus=self._event_bus, api_key=api_key
         )
@@ -156,12 +158,10 @@ class RealtimeAgent(Generic[T]):
             session=audio_session,
         )
         self._user_inactivity_timeout_watchdog = UserInactivityTimeoutWatchdog(
-            event_bus=self._event_bus
+            event_bus=self._event_bus,
+            timeout_seconds=self._inactivity_timeout_seconds,
         )
         self._transcription_watchdog = TranscriptionWatchdog(event_bus=self._event_bus)
-        self._conversation_history_watchdog = ConversationHistoryWatchdog(
-            event_bus=self._event_bus
-        )
         self._tool_calling_watchdog = ToolCallingWatchdog(
             event_bus=self._event_bus,
             tools=self._tools,
@@ -260,9 +260,9 @@ class RealtimeAgent(Generic[T]):
             tools=self._tools.get_tool_schema(),
         )
 
-    async def stop(self) -> AgentHistory | None:
+    async def stop(self) -> None:
         if self._stop_called:
-            return None
+            return
         self._stop_called = True
 
         logger.info("Stopping agent...")
@@ -272,21 +272,11 @@ class RealtimeAgent(Generic[T]):
 
         await self._event_bus.dispatch(AgentStoppedEvent())
 
-        history_event = await self._event_bus.wait_for_event(
-            ConversationHistoryResponseEvent, timeout=5.0
-        )
-
-        agent_history = AgentHistory(
-            conversation_turns=history_event.conversation_turns
-        )
-
         self._stopped.set()
         logger.info("Agent stopped successfully")
 
         if self._agent_listener:
-            await self._agent_listener.on_agent_stopped(agent_history)
-
-        return agent_history
+            await self._agent_listener.on_agent_stopped()
 
     async def _on_user_chunk(self, event: UserTranscriptChunkReceivedEvent) -> None:
         await self._transcript_listener.on_user_chunk(event.chunk)

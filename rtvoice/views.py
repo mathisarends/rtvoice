@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 from pydantic import BaseModel
-
-if TYPE_CHECKING:
-    from rtvoice.watchdogs.conversation_history import ConversationTurn
 
 
 class RealtimeModel(StrEnum):
@@ -77,10 +74,6 @@ class TurnDetection(BaseModel):
     silence_duration_ms: int = 500
 
 
-class AgentHistory(BaseModel):
-    conversation_turns: list[ConversationTurn]
-
-
 class ActionResult(BaseModel):
     success: bool = True
     message: str | None = None
@@ -98,5 +91,5 @@ class TranscriptListener(Protocol):
 
 class AgentListener(Protocol):
     async def on_agent_started(self) -> None: ...
-    async def on_agent_stopped(self, history: AgentHistory) -> None: ...
+    async def on_agent_stopped(self) -> None: ...
     async def on_agent_interrupted(self) -> None: ...

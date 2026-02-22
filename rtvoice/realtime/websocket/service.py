@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 from contextlib import suppress
 from typing import Self
@@ -11,13 +12,14 @@ from websockets.exceptions import ConnectionClosed
 
 from rtvoice.events import EventBus
 from rtvoice.realtime.schemas import ServerEventAdapter
-from rtvoice.shared.logging import LoggingMixin
 from rtvoice.views import RealtimeModel
 
 load_dotenv(override=True)
 
+logger = logging.getLogger(__name__)
 
-class RealtimeWebSocket(LoggingMixin):
+
+class RealtimeWebSocket:
     _BASE_URL = "wss://api.openai.com/v1/realtime"
 
     def __init__(
@@ -53,23 +55,23 @@ class RealtimeWebSocket(LoggingMixin):
 
     async def connect(self) -> None:
         if self._ws:
-            self.logger.debug("Closing existing connection")
+            logger.debug("Closing existing connection")
             await self.close()
 
         url = f"{self._BASE_URL}?model={self._model.value}"
         headers = {"Authorization": f"Bearer {self._api_key}"}
 
-        self.logger.info("Connecting to %s...", url)
+        logger.info("Connecting to %s...", url)
 
         try:
             self._ws = await connect(url, additional_headers=headers)
             self._is_connected = True
-            self.logger.info("Connected successfully")
+            logger.info("Connected successfully")
             self._receive_task = asyncio.create_task(self._receive_loop())
 
         except Exception as e:
             self._is_connected = False
-            self.logger.error("Connection failed: %s", e)
+            logger.error("Connection failed: %s", e)
             raise
 
     async def send(self, message: BaseModel) -> None:
@@ -83,7 +85,7 @@ class RealtimeWebSocket(LoggingMixin):
         if not self._ws:
             return
 
-        self.logger.info("Closing connection...")
+        logger.info("Closing connection...")
         self._is_connected = False
 
         if self._receive_task and not self._receive_task.done():
@@ -93,7 +95,7 @@ class RealtimeWebSocket(LoggingMixin):
 
         await self._ws.close()
         self._ws = None
-        self.logger.info("Connection closed")
+        logger.info("Connection closed")
 
     async def _receive_loop(self) -> None:
         try:
@@ -103,10 +105,10 @@ class RealtimeWebSocket(LoggingMixin):
                     event = ServerEventAdapter.validate_python(data)
                     await self._event_bus.dispatch(event)
                 except ValidationError:
-                    self.logger.debug(
+                    logger.debug(
                         "Skipping unknown event type: %s",
                         data.get("type", "unknown"),
                     )
         except ConnectionClosed as e:
             self._is_connected = False
-            self.logger.info("Connection closed: %s", e)
+            logger.info("Connection closed: %s", e)

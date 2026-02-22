@@ -1,3 +1,5 @@
+import logging
+
 from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentStartedEvent,
@@ -9,10 +11,11 @@ from rtvoice.realtime.schemas import (
     SessionUpdateEvent,
 )
 from rtvoice.realtime.websocket.service import RealtimeWebSocket
-from rtvoice.shared.logging import LoggingMixin
+
+logger = logging.getLogger(__name__)
 
 
-class LifecycleWatchdog(LoggingMixin):
+class LifecycleWatchdog:
     def __init__(self, event_bus: EventBus, websocket: RealtimeWebSocket):
         self._event_bus = event_bus
         self._websocket = websocket
@@ -31,13 +34,13 @@ class LifecycleWatchdog(LoggingMixin):
         self, event: InputAudioBufferAppendEvent
     ) -> None:
         if not self._is_connected():
-            self.logger.warning("Cannot send audio - WebSocket not connected")
+            logger.warning("Cannot send audio - WebSocket not connected")
             return
 
         await self._websocket.send(event)
 
     async def _on_agent_started(self, event: AgentStartedEvent) -> None:
-        self.logger.info("Starting agent session")
+        logger.info("Starting agent session")
 
         if not self._is_connected():
             await self._websocket.connect()
@@ -51,4 +54,4 @@ class LifecycleWatchdog(LoggingMixin):
             return
 
         await self._websocket.close()
-        self.logger.info("Agent session stopped")
+        logger.info("Agent session stopped")

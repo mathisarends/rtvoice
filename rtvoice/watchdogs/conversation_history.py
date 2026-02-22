@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal
@@ -9,7 +10,6 @@ from rtvoice.events.views import (
     ConversationHistoryResponseEvent,
     UserTranscriptCompletedEvent,
 )
-from rtvoice.shared.logging import LoggingMixin
 
 
 @dataclass
@@ -22,7 +22,10 @@ class ConversationTurn:
     content_index: int | None = None
 
 
-class ConversationHistoryWatchdog(LoggingMixin):
+logger = logging.getLogger(__name__)
+
+
+class ConversationHistoryWatchdog:
     def __init__(self, event_bus: EventBus):
         self._event_bus = event_bus
         self._conversation_history: list[ConversationTurn] = []
@@ -46,7 +49,7 @@ class ConversationHistoryWatchdog(LoggingMixin):
 
     def clear_history(self) -> None:
         self._conversation_history.clear()
-        self.logger.info("Conversation history cleared")
+        logger.info("Conversation history cleared")
 
     async def _on_user_transcript_completed(
         self, event: UserTranscriptCompletedEvent
@@ -57,7 +60,7 @@ class ConversationHistoryWatchdog(LoggingMixin):
             item_id=event.item_id,
         )
         self._conversation_history.append(turn)
-        self.logger.debug("Added user turn to conversation history")
+        logger.debug("Added user turn to conversation history")
 
     async def _on_assistant_transcript_completed(
         self, event: AssistantTranscriptCompletedEvent
@@ -70,10 +73,10 @@ class ConversationHistoryWatchdog(LoggingMixin):
             content_index=event.content_index,
         )
         self._conversation_history.append(turn)
-        self.logger.debug("Added assistant turn to conversation history")
+        logger.debug("Added assistant turn to conversation history")
 
     async def _on_agent_stopped(self, event: AgentStoppedEvent) -> None:
-        self.logger.info(
+        logger.info(
             "Agent stopped - publishing conversation history (%d turns)",
             len(self._conversation_history),
         )

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 
 from rtvoice.events import EventBus
@@ -8,11 +9,12 @@ from rtvoice.realtime.schemas import (
     InputAudioBufferSpeechStoppedEvent,
     ResponseCreatedEvent,
 )
-from rtvoice.shared.logging import LoggingMixin
+
+logger = logging.getLogger(__name__)
 
 
 # TODO: Hier zuverlässiger austimen (erst wenn das playback hier wirklich keine frames mehr liefert)
-class UserInactivityTimeoutWatchdog(LoggingMixin):
+class UserInactivityTimeoutWatchdog:
     def __init__(self, event_bus: EventBus, timeout_seconds: float = 10.0):
         self.event_bus = event_bus
         self.timeout_seconds = timeout_seconds
@@ -43,7 +45,7 @@ class UserInactivityTimeoutWatchdog(LoggingMixin):
         self, event: InputAudioBufferSpeechStoppedEvent
     ) -> None:
         self._user_has_stopped_speaking = True
-        self.logger.debug(
+        logger.debug(
             "User stopped speaking at %d ms",
             event.audio_end_ms,
         )
@@ -55,7 +57,7 @@ class UserInactivityTimeoutWatchdog(LoggingMixin):
     ) -> None:
         self._user_has_stopped_speaking = False
         self._is_monitoring = False
-        self.logger.debug(
+        logger.debug(
             "User started speaking at %d ms, stopping inactivity timeout monitoring",
             event.audio_start_ms,
         )
@@ -63,11 +65,11 @@ class UserInactivityTimeoutWatchdog(LoggingMixin):
     async def _handle_assistant_started(self, event: ResponseCreatedEvent) -> None:
         self._assistant_is_speaking = True
         self._is_monitoring = False  # Stop monitoring while assistant speaks
-        self.logger.debug("Assistant started speaking")
+        logger.debug("Assistant started speaking")
 
     async def _handle_assistant_done(self, event: AudioPlaybackCompletedEvent) -> None:
         self._assistant_is_speaking = False
-        self.logger.debug("Assistant finished speaking")
+        logger.debug("Assistant finished speaking")
 
         # Nur Timer starten, wenn User auch fertig ist
         self._try_start_monitoring()
@@ -78,7 +80,7 @@ class UserInactivityTimeoutWatchdog(LoggingMixin):
 
         self._last_speech_time = time.monotonic()
         self._is_monitoring = True
-        self.logger.debug(
+        logger.debug(
             "Both user and assistant finished - starting inactivity timeout monitoring (%.1fs)",
             self.timeout_seconds,
         )
@@ -92,7 +94,7 @@ class UserInactivityTimeoutWatchdog(LoggingMixin):
                 await asyncio.sleep(0.5)
                 continue
 
-            self.logger.warning(
+            logger.warning(
                 "Inactivity timeout occurred after %.1f seconds",
                 self.timeout_seconds,
             )

@@ -1,3 +1,4 @@
+from ._logging import configure_logging
 from .mcp import MCPServerStdio
 from .service import RealtimeAgent
 from .subagents import SubAgent
@@ -11,4 +12,5 @@ __all__ = [
     "RealtimeModel",
     "SubAgent",
     "Tools",
+    "configure_logging",
 ]

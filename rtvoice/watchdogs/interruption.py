@@ -1,3 +1,4 @@
+import logging
 import time
 
 from rtvoice.audio.session import AudioSession
@@ -13,10 +14,11 @@ from rtvoice.realtime.schemas import (
     ResponseOutputAudioDeltaEvent,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
-from rtvoice.shared.logging import LoggingMixin
+
+logger = logging.getLogger(__name__)
 
 
-class InterruptionWatchdog(LoggingMixin):
+class InterruptionWatchdog:
     """Handles barge-in: cancels the running response, clears the audio buffer,
     and truncates the conversation item to what was actually played."""
 
@@ -52,19 +54,19 @@ class InterruptionWatchdog(LoggingMixin):
         self._response_id = event.response_id
         self._start_time = time.time()
         self._assistant_is_speaking = True
-        self.logger.debug("Response started: %s", event.response_id)
+        logger.debug("Response started: %s", event.response_id)
 
     async def _on_audio_delta(self, event: ResponseOutputAudioDeltaEvent) -> None:
         if event.response_id != self._response_id:
             return
         if not self._item_id:
             self._item_id = event.item_id
-            self.logger.debug("Tracking item_id: %s", self._item_id)
+            logger.debug("Tracking item_id: %s", self._item_id)
 
     async def _on_response_done(self, event: ResponseDoneEvent) -> None:
         if event.response_id != self._response_id:
             return
-        self.logger.debug("Response completed: %s", event.response_id)
+        logger.debug("Response completed: %s", event.response_id)
         self._reset()
 
     async def _on_user_started_speaking(
@@ -73,15 +75,13 @@ class InterruptionWatchdog(LoggingMixin):
         if not self._assistant_is_speaking and not self._session.is_playing:
             return
 
-        self.logger.info("Barge-in detected - cancelling response")
+        logger.info("Barge-in detected - cancelling response")
 
         await self._websocket.send(ResponseCancelEvent())
         await self._websocket.send(OutputAudioBufferClearEvent())
 
         if self._item_id and self._elapsed_ms is not None:
-            self.logger.debug(
-                "Truncating item %s at %d ms", self._item_id, self._elapsed_ms
-            )
+            logger.debug("Truncating item %s at %d ms", self._item_id, self._elapsed_ms)
             await self._websocket.send(
                 ConversationItemTruncateEvent(
                     item_id=self._item_id,
@@ -90,7 +90,7 @@ class InterruptionWatchdog(LoggingMixin):
                 )
             )
         else:
-            self.logger.warning(
+            logger.warning(
                 "Cannot truncate - missing item_id=%s or elapsed_ms=%s",
                 self._item_id,
                 self._elapsed_ms,

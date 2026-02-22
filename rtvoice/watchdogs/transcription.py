@@ -1,3 +1,5 @@
+import logging
+
 from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AssistantTranscriptChunkReceivedEvent,
@@ -11,10 +13,11 @@ from rtvoice.realtime.schemas import (
     ResponseOutputAudioTranscriptDelta,
     ResponseOutputAudioTranscriptDone,
 )
-from rtvoice.shared.logging import LoggingMixin
+
+logger = logging.getLogger(__name__)
 
 
-class TranscriptionWatchdog(LoggingMixin):
+class TranscriptionWatchdog:
     def __init__(self, event_bus: EventBus):
         self._event_bus = event_bus
 
@@ -39,7 +42,7 @@ class TranscriptionWatchdog(LoggingMixin):
     async def _on_user_transcript_chunk(
         self, event: InputAudioTranscriptionDelta
     ) -> None:
-        self.logger.debug(
+        logger.debug(
             "User transcript chunk: '%s' (item_id=%s)",
             event.delta,
             event.item_id,
@@ -51,14 +54,14 @@ class TranscriptionWatchdog(LoggingMixin):
     async def _on_user_transcript_completed(
         self, event: InputAudioTranscriptionCompleted
     ) -> None:
-        self.logger.info(
+        logger.info(
             "User transcript completed: '%s' (item_id=%s)",
             event.transcript,
             event.item_id,
         )
 
         if event.usage:
-            self.logger.debug("Transcription usage: %s", event.usage)
+            logger.debug("Transcription usage: %s", event.usage)
 
         completed_event = UserTranscriptCompletedEvent(
             transcript=event.transcript, item_id=event.item_id
@@ -68,7 +71,7 @@ class TranscriptionWatchdog(LoggingMixin):
     async def _on_assistant_transcript_chunk(
         self, event: ResponseOutputAudioTranscriptDelta
     ) -> None:
-        self.logger.debug(
+        logger.debug(
             "Assistant transcript chunk: '%s' (response_id=%s)",
             event.delta,
             event.response_id,
@@ -80,7 +83,7 @@ class TranscriptionWatchdog(LoggingMixin):
     async def _on_assistant_transcript_completed(
         self, event: ResponseOutputAudioTranscriptDone
     ) -> None:
-        self.logger.info(
+        logger.info(
             "Assistant transcript completed: '%s' (response_id=%s)",
             event.transcript,
             event.response_id,

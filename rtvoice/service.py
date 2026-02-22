@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import Generic, Self, TypeVar
 
 from rtvoice.audio import (
@@ -34,7 +35,6 @@ from rtvoice.realtime.schemas import (
     TurnDetectionConfig,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
-from rtvoice.shared.logging import LoggingMixin
 from rtvoice.subagents import SubAgent
 from rtvoice.tools import SpecialToolParameters, Tools
 from rtvoice.views import (
@@ -60,8 +60,10 @@ from rtvoice.watchdogs import (
 
 T = TypeVar("T")
 
+logger = logging.getLogger(__name__)
 
-class RealtimeAgent(LoggingMixin, Generic[T]):
+
+class RealtimeAgent(Generic[T]):
     def __init__(
         self,
         instructions: str = "",
@@ -123,7 +125,7 @@ class RealtimeAgent(LoggingMixin, Generic[T]):
         clipped = max(0.5, min(speed, 1.5))
 
         if speed != clipped:
-            self.logger.warning(
+            logger.warning(
                 "Speech speed %.2f is out of range [0.5, 1.5], clipping to %.2f",
                 speed,
                 clipped,
@@ -189,11 +191,11 @@ class RealtimeAgent(LoggingMixin, Generic[T]):
         self._event_bus.subscribe(AssistantInterruptedEvent, self._on_agent_interrupted)
 
     async def _on_stop_command(self, _: StopAgentCommand) -> None:
-        self.logger.info("Received stop command - triggering shutdown")
+        logger.info("Received stop command - triggering shutdown")
         asyncio.ensure_future(self.stop())
 
     async def _on_inactivity_timeout(self, event: UserInactivityTimeoutEvent) -> None:
-        self.logger.info(
+        logger.info(
             "User inactivity timeout after %.1f seconds - triggering shutdown",
             event.timeout_seconds,
         )
@@ -207,13 +209,13 @@ class RealtimeAgent(LoggingMixin, Generic[T]):
         await self.stop()
 
     async def start(self) -> None:
-        self.logger.info("Starting agent...")
+        logger.info("Starting agent...")
 
         await self._connect_mcp_servers()
 
         session_config = self._build_session_config()
         await self._event_bus.dispatch(AgentStartedEvent(session_config=session_config))
-        self.logger.info("Agent started successfully")
+        logger.info("Agent started successfully")
 
         await self._stopped.wait()
 
@@ -223,7 +225,7 @@ class RealtimeAgent(LoggingMixin, Generic[T]):
             tools = await server.list_tools()
             for tool in tools:
                 self._tools.register_mcp(tool, server)
-            self.logger.info("MCP server connected: %d tools loaded", len(tools))
+            logger.info("MCP server connected: %d tools loaded", len(tools))
 
     def _build_session_config(self) -> RealtimeSessionConfig:
         input_config = AudioInputConfig(
@@ -263,7 +265,7 @@ class RealtimeAgent(LoggingMixin, Generic[T]):
             return None
         self._stop_called = True
 
-        self.logger.info("Stopping agent...")
+        logger.info("Stopping agent...")
 
         for server in self._mcp_servers:
             await server.cleanup()
@@ -279,7 +281,7 @@ class RealtimeAgent(LoggingMixin, Generic[T]):
         )
 
         self._stopped.set()
-        self.logger.info("Agent stopped successfully")
+        logger.info("Agent stopped successfully")
 
         if self._agent_listener:
             await self._agent_listener.on_agent_stopped(agent_history)

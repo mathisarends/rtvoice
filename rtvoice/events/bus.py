@@ -1,22 +1,23 @@
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
 from pydantic import BaseModel
 
-from rtvoice.shared.logging import LoggingMixin
-
 T = TypeVar("T", bound=BaseModel)
 EventHandler = Callable[[T], Awaitable[None]]
 
+logger = logging.getLogger(__name__)
 
-class EventBus(LoggingMixin):
+
+class EventBus:
     def __init__(self):
         self._handlers: dict[type[BaseModel], list[EventHandler]] = {}
 
     def subscribe(self, event_type: type[T], handler: EventHandler[T]) -> None:
         self._handlers.setdefault(event_type, []).append(handler)
-        self.logger.debug(f"Subscribed to {event_type.__name__}")
+        logger.debug(f"Subscribed to {event_type.__name__}")
 
     def unsubscribe(self, event_type: type[T], handler: EventHandler[T]) -> None:
         if event_type in self._handlers and handler in self._handlers[event_type]:
@@ -26,12 +27,10 @@ class EventBus(LoggingMixin):
         event_type = type(event)
         handlers = self._handlers.get(event_type, [])
 
-        self.logger.debug(
-            f"Dispatching {event_type.__name__} to {len(handlers)} handler(s)"
-        )
+        logger.debug(f"Dispatching {event_type.__name__} to {len(handlers)} handler(s)")
 
         if not handlers:
-            self.logger.warning(f"No handlers registered for {event_type.__name__}")
+            logger.warning(f"No handlers registered for {event_type.__name__}")
             return event
 
         tasks = [handler(event) for handler in handlers]
@@ -39,7 +38,7 @@ class EventBus(LoggingMixin):
 
         for result in results:
             if isinstance(result, Exception):
-                self.logger.error(
+                logger.error(
                     f"Handler failed for {event_type.__name__}: {result}",
                     exc_info=result,
                 )
@@ -54,7 +53,7 @@ class EventBus(LoggingMixin):
     ) -> T:
         future: asyncio.Future[T] = asyncio.Future()
 
-        self.logger.debug(f"Waiting for {event_type.__name__} (timeout={timeout}s)")
+        logger.debug(f"Waiting for {event_type.__name__} (timeout={timeout}s)")
 
         async def handler(event: T) -> None:
             if (predicate is None or predicate(event)) and not future.done():
@@ -68,10 +67,10 @@ class EventBus(LoggingMixin):
             else:
                 result = await future
 
-            self.logger.debug(f"Received {event_type.__name__}")
+            logger.debug(f"Received {event_type.__name__}")
             return result
         except TimeoutError:
-            self.logger.warning(
+            logger.warning(
                 f"Timeout waiting for {event_type.__name__} after {timeout}s"
             )
             raise

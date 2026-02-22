@@ -1,3 +1,4 @@
+import logging
 import queue
 import struct
 import threading
@@ -5,10 +6,11 @@ import threading
 import pyaudio
 
 from rtvoice.audio.devices import AudioOutputDevice
-from rtvoice.shared.logging import LoggingMixin
+
+logger = logging.getLogger(__name__)
 
 
-class SpeakerOutput(AudioOutputDevice, LoggingMixin):
+class SpeakerOutput(AudioOutputDevice):
     def __init__(self, device_index: int | None = None, sample_rate: int = 24000):
         self._device_index = device_index
         self._sample_rate = sample_rate
@@ -83,7 +85,7 @@ class SpeakerOutput(AudioOutputDevice, LoggingMixin):
                 cleared += 1
             except queue.Empty:
                 break
-        self.logger.debug("Cleared %d audio chunks from queue", cleared)
+        logger.debug("Cleared %d audio chunks from queue", cleared)
 
     async def set_volume(self, volume: float) -> None:
         self._volume = max(0.0, min(1.0, volume))

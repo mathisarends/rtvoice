@@ -9,20 +9,23 @@ from rtvoice.events import EventBus
 if TYPE_CHECKING:
     from rtvoice.subagents import SubAgent
 
+import logging
+
 from rtvoice.events.views import (
     StopAgentCommand,
     VolumeUpdateRequestedEvent,
 )
 from rtvoice.mcp.server import MCPServer
 from rtvoice.realtime.schemas import FunctionTool
-from rtvoice.shared.logging import LoggingMixin
 from rtvoice.tools.registry import ToolRegistry
 from rtvoice.tools.registry.views import Tool
 from rtvoice.tools.views import SpecialToolParameters
 from rtvoice.views import ActionResult
 
+logger = logging.getLogger(__name__)
 
-class Tools(LoggingMixin):
+
+class Tools:
     def __init__(self):
         self._registry = ToolRegistry()
         self._context: SpecialToolParameters = SpecialToolParameters()
@@ -124,7 +127,7 @@ class Tools(LoggingMixin):
             clamped_level = max(0.0, min(1.0, level))
 
             if level != clamped_level:
-                self.logger.warning(
+                logger.warning(
                     "Volume level %.2f out of range, clamped to %.2f",
                     level,
                     clamped_level,
@@ -140,7 +143,7 @@ class Tools(LoggingMixin):
 
         @self.action("Stop the current realtime session.")
         async def stop_session(event_bus: EventBus) -> ActionResult:
-            self.logger.info("Stop command received - dispatching stop event")
+            logger.info("Stop command received - dispatching stop event")
 
             stop_event = StopAgentCommand()
             await event_bus.dispatch(stop_event)

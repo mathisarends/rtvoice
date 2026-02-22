@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Any
 
 from pydantic import BaseModel
@@ -10,15 +11,16 @@ from rtvoice.realtime.schemas import (
     FunctionCallItem,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
-from rtvoice.shared.logging import LoggingMixin
 from rtvoice.tools import Tools
 
 _DEFAULT_RESPONSE_INSTRUCTION = (
     "The tool call has completed. Respond directly with the result."
 )
 
+logger = logging.getLogger(__name__)
 
-class ToolCallingWatchdog(LoggingMixin):
+
+class ToolCallingWatchdog:
     def __init__(self, event_bus: EventBus, tools: Tools, websocket: RealtimeWebSocket):
         self._event_bus = event_bus
         self._tools = tools
@@ -29,10 +31,10 @@ class ToolCallingWatchdog(LoggingMixin):
     async def _handle_tool_call(self, event: FunctionCallItem) -> None:
         tool = self._tools.get(event.name)
         if not tool:
-            self.logger.error("Tool '%s' not found", event.name)
+            logger.error("Tool '%s' not found", event.name)
             return
 
-        self.logger.info(
+        logger.info(
             "Tool call started: '%s' | args: %s",
             event.name,
             json.dumps(event.arguments or {}, ensure_ascii=False),
@@ -45,7 +47,7 @@ class ToolCallingWatchdog(LoggingMixin):
 
         result = await self._tools.execute(event.name, event.arguments or {})
 
-        self.logger.info(
+        logger.info(
             "Tool call result: '%s' | result: %s",
             event.name,
             self._serialize(result),

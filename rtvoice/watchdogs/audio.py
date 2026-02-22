@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import logging
 from contextlib import suppress
 
 from rtvoice.audio.session import AudioSession
@@ -16,10 +17,11 @@ from rtvoice.realtime.schemas import (
     ResponseDoneEvent,
     ResponseOutputAudioDeltaEvent,
 )
-from rtvoice.shared.logging import LoggingMixin
+
+logger = logging.getLogger(__name__)
 
 
-class AudioWatchdog(LoggingMixin):
+class AudioWatchdog:
     def __init__(self, event_bus: EventBus, session: AudioSession):
         self._event_bus = event_bus
         self._session = session
@@ -39,7 +41,7 @@ class AudioWatchdog(LoggingMixin):
     async def _on_agent_started(self, _: AgentStartedEvent) -> None:
         await self._session.start()
         self._streaming_task = asyncio.create_task(self._stream_audio())
-        self.logger.info("Audio started")
+        logger.info("Audio started")
 
     async def _on_agent_stopped(self, _: AgentStoppedEvent) -> None:
         if self._streaming_task:
@@ -49,7 +51,7 @@ class AudioWatchdog(LoggingMixin):
             self._streaming_task = None
 
         await self._session.stop()
-        self.logger.info("Audio stopped")
+        logger.info("Audio stopped")
 
     async def _stream_audio(self) -> None:
         try:
@@ -74,7 +76,7 @@ class AudioWatchdog(LoggingMixin):
         self, event: VolumeUpdateRequestedEvent
     ) -> None:
         await self._session.set_volume(event.volume)
-        self.logger.info("Volume set to %d%%", int(event.volume * 100))
+        logger.info("Volume set to %d%%", int(event.volume * 100))
 
     async def _on_response_done(self, _: ResponseDoneEvent) -> None:
         asyncio.create_task(self._wait_for_playback_completion())

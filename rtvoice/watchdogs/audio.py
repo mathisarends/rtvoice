@@ -9,7 +9,6 @@ from rtvoice.events.views import (
     AgentStartedEvent,
     AgentStoppedEvent,
     AudioPlaybackCompletedEvent,
-    VolumeUpdateRequestedEvent,
 )
 from rtvoice.realtime.schemas import (
     InputAudioBufferAppendEvent,
@@ -32,9 +31,6 @@ class AudioWatchdog:
         self._event_bus.subscribe(ResponseOutputAudioDeltaEvent, self._on_audio_delta)
         self._event_bus.subscribe(
             InputAudioBufferSpeechStartedEvent, self._on_user_started_speaking
-        )
-        self._event_bus.subscribe(
-            VolumeUpdateRequestedEvent, self._on_volume_update_requested
         )
         self._event_bus.subscribe(ResponseDoneEvent, self._on_response_done)
 
@@ -71,12 +67,6 @@ class AudioWatchdog:
         self, _: InputAudioBufferSpeechStartedEvent
     ) -> None:
         await self._session.clear_output_buffer()
-
-    async def _on_volume_update_requested(
-        self, event: VolumeUpdateRequestedEvent
-    ) -> None:
-        await self._session.set_volume(event.volume)
-        logger.info("Volume set to %d%%", int(event.volume * 100))
 
     async def _on_response_done(self, _: ResponseDoneEvent) -> None:
         asyncio.create_task(self._wait_for_playback_completion())

@@ -13,7 +13,6 @@ import logging
 
 from rtvoice.events.views import (
     StopAgentCommand,
-    VolumeUpdateRequestedEvent,
 )
 from rtvoice.mcp.server import MCPServer
 from rtvoice.realtime.schemas import FunctionTool
@@ -44,15 +43,22 @@ class Tools:
         async def _handoff(
             task: Annotated[
                 str,
-                "The task or question to delegate to this agent. Be specific and add enough context for the agent to complete the task without further clarification.",
+                """
+                The task or question to delegate to this agent.
+                Be specific and add enough context for the agent to complete the task without further clarification.
+                """,
             ],
         ) -> str:
             return await agent.run(task)
 
+        description = agent.description
+        if agent.handoff_instructions:
+            description = f"{agent.description}\n\nHandoff instructions: {agent.handoff_instructions}"
+
         safe_name = agent.name.replace(" ", "_")
         _handoff.__name__ = safe_name
         self._registry.action(
-            agent.description,
+            description,
             pending_message=agent.pending_message,
         )(_handoff)
 
@@ -118,28 +124,6 @@ class Tools:
         @self.action("Get the current local time")
         def get_current_time() -> str:
             return datetime.now().strftime("%H:%M:%S")
-
-        @self.action("Adjust volume level.")
-        async def adjust_volume(
-            level: Annotated[float, "Volume level from 0.0 (0%) to 1.0 (100%)"],
-            event_bus: EventBus,
-        ) -> ActionResult:
-            clamped_level = max(0.0, min(1.0, level))
-
-            if level != clamped_level:
-                logger.warning(
-                    "Volume level %.2f out of range, clamped to %.2f",
-                    level,
-                    clamped_level,
-                )
-
-            event = VolumeUpdateRequestedEvent(volume=clamped_level)
-            await event_bus.dispatch(event)
-
-            percentage = int(clamped_level * 100)
-            return ActionResult(
-                success=True, message=f"Volume adjusted to {percentage}%"
-            )
 
         @self.action("Stop the current realtime session.")
         async def stop_session(event_bus: EventBus) -> ActionResult:

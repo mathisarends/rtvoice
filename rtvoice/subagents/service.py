@@ -20,6 +20,7 @@ class SubAgent:
         llm: BaseChatModel | None = None,
         max_iterations: int = 10,
         pending_message: str | None = None,
+        handoff_instructions: str | None = None,
     ):
         self.name = name
         self.description = description
@@ -29,6 +30,7 @@ class SubAgent:
         self._llm = llm
         self._max_iterations = max_iterations
         self.pending_message = pending_message
+        self.handoff_instructions = handoff_instructions
 
         self._register_done_tool()
 

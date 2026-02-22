@@ -1,6 +1,5 @@
 import logging
 import queue
-import struct
 import threading
 
 import pyaudio
@@ -17,7 +16,6 @@ class SpeakerOutput(AudioOutputDevice):
         self._audio: pyaudio.PyAudio | None = None
         self._stream = None
         self._active = False
-        self._volume = 1.0
 
         self._queue: queue.Queue[bytes | None] = queue.Queue()
         self._playback_thread: threading.Thread | None = None
@@ -69,7 +67,7 @@ class SpeakerOutput(AudioOutputDevice):
                 break
             self._playing = True
             if self._stream and self._active:
-                self._stream.write(self._apply_volume(chunk))
+                self._stream.write(chunk)
             self._playing = False
 
     async def play_chunk(self, chunk: bytes) -> None:
@@ -86,14 +84,3 @@ class SpeakerOutput(AudioOutputDevice):
             except queue.Empty:
                 break
         logger.debug("Cleared %d audio chunks from queue", cleared)
-
-    async def set_volume(self, volume: float) -> None:
-        self._volume = max(0.0, min(1.0, volume))
-
-    def _apply_volume(self, chunk: bytes) -> bytes:
-        if self._volume == 1.0:
-            return chunk
-        sample_count = len(chunk) // 2
-        samples = struct.unpack(f"<{sample_count}h", chunk)
-        scaled = [int(s * self._volume) for s in samples]
-        return struct.pack(f"<{sample_count}h", *scaled)

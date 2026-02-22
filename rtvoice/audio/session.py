@@ -26,9 +26,6 @@ class AudioSession:
     async def play_chunk(self, chunk: bytes) -> None:
         await self._output.play_chunk(chunk)
 
-    async def set_volume(self, volume: float) -> None:
-        await self._output.set_volume(volume)
-
     async def clear_output_buffer(self) -> None:
         await self._output.clear_buffer()
 

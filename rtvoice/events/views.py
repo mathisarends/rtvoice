@@ -17,10 +17,6 @@ class StopAgentCommand(BaseModel):
     pass
 
 
-class VolumeUpdateRequestedEvent(BaseModel):
-    volume: float
-
-
 class UserTranscriptChunkReceivedEvent(BaseModel):
     chunk: str
 

@@ -40,11 +40,6 @@ class AudioOutputDevice(ABC):
         pass
 
     @abstractmethod
-    async def set_volume(self, volume: float) -> None:
-        """Set the output volume level (0.0 to 1.0)."""
-        pass
-
-    @abstractmethod
     async def clear_buffer(self) -> None:
         """Clear any queued audio data to stop playback immediately."""
         pass

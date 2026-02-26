@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Protocol
 
 from pydantic import BaseModel
 
@@ -82,15 +81,29 @@ class ActionResult(BaseModel):
         return self.message or ("Success" if self.success else "Failed")
 
 
-class TranscriptListener(Protocol):
-    async def on_user_chunk(self, chunk: str) -> None: ...
-    async def on_user_completed(self, transcript: str) -> None: ...
-    async def on_assistant_chunk(self, chunk: str) -> None: ...
-    async def on_assistant_completed(self, transcript: str) -> None: ...
+class TranscriptListener:
+    async def on_user_chunk(self, chunk: str) -> None:
+        pass
+
+    async def on_user_completed(self, transcript: str) -> None:
+        pass
+
+    async def on_assistant_chunk(self, chunk: str) -> None:
+        pass
+
+    async def on_assistant_completed(self, transcript: str) -> None:
+        pass
 
 
-class AgentListener(Protocol):
-    async def on_agent_started(self) -> None: ...
-    async def on_agent_stopped(self) -> None: ...
-    async def on_agent_interrupted(self) -> None: ...
-    async def on_subagent_called(self, agent_name: str, task: str) -> None: ...
+class AgentListener:
+    async def on_agent_started(self) -> None:
+        pass
+
+    async def on_agent_stopped(self) -> None:
+        pass
+
+    async def on_agent_interrupted(self) -> None:
+        pass
+
+    async def on_subagent_called(self, agent_name: str, task: str) -> None:
+        pass

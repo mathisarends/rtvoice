@@ -47,3 +47,8 @@ class AssistantInterruptedEvent(BaseModel):
 
 class AudioPlaybackCompletedEvent(BaseModel):
     pass
+
+
+class SubAgentCalledEvent(BaseModel):
+    agent_name: str
+    task: str

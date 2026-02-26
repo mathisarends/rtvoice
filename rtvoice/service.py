@@ -17,6 +17,7 @@ from rtvoice.events.views import (
     AssistantTranscriptChunkReceivedEvent,
     AssistantTranscriptCompletedEvent,
     StopAgentCommand,
+    SubAgentCalledEvent,
     UserInactivityTimeoutEvent,
     UserTranscriptChunkReceivedEvent,
     UserTranscriptCompletedEvent,
@@ -192,6 +193,7 @@ class RealtimeAgent(Generic[T]):
 
         self._event_bus.subscribe(AgentStartedEvent, self._on_agent_started)
         self._event_bus.subscribe(AssistantInterruptedEvent, self._on_agent_interrupted)
+        self._event_bus.subscribe(SubAgentCalledEvent, self._on_subagent_called)
 
     async def _on_stop_command(self, _: StopAgentCommand) -> None:
         logger.info("Received stop command - triggering shutdown")
@@ -210,13 +212,6 @@ class RealtimeAgent(Generic[T]):
 
         await asyncio.gather(*own_servers, *subagent_servers, return_exceptions=True)
         return self
-
-    async def __aenter__(self) -> Self:
-        await self.start()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        await self.stop()
 
     async def run(self) -> None:
         logger.info("Starting agent...")
@@ -334,3 +329,6 @@ class RealtimeAgent(Generic[T]):
 
     async def _on_agent_interrupted(self, _: AssistantInterruptedEvent) -> None:
         await self._agent_listener.on_agent_interrupted()
+
+    async def _on_subagent_called(self, event: SubAgentCalledEvent) -> None:
+        await self._agent_listener.on_subagent_called(event.agent_name, event.task)

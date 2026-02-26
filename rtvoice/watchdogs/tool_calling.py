@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 from typing import Any
@@ -10,10 +9,7 @@ from rtvoice.realtime.schemas import (
     ConversationItemCreateEvent,
     ConversationResponseCreateEvent,
     FunctionCallItem,
-    ResponseCancelEvent,
-    ResponseCreatedEvent,
     ResponseDoneEvent,
-    ToolChoiceMode,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.tools import Tools
@@ -30,10 +26,8 @@ class ToolCallingWatchdog:
         self._event_bus = event_bus
         self._tools = tools
         self._websocket = websocket
-        self._active_response = False
 
         self._event_bus.subscribe(FunctionCallItem, self._handle_tool_call)
-        self._event_bus.subscribe(ResponseCreatedEvent, self._on_response_created)
         self._event_bus.subscribe(ResponseDoneEvent, self._on_response_done)
 
     async def _handle_tool_call(self, event: FunctionCallItem) -> None:
@@ -48,30 +42,13 @@ class ToolCallingWatchdog:
             json.dumps(event.arguments or {}, ensure_ascii=False),
         )
 
-        tool_task = asyncio.create_task(
-            self._tools.execute(event.name, event.arguments or {})
-        )
-
-        if tool.pending_message:
-            await self._websocket.send(
-                ConversationItemCreateEvent.assistant_message(tool.pending_message)
-            )
-            await self._websocket.send(
-                ConversationResponseCreateEvent.from_instructions(
-                    tool.pending_message, tool_choice=ToolChoiceMode.NONE
-                )
-            )
-
-        result = await tool_task
+        result = await self._tools.execute(event.name, event.arguments or {})
 
         logger.info(
             "Tool call result: '%s' | result: %s",
             event.name,
             self._serialize(result),
         )
-
-        if tool.pending_message and self._active_response:
-            await self._websocket.send(ResponseCancelEvent())
 
         await self._websocket.send(
             ConversationItemCreateEvent.function_call_output(
@@ -97,8 +74,5 @@ class ToolCallingWatchdog:
         except (TypeError, ValueError):
             return str(result)
 
-    async def _on_response_created(self, event: ResponseCreatedEvent) -> None:
-        self._active_response = True
-
     async def _on_response_done(self, event: ResponseDoneEvent) -> None:
-        self._active_response = False
+        pass

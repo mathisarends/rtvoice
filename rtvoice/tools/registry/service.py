@@ -43,7 +43,6 @@ class ToolRegistry:
         name: str,
         description: str,
         result_instruction: str | None,
-        pending_message: str | None,
     ) -> Tool:
         bound_func = getattr(self, func.__name__, func)
         schema = self._schema_builder.build(func)
@@ -54,7 +53,6 @@ class ToolRegistry:
             function=bound_func,
             schema=schema,
             result_instruction=result_instruction,
-            pending_message=pending_message,
         )
 
     def _register_tool(self, tool: Tool) -> None:

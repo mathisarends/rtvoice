@@ -40,7 +40,7 @@ async def main() -> None:
             "questions about current conditions. Be concise and friendly."
         ),
         tools=build_weather_tools(),
-        llm=ChatOpenAI(model="gpt-4o", temperature=0.2),
+        llm=ChatOpenAI(model="gpt-4o-mini", temperature=0.2),
         pending_message="One moment, I'll check the current weather for you.",
     )
 

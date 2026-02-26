@@ -13,6 +13,7 @@ import logging
 
 from rtvoice.events.views import (
     StopAgentCommand,
+    SubAgentCalledEvent,
 )
 from rtvoice.mcp.server import MCPServer
 from rtvoice.realtime.schemas import FunctionTool
@@ -48,7 +49,11 @@ class Tools:
                 Be specific and add enough context for the agent to complete the task without further clarification.
                 """,
             ],
+            event_bus: EventBus,
         ) -> str:
+            await event_bus.dispatch(
+                SubAgentCalledEvent(agent_name=agent.name, task=task)
+            )
             return await agent.run(task)
 
         description = agent.description

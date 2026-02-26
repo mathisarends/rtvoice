@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 from datetime import datetime
 from typing import TYPE_CHECKING, Annotated, Any
@@ -40,6 +41,7 @@ class Tools:
     def register_mcp(self, tool: FunctionTool, server: MCPServer) -> None:
         self._registry.register_mcp(tool, server)
 
+    # TODO: Das hier mit dem fire und forget sollte hier so dann nicht funktioneron
     def register_subagent(self, agent: SubAgent) -> None:
         async def _handoff(
             task: Annotated[
@@ -54,7 +56,16 @@ class Tools:
             await event_bus.dispatch(
                 SubAgentCalledEvent(agent_name=agent.name, task=task)
             )
-            return await agent.run(task)
+
+            if agent.fire_and_forget:
+                asyncio.create_task(agent.run(task))
+                return (
+                    agent.result_instructions
+                    or "The task has been delegated to the agent and will be completed shortly."
+                )
+            else:
+                result = await agent.run(task)
+                return result.message or ""
 
         description = agent.description
         if agent.handoff_instructions:

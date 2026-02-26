@@ -1,3 +1,4 @@
+import inspect
 from collections.abc import Callable
 
 from rtvoice.mcp import MCPServer
@@ -59,10 +60,12 @@ class ToolRegistry:
         self._tools[tool.name] = tool
 
     def register_mcp(self, tool: FunctionTool, server: MCPServer) -> None:
-        async def handler(**arguments):
-            return await server.call_tool(tool.name, arguments)
+        async def handler(**kwargs):
+            return await server.call_tool(tool.name, kwargs or None)
 
         handler.__name__ = tool.name
+        # Do not copy the original function signature; set an empty signature instead
+        handler.__signature__ = inspect.Signature()
 
         mcp_tool = Tool(
             name=tool.name,

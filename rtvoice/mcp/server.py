@@ -1,6 +1,7 @@
 import abc
 import asyncio
 import json
+import logging
 from typing import Any
 
 from rtvoice.realtime.schemas import (
@@ -8,6 +9,8 @@ from rtvoice.realtime.schemas import (
     FunctionParameters,
     FunctionTool,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_tool(raw: dict) -> FunctionTool:
@@ -81,9 +84,9 @@ class MCPServerStdio(MCPServer):
             *self.args,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
-            env=self.env,
+            stderr=asyncio.subprocess.PIPE,
         )
+
         await self._request(
             "initialize",
             {
@@ -137,8 +140,23 @@ class MCPServerStdio(MCPServer):
 
     async def _recv(self) -> dict:
         assert self._process and self._process.stdout
-        line = await self._process.stdout.readline()
-        return json.loads(line)
+        while True:
+            line = await self._process.stdout.readline()
+            if not line:
+                stderr_output = b""
+                if self._process.stderr:
+                    stderr_output = await self._process.stderr.read()
+                raise RuntimeError(
+                    f"MCP server process exited unexpectedly.\nSTDERR: {stderr_output.decode()}"
+                )
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                return json.loads(line)
+            except json.JSONDecodeError:
+                logger.debug("MCP server non-JSON stdout: %s", line.decode())
+                continue
 
     async def _request(self, method: str, params: dict) -> dict:
         msg_id = self._next_id()

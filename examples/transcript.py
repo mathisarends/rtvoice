@@ -23,7 +23,7 @@ async def main():
         instructions=instructions,
         transcript_listener=ConsolePrinter(),
     )
-    await agent.start()
+    await agent.run()
 
 
 if __name__ == "__main__":

@@ -91,7 +91,8 @@ class RealtimeAgent(Generic[T]):
 
         self._tools = tools or Tools()
         self._mcp_servers = mcp_servers or []
-        for subagent in subagents or []:
+        self._subagents = subagents or []
+        for subagent in self._subagents:
             self._tools.register_subagent(subagent)
 
         self._transcript_listener = transcript_listener
@@ -101,6 +102,8 @@ class RealtimeAgent(Generic[T]):
 
         self._stopped = asyncio.Event()
         self._stop_called = False
+        self._mcp_ready = asyncio.Event()
+        self._mcp_tool_cache: list[tuple] = []
 
         self._event_bus = EventBus()
         self._tools.set_context(
@@ -201,6 +204,13 @@ class RealtimeAgent(Generic[T]):
         )
         asyncio.ensure_future(self.stop())
 
+    async def prepare(self) -> Self:
+        own_servers = [self._connect_mcp_servers()]
+        subagent_servers = [subagent.prepare() for subagent in self._subagents]
+
+        await asyncio.gather(*own_servers, *subagent_servers, return_exceptions=True)
+        return self
+
     async def __aenter__(self) -> Self:
         await self.start()
         return self
@@ -208,24 +218,49 @@ class RealtimeAgent(Generic[T]):
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.stop()
 
-    async def start(self) -> None:
+    async def run(self) -> None:
         logger.info("Starting agent...")
 
-        await self._connect_mcp_servers()
+        # idempotent preparation to ensure MCP servers are connected before accepting tasks
+        await self.prepare()
 
         session_config = self._build_session_config()
         await self._event_bus.dispatch(AgentStartedEvent(session_config=session_config))
         logger.info("Agent started successfully")
 
-        await self._stopped.wait()
+        try:
+            await self._stopped.wait()
+        finally:
+            await self.stop()
 
     async def _connect_mcp_servers(self) -> None:
-        for server in self._mcp_servers:
+        if self._mcp_ready.is_set():
+            return
+
+        if not self._mcp_servers:
+            self._mcp_ready.set()
+            return
+
+        async def connect_one(server: MCPServer) -> list[tuple]:
             await server.connect()
             tools = await server.list_tools()
-            for tool in tools:
-                self._tools.register_mcp(tool, server)
             logger.info("MCP server connected: %d tools loaded", len(tools))
+            return [(tool, server) for tool in tools]
+
+        results = await asyncio.gather(
+            *[connect_one(s) for s in self._mcp_servers],
+            return_exceptions=True,
+        )
+
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error("MCP server connection failed: %s", result)
+                continue
+            for tool, server in result:
+                self._tools.register_mcp(tool, server)
+                self._mcp_tool_cache.append((tool, server))
+
+        self._mcp_ready.set()
 
     def _build_session_config(self) -> RealtimeSessionConfig:
         input_config = AudioInputConfig(

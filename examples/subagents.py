@@ -52,7 +52,7 @@ async def main() -> None:
         subagents=[weather_agent],
     )
 
-    await agent.start()
+    await agent.run()
 
 
 if __name__ == "__main__":

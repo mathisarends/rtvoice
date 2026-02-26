@@ -1,7 +1,10 @@
 import asyncio
-from typing import Annotated
+import logging
+from typing import Annotated, Self
 
 from llmify import BaseChatModel, SystemMessage, ToolResultMessage, UserMessage
+
+logger = logging.getLogger(__name__)
 
 from rtvoice.mcp import MCPServer
 from rtvoice.subagents.views import SubAgentDone
@@ -32,6 +35,8 @@ class SubAgent:
         self.pending_message = pending_message
         self.handoff_instructions = handoff_instructions
 
+        self._mcp_ready = asyncio.Event()
+
         self._register_done_tool()
 
     def _register_done_tool(self) -> None:
@@ -44,8 +49,12 @@ class SubAgent:
         ) -> str:
             raise SubAgentDone(result)
 
-    async def run(self, task: str) -> ActionResult:
+    async def prepare(self) -> Self:
         await self._connect_mcp_servers()
+        return self
+
+    async def run(self, task: str) -> ActionResult:
+        await self._mcp_ready.wait()
 
         tool_schema = self._tools.get_json_tool_schema()
         messages = [
@@ -77,10 +86,29 @@ class SubAgent:
         )
 
     async def _connect_mcp_servers(self) -> None:
-        async def _setup_server(server: MCPServer) -> None:
+        if self._mcp_ready.is_set():
+            return
+
+        if not self._mcp_servers:
+            self._mcp_ready.set()
+            return
+
+        async def _setup_server(server: MCPServer) -> tuple[MCPServer, list]:
             await server.connect()
             tools = await server.list_tools()
+            return server, tools
+
+        results = await asyncio.gather(
+            *[_setup_server(s) for s in self._mcp_servers],
+            return_exceptions=True,
+        )
+
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error("SubAgent MCP server failed: %s", result)
+                continue
+            server, tools = result
             for tool in tools:
                 self._tools.register_mcp(tool, server)
 
-        await asyncio.gather(*[_setup_server(s) for s in self._mcp_servers])
+        self._mcp_ready.set()

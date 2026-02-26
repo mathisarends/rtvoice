@@ -61,10 +61,9 @@ class Tools:
             description = f"{agent.description}\n\nHandoff instructions: {agent.handoff_instructions}"
 
         safe_name = agent.name.replace(" ", "_")
-        _handoff.__name__ = safe_name
+        result_instructions = agent.result_instructions
         self._registry.action(
-            description,
-            pending_message=agent.pending_message,
+            description, name=safe_name, result_instruction=result_instructions
         )(_handoff)
 
     def get_tool_schema(self) -> list[FunctionTool]:

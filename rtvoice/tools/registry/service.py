@@ -16,7 +16,6 @@ class ToolRegistry:
         description: str,
         name: str | None = None,
         result_instruction: str | None = None,
-        pending_message: str | None = None,
     ):
         def decorator(func: Callable) -> Callable:
             tool = self._build_tool(
@@ -24,7 +23,6 @@ class ToolRegistry:
                 name=name or func.__name__,
                 description=description,
                 result_instruction=result_instruction,
-                pending_message=pending_message,
             )
             self._register_tool(tool)
             return func

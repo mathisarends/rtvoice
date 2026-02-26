@@ -22,8 +22,8 @@ class SubAgent:
         mcp_servers: list[MCPServer] | None = None,
         llm: BaseChatModel | None = None,
         max_iterations: int = 10,
-        pending_message: str | None = None,
         handoff_instructions: str | None = None,
+        result_instructions: str | None = None,
     ):
         self.name = name
         self.description = description
@@ -32,8 +32,8 @@ class SubAgent:
         self._mcp_servers = mcp_servers or []
         self._llm = llm
         self._max_iterations = max_iterations
-        self.pending_message = pending_message
         self.handoff_instructions = handoff_instructions
+        self.result_instructions = result_instructions
 
         self._mcp_ready = asyncio.Event()
 

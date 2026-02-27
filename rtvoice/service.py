@@ -11,6 +11,7 @@ from rtvoice.audio import (
 )
 from rtvoice.events import EventBus
 from rtvoice.events.views import (
+    AgentErrorEvent,
     AgentStartedEvent,
     AgentStoppedEvent,
     AssistantInterruptedEvent,
@@ -194,6 +195,7 @@ class RealtimeAgent(Generic[T]):
         self._event_bus.subscribe(AgentStartedEvent, self._on_agent_started)
         self._event_bus.subscribe(AssistantInterruptedEvent, self._on_agent_interrupted)
         self._event_bus.subscribe(SubAgentCalledEvent, self._on_subagent_called)
+        self._event_bus.subscribe(AgentErrorEvent, self._on_agent_error)
 
     async def _on_stop_command(self, _: StopAgentCommand) -> None:
         logger.info("Received stop command - triggering shutdown")
@@ -332,3 +334,8 @@ class RealtimeAgent(Generic[T]):
 
     async def _on_subagent_called(self, event: SubAgentCalledEvent) -> None:
         await self._agent_listener.on_subagent_called(event.agent_name, event.task)
+
+    async def _on_agent_error(self, event: AgentErrorEvent) -> None:
+        await self._agent_listener.on_agent_error(
+            event.type, event.message, event.code, event.param
+        )

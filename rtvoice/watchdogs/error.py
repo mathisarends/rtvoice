@@ -1,6 +1,7 @@
 import logging
 
 from rtvoice.events import EventBus
+from rtvoice.events.views import AgentErrorEvent
 from rtvoice.realtime.schemas import ErrorEvent
 
 logger = logging.getLogger(__name__)
@@ -19,4 +20,13 @@ class ErrorWatchdog:
             event.error.code,
             event.error.param,
             event.error.event_id,
+        )
+        await self._event_bus.dispatch(
+            AgentErrorEvent(
+                type=event.error.type,
+                message=event.error.message,
+                code=event.error.code,
+                param=event.error.param,
+                event_id=event.error.event_id,
+            )
         )

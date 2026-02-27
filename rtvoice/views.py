@@ -107,3 +107,8 @@ class AgentListener:
 
     async def on_subagent_called(self, agent_name: str, task: str) -> None:
         pass
+
+    async def on_agent_error(
+        self, type: str, message: str, code: str | None, param: str | None
+    ) -> None:
+        pass

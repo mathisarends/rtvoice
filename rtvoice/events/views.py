@@ -52,3 +52,11 @@ class AudioPlaybackCompletedEvent(BaseModel):
 class SubAgentCalledEvent(BaseModel):
     agent_name: str
     task: str
+
+
+class AgentErrorEvent(BaseModel):
+    type: str
+    message: str
+    code: str | None = None
+    param: str | None = None
+    event_id: str | None = None

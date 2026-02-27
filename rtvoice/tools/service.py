@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from datetime import datetime
 from typing import TYPE_CHECKING, Annotated, Any
 
 from rtvoice.events import EventBus
@@ -136,10 +135,6 @@ class Tools:
         }
 
     def _register_default_tools(self) -> None:
-        @self.action("Get the current local time")
-        def get_current_time() -> str:
-            return datetime.now().strftime("%H:%M:%S")
-
         @self.action("Stop the current realtime session.")
         async def stop_session(event_bus: EventBus) -> ActionResult:
             logger.info("Stop command received - dispatching stop event")

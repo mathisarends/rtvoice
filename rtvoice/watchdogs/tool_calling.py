@@ -52,7 +52,8 @@ class ToolCallingWatchdog:
                 output=self._serialize(result),
             )
         )
-        if not tool.silent:
+
+        if not tool.suppress_response:
             await self._websocket.send(
                 ConversationResponseCreateEvent.from_instructions(
                     tool.result_instruction

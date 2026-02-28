@@ -34,12 +34,9 @@ class Tools:
     def action(self, description: str, **kwargs):
         return self._registry.action(description, **kwargs)
 
-    def register_mcp(
-        self, tool: FunctionTool, server: MCPServer, silent: bool = False
-    ) -> None:
-        self._registry.register_mcp(tool, server, silent=silent)
+    def register_mcp(self, tool: FunctionTool, server: MCPServer) -> None:
+        self._registry.register_mcp(tool, server)
 
-    # TODO: Das hier mit dem fire und forget sollte hier so dann nicht funktioneron
     def register_subagent(self, agent: SubAgent) -> None:
         async def _handoff(
             task: Annotated[
@@ -72,7 +69,10 @@ class Tools:
         safe_name = agent.name.replace(" ", "_")
         result_instructions = agent.result_instructions
         self._registry.action(
-            description, name=safe_name, result_instruction=result_instructions
+            description,
+            name=safe_name,
+            result_instruction=result_instructions,
+            is_subagent=True,
         )(_handoff)
 
     def get_tool_schema(self) -> list[FunctionTool]:

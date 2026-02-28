@@ -12,7 +12,7 @@ async def main():
 
         return datetime.now().isoformat()
 
-    @tools.action("Turn on the light", silent=True)
+    @tools.action("Turn on the light", suppress_response=True)
     async def turn_on_light():
         await asyncio.sleep(1)
         print("Light turned on JAJAJAJ")

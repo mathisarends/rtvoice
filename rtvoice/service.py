@@ -179,6 +179,12 @@ class RealtimeAgent(Generic[T]):
         if not self._transcript_listener:
             return
 
+        if not self._transcription_model:
+            logger.warning(
+                "TranscriptListener is set but no transcription_model defined – "
+                "user transcript events (on_user_chunk, on_user_completed) will not be received."
+            )
+
         self._event_bus.subscribe(UserTranscriptChunkReceivedEvent, self._on_user_chunk)
         self._event_bus.subscribe(UserTranscriptCompletedEvent, self._on_user_completed)
         self._event_bus.subscribe(

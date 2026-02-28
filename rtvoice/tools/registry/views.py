@@ -13,14 +13,16 @@ class Tool:
         function: Callable,
         schema: FunctionParameters,
         result_instruction: str | None = None,
-        silent: bool = False,
+        suppress_response: bool = False,
+        is_subagent: bool = False,
     ):
         self.name = name
         self.description = description
         self.function = function
         self.schema = schema
         self.result_instruction = result_instruction
-        self.silent = silent
+        self.suppress_response = suppress_response
+        self.is_subagent = is_subagent
 
     async def execute(self, arguments: dict[str, Any]) -> Any:
         if inspect.iscoroutinefunction(self.function):

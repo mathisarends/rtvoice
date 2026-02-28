@@ -17,7 +17,8 @@ class ToolRegistry:
         description: str,
         name: str | None = None,
         result_instruction: str | None = None,
-        silent: bool = False,
+        suppress_response: bool = False,
+        is_subagent: bool = False,
     ):
         def decorator(func: Callable) -> Callable:
             tool = self._build_tool(
@@ -25,7 +26,8 @@ class ToolRegistry:
                 name=name or func.__name__,
                 description=description,
                 result_instruction=result_instruction,
-                silent=silent,
+                suppress_response=suppress_response,
+                is_subagent=is_subagent,
             )
             self._register_tool(tool)
             return func
@@ -44,7 +46,8 @@ class ToolRegistry:
         name: str,
         description: str,
         result_instruction: str | None,
-        silent: bool = False,
+        suppress_response: bool = False,
+        is_subagent: bool = False,
     ) -> Tool:
         bound_func = getattr(self, func.__name__, func)
         schema = self._schema_builder.build(func)
@@ -55,7 +58,8 @@ class ToolRegistry:
             function=bound_func,
             schema=schema,
             result_instruction=result_instruction,
-            silent=silent,
+            suppress_response=suppress_response,
+            is_subagent=is_subagent,
         )
 
     def _register_tool(self, tool: Tool) -> None:
@@ -63,14 +67,11 @@ class ToolRegistry:
             raise ValueError(f"Tool '{tool.name}' already registered")
         self._tools[tool.name] = tool
 
-    def register_mcp(
-        self, tool: FunctionTool, server: MCPServer, silent: bool = False
-    ) -> None:
+    def register_mcp(self, tool: FunctionTool, server: MCPServer) -> None:
         async def handler(**kwargs):
             return await server.call_tool(tool.name, kwargs or None)
 
         handler.__name__ = tool.name
-        # Do not copy the original function signature; set an empty signature instead
         handler.__signature__ = inspect.Signature()
 
         mcp_tool = Tool(
@@ -78,6 +79,5 @@ class ToolRegistry:
             description=tool.description or "",
             function=handler,
             schema=tool.parameters,
-            silent=silent,
         )
         self._register_tool(mcp_tool)

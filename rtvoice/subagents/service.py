@@ -7,9 +7,8 @@ from llmify import BaseChatModel, SystemMessage, ToolResultMessage, UserMessage
 
 from rtvoice.mcp import MCPServer
 from rtvoice.subagents.skills import SkillRegistry
-from rtvoice.subagents.views import SubAgentDone
+from rtvoice.subagents.views import SubAgentDone, SubAgentResult, ToolCall
 from rtvoice.tools import Tools
-from rtvoice.views import ActionResult
 
 logger = logging.getLogger(__name__)
 
@@ -20,26 +19,26 @@ class SubAgent:
         name: str,
         description: str,
         instructions: str,
+        llm: BaseChatModel | None = None,
         tools: Tools | None = None,
         mcp_servers: list[MCPServer] | None = None,
-        llm: BaseChatModel | None = None,
         max_iterations: int = 10,
+        skills_dir: str | Path | None = None,
         handoff_instructions: str | None = None,
         result_instructions: str | None = None,
         fire_and_forget: bool = False,
-        skills_dir: str | Path | None = None,
-    ):
+    ) -> None:
         self.name = name
         self.description = description
         self._instructions = instructions
+        self._llm = llm
         self._tools = tools or Tools()
         self._mcp_servers = mcp_servers or []
-        self._llm = llm
         self._max_iterations = max_iterations
+        self._skills = SkillRegistry(Path(skills_dir)) if skills_dir else None
         self.handoff_instructions = handoff_instructions
         self.result_instructions = result_instructions
         self.fire_and_forget = fire_and_forget
-        self._skills = SkillRegistry(Path(skills_dir)) if skills_dir else None
 
         self._mcp_ready = asyncio.Event()
 
@@ -90,7 +89,7 @@ class SubAgent:
         await self._connect_mcp_servers()
         return self
 
-    async def run(self, task: str) -> ActionResult:
+    async def run(self, task: str) -> SubAgentResult:
         await self.prepare()
 
         tool_schema = self._tools.get_json_tool_schema()
@@ -98,12 +97,15 @@ class SubAgent:
             SystemMessage(self._build_system_prompt()),
             UserMessage(task),
         ]
+        executed_tool_calls: list[ToolCall] = []
 
         for _ in range(self._max_iterations):
             response = await self._llm.invoke(messages, tools=tool_schema)
 
             if not response.has_tool_calls:
-                return ActionResult(message=response.content)
+                return SubAgentResult(
+                    message=response.content, tool_calls=executed_tool_calls
+                )
 
             messages.append(response.to_message())
 
@@ -111,21 +113,35 @@ class SubAgent:
                 try:
                     result = await self._tools.execute(tool_call.name, tool_call.tool)
                 except SubAgentDone as done:
-                    return ActionResult(success=True, message=done.result)
+                    return SubAgentResult(
+                        success=True,
+                        message=done.result,
+                        tool_calls=executed_tool_calls,
+                    )
+
+                executed_tool_calls.append(
+                    ToolCall(
+                        name=tool_call.name,
+                        arguments=tool_call.tool,
+                        result=str(result),
+                    )
+                )
 
                 messages.append(
                     ToolResultMessage(tool_call_id=tool_call.id, content=str(result))
                 )
 
-        return ActionResult(
+        return SubAgentResult(
             message="Max iterations reached without a final answer.",
             success=False,
+            tool_calls=executed_tool_calls,
         )
 
-    async def _setup_server(self, server: MCPServer) -> tuple[MCPServer, list]:
+    async def _setup_server(self, server: MCPServer) -> None:
         await server.connect()
         tools = await server.list_tools()
-        return server, tools
+        for tool in tools:
+            self._tools.register_mcp(tool, server)
 
     async def _connect_mcp_servers(self) -> None:
         if self._mcp_ready.is_set():
@@ -143,9 +159,5 @@ class SubAgent:
         for result in results:
             if isinstance(result, Exception):
                 logger.error("SubAgent MCP server failed: %s", result)
-                continue
-            server, tools = result
-            for tool in tools:
-                self._tools.register_mcp(tool, server)
 
         self._mcp_ready.set()

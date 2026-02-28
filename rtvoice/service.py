@@ -17,6 +17,7 @@ from rtvoice.events.views import (
     AgentStoppedEvent,
     AssistantInterruptedEvent,
     AssistantTranscriptCompletedEvent,
+    StartAgentCommand,
     StopAgentCommand,
     SubAgentCalledEvent,
     UserInactivityTimeoutEvent,
@@ -38,7 +39,6 @@ from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.subagents import SubAgent
 from rtvoice.tools import SpecialToolParameters, Tools
 from rtvoice.views import (
-    AgentHistory,
     AgentListener,
     AssistantVoice,
     NoiseReduction,
@@ -199,7 +199,9 @@ class RealtimeAgent(Generic[T]):
         if not self._agent_listener:
             return
 
-        self._event_bus.subscribe(AgentStartedEvent, self._on_agent_started)
+        self._event_bus.subscribe(
+            AgentStartedEvent, self._on_agent_started
+        )  # fires after session is ready
         self._event_bus.subscribe(AssistantInterruptedEvent, self._on_agent_interrupted)
         self._event_bus.subscribe(SubAgentCalledEvent, self._on_subagent_called)
         self._event_bus.subscribe(AgentErrorEvent, self._on_agent_error)
@@ -222,22 +224,20 @@ class RealtimeAgent(Generic[T]):
         await asyncio.gather(*own_servers, *subagent_servers, return_exceptions=True)
         return self
 
-    async def run(self) -> AgentHistory:
+    async def run(self) -> None:
         logger.info("Starting agent...")
 
         # idempotent preparation to ensure MCP servers are connected before accepting tasks
         await self.prepare()
 
         session_config = self._build_session_config()
-        await self._event_bus.dispatch(AgentStartedEvent(session_config=session_config))
+        await self._event_bus.dispatch(StartAgentCommand(session_config=session_config))
         logger.info("Agent started successfully")
 
         try:
             await self._stopped.wait()
         finally:
             await self.stop()
-
-        return AgentHistory(turns=self._conversation_history.turns)
 
     async def _connect_mcp_servers(self) -> None:
         if self._mcp_ready.is_set():

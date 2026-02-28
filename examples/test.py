@@ -1,15 +1,29 @@
 import asyncio
+import time
 from typing import Annotated
 
 from llmify import ChatOpenAI
 
 from rtvoice import RealtimeAgent, Tools
 from rtvoice.subagents import SubAgent
+from rtvoice.views import AgentListener
+
+
+class TimingListener(AgentListener):
+    def __init__(self):
+        self._start = time.perf_counter()
+
+    async def on_agent_started(self) -> None:
+        elapsed = time.perf_counter() - self._start
+        print(f"⏱️  Session ready in {elapsed:.3f}s")
+
+    async def on_agent_stopped(self) -> None:
+        elapsed = time.perf_counter() - self._start
+        print(f"⏱️  Session ran for {elapsed:.3f}s total")
 
 
 async def main():
     instructions = """Du bist Jarvis. Antworte kurz und bündig."""
-
     email_tools = Tools()
 
     @email_tools.action(
@@ -49,6 +63,7 @@ async def main():
     agent = RealtimeAgent(
         instructions=instructions,
         subagents=[email_agent, summary_agent],
+        agent_listener=TimingListener(),
     )
     await agent.run()
 

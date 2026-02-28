@@ -1,12 +1,14 @@
-from __future__ import annotations
-
 from pydantic import BaseModel
 
 from rtvoice.realtime.schemas import RealtimeSessionConfig
 
 
-class AgentStartedEvent(BaseModel):
+class StartAgentCommand(BaseModel):
     session_config: RealtimeSessionConfig
+
+
+class AgentStartedEvent(BaseModel):
+    pass
 
 
 class AgentStoppedEvent(BaseModel):

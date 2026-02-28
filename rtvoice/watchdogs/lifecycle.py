@@ -4,6 +4,7 @@ from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentStartedEvent,
     AgentStoppedEvent,
+    StartAgentCommand,
 )
 from rtvoice.realtime.schemas import (
     InputAudioBufferAppendEvent,
@@ -21,7 +22,7 @@ class LifecycleWatchdog:
         self._websocket = websocket
         self._session_config: RealtimeSessionConfig | None = None
 
-        self._event_bus.subscribe(AgentStartedEvent, self._on_agent_started)
+        self._event_bus.subscribe(StartAgentCommand, self._on_start_agent_command)
         self._event_bus.subscribe(AgentStoppedEvent, self._on_agent_stopped)
         self._event_bus.subscribe(
             InputAudioBufferAppendEvent, self._on_input_audio_buffer_append
@@ -39,15 +40,18 @@ class LifecycleWatchdog:
 
         await self._websocket.send(event)
 
-    async def _on_agent_started(self, event: AgentStartedEvent) -> None:
+    async def _on_start_agent_command(self, command: StartAgentCommand) -> None:
         logger.info("Starting agent session")
 
         if not self._is_connected():
             await self._websocket.connect()
 
-        self._session_config = event.session_config
+        self._session_config = command.session_config
         session_update = SessionUpdateEvent(session=self._session_config)
         await self._websocket.send(session_update)
+
+        await self._event_bus.dispatch(AgentStartedEvent())
+        logger.info("Agent session ready")
 
     async def _on_agent_stopped(self, _: AgentStoppedEvent) -> None:
         if not self._is_connected():

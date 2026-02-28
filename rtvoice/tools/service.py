@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
 from typing import TYPE_CHECKING, Annotated, Any
 
 from rtvoice.events import EventBus
@@ -9,8 +10,8 @@ from rtvoice.events import EventBus
 if TYPE_CHECKING:
     from rtvoice.subagents import SubAgent
 
-import logging
 
+from rtvoice.conversation import ConversationHistory
 from rtvoice.events.views import (
     SubAgentCalledEvent,
 )
@@ -47,19 +48,22 @@ class Tools:
                 """,
             ],
             event_bus: EventBus,
+            conversation_history: ConversationHistory,
         ) -> str:
             await event_bus.dispatch(
                 SubAgentCalledEvent(agent_name=agent.name, task=task)
             )
 
+            context = conversation_history.format() if conversation_history else None
+
             if agent.fire_and_forget:
-                asyncio.create_task(agent.run(task))
+                asyncio.create_task(agent.run(task, context=context))
                 return (
                     agent.result_instructions
                     or "The task has been delegated to the agent and will be completed shortly."
                 )
             else:
-                result = await agent.run(task)
+                result = await agent.run(task, context=context)
                 return result.message or ""
 
         description = agent.description

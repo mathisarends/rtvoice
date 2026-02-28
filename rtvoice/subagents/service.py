@@ -89,14 +89,22 @@ class SubAgent:
         await self._connect_mcp_servers()
         return self
 
-    async def run(self, task: str) -> SubAgentResult:
+    async def run(self, task: str, context: str | None = None) -> SubAgentResult:
         await self.prepare()
 
         tool_schema = self._tools.get_json_tool_schema()
         messages = [
             SystemMessage(self._build_system_prompt()),
-            UserMessage(task),
         ]
+
+        if context:
+            messages.append(
+                UserMessage(
+                    f"<conversation_history>\n{context}\n</conversation_history>"
+                )
+            )
+
+        messages.append(UserMessage(f"<task>\n{task}\n</task>"))
         executed_tool_calls: list[ToolCall] = []
 
         for _ in range(self._max_iterations):

@@ -1,27 +1,57 @@
+import asyncio
+from typing import Annotated
+
+from llmify import ChatOpenAI
+
 from rtvoice import RealtimeAgent, Tools
+from rtvoice.subagents import SubAgent
 
 
 async def main():
-    instructions = """Du bist Jarvis. Antworte kurz und bündig. Wenn du eine Frage nicht beantworten kannst, sage "Das weiß ich leider nicht"."""
+    instructions = """Du bist Jarvis. Antworte kurz und bündig."""
 
-    tools = Tools()
+    email_tools = Tools()
 
-    @tools.action("get_current_time")
-    def get_current_time():
-        from datetime import datetime
+    @email_tools.action(
+        "Send an email to the given recipient with the given subject and body."
+    )
+    async def send_email(
+        recipient: Annotated[str, "The email address of the recipient."],
+        subject: Annotated[str, "The subject of the email."],
+        body: Annotated[str, "The body of the email."],
+    ) -> str:
+        await asyncio.sleep(3)  # simuliert langlaufenden Versand
+        print(f"\n📧 Email sent to {recipient} | Subject: {subject}\n{body}\n")
+        return f"Email successfully sent to {recipient}."
 
-        return datetime.now().isoformat()
+    email_agent = SubAgent(
+        name="email_agent",
+        description="Sends an email in the background. Use when the user wants to send an email.",
+        instructions="You are an email assistant. Send the email using the send_email tool and confirm.",
+        llm=ChatOpenAI(model="gpt-4o-mini"),
+        tools=email_tools,
+        fire_and_forget=True,
+        result_instructions="The email is being sent in the background.",
+    )
 
-    @tools.action("Turn on the light", suppress_response=True)
-    async def turn_on_light():
-        await asyncio.sleep(1)
-        print("Light turned on JAJAJAJ")
+    summary_agent = SubAgent(
+        name="summary_agent",
+        description="Summarizes the conversation so far. Use when the user asks for a summary of what was discussed.",
+        instructions=(
+            "You are a summarization assistant. "
+            "The user will provide you with the conversation history. "
+            "Summarize it concisely in German."
+        ),
+        llm=ChatOpenAI(model="gpt-4o-mini"),
+        result_instructions="Here is the summary of our conversation so far.",
+    )
 
-    agent = RealtimeAgent(instructions=instructions, tools=tools)
+    agent = RealtimeAgent(
+        instructions=instructions,
+        subagents=[email_agent, summary_agent],
+    )
     await agent.run()
 
 
 if __name__ == "__main__":
-    import asyncio
-
     asyncio.run(main())

@@ -9,18 +9,17 @@ from rtvoice.audio import (
     MicrophoneInput,
     SpeakerOutput,
 )
+from rtvoice.conversation import ConversationHistory
 from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentErrorEvent,
     AgentStartedEvent,
     AgentStoppedEvent,
     AssistantInterruptedEvent,
-    AssistantTranscriptChunkReceivedEvent,
     AssistantTranscriptCompletedEvent,
     StopAgentCommand,
     SubAgentCalledEvent,
     UserInactivityTimeoutEvent,
-    UserTranscriptChunkReceivedEvent,
     UserTranscriptCompletedEvent,
 )
 from rtvoice.mcp import MCPServer
@@ -108,10 +107,12 @@ class RealtimeAgent(Generic[T]):
         self._mcp_tool_cache: list[tuple] = []
 
         self._event_bus = EventBus()
+        self._conversation_history = ConversationHistory(self._event_bus)
         self._tools.set_context(
             SpecialToolParameters(
                 event_bus=self._event_bus,
                 context=context,
+                conversation_history=self._conversation_history,
             )
         )
         self._websocket = RealtimeWebSocket(
@@ -182,14 +183,10 @@ class RealtimeAgent(Generic[T]):
         if not self._transcription_model:
             logger.warning(
                 "TranscriptListener is set but no transcription_model defined – "
-                "user transcript events (on_user_chunk, on_user_completed) will not be received."
+                "on_user_completed will not be received."
             )
 
-        self._event_bus.subscribe(UserTranscriptChunkReceivedEvent, self._on_user_chunk)
         self._event_bus.subscribe(UserTranscriptCompletedEvent, self._on_user_completed)
-        self._event_bus.subscribe(
-            AssistantTranscriptChunkReceivedEvent, self._on_assistant_chunk
-        )
         self._event_bus.subscribe(
             AssistantTranscriptCompletedEvent, self._on_assistant_completed
         )
@@ -316,16 +313,8 @@ class RealtimeAgent(Generic[T]):
         if self._agent_listener:
             await self._agent_listener.on_agent_stopped()
 
-    async def _on_user_chunk(self, event: UserTranscriptChunkReceivedEvent) -> None:
-        await self._transcript_listener.on_user_chunk(event.chunk)
-
     async def _on_user_completed(self, event: UserTranscriptCompletedEvent) -> None:
         await self._transcript_listener.on_user_completed(event.transcript)
-
-    async def _on_assistant_chunk(
-        self, event: AssistantTranscriptChunkReceivedEvent
-    ) -> None:
-        await self._transcript_listener.on_assistant_chunk(event.chunk)
 
     async def _on_assistant_completed(
         self, event: AssistantTranscriptCompletedEvent

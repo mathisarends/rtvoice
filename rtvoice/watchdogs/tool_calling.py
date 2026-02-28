@@ -52,11 +52,14 @@ class ToolCallingWatchdog:
                 output=self._serialize(result),
             )
         )
-        await self._websocket.send(
-            ConversationResponseCreateEvent.from_instructions(tool.result_instruction)
-            if tool.result_instruction
-            else ConversationResponseCreateEvent()
-        )
+        if not tool.silent:
+            await self._websocket.send(
+                ConversationResponseCreateEvent.from_instructions(
+                    tool.result_instruction
+                )
+                if tool.result_instruction
+                else ConversationResponseCreateEvent()
+            )
 
     def _serialize(self, result: Any) -> str:
         if result is None:

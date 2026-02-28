@@ -17,6 +17,7 @@ class ToolRegistry:
         description: str,
         name: str | None = None,
         result_instruction: str | None = None,
+        silent: bool = False,
     ):
         def decorator(func: Callable) -> Callable:
             tool = self._build_tool(
@@ -24,6 +25,7 @@ class ToolRegistry:
                 name=name or func.__name__,
                 description=description,
                 result_instruction=result_instruction,
+                silent=silent,
             )
             self._register_tool(tool)
             return func
@@ -42,6 +44,7 @@ class ToolRegistry:
         name: str,
         description: str,
         result_instruction: str | None,
+        silent: bool = False,
     ) -> Tool:
         bound_func = getattr(self, func.__name__, func)
         schema = self._schema_builder.build(func)
@@ -52,6 +55,7 @@ class ToolRegistry:
             function=bound_func,
             schema=schema,
             result_instruction=result_instruction,
+            silent=silent,
         )
 
     def _register_tool(self, tool: Tool) -> None:
@@ -59,7 +63,9 @@ class ToolRegistry:
             raise ValueError(f"Tool '{tool.name}' already registered")
         self._tools[tool.name] = tool
 
-    def register_mcp(self, tool: FunctionTool, server: MCPServer) -> None:
+    def register_mcp(
+        self, tool: FunctionTool, server: MCPServer, silent: bool = False
+    ) -> None:
         async def handler(**kwargs):
             return await server.call_tool(tool.name, kwargs or None)
 
@@ -72,5 +78,6 @@ class ToolRegistry:
             description=tool.description or "",
             function=handler,
             schema=tool.parameters,
+            silent=silent,
         )
         self._register_tool(mcp_tool)

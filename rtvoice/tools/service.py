@@ -34,8 +34,10 @@ class Tools:
     def action(self, description: str, **kwargs):
         return self._registry.action(description, **kwargs)
 
-    def register_mcp(self, tool: FunctionTool, server: MCPServer) -> None:
-        self._registry.register_mcp(tool, server)
+    def register_mcp(
+        self, tool: FunctionTool, server: MCPServer, silent: bool = False
+    ) -> None:
+        self._registry.register_mcp(tool, server, silent=silent)
 
     # TODO: Das hier mit dem fire und forget sollte hier so dann nicht funktioneron
     def register_subagent(self, agent: SubAgent) -> None:

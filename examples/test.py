@@ -12,6 +12,11 @@ async def main():
 
         return datetime.now().isoformat()
 
+    @tools.action("Turn on the light", silent=True)
+    async def turn_on_light():
+        await asyncio.sleep(1)
+        print("Light turned on JAJAJAJ")
+
     agent = RealtimeAgent(instructions=instructions, tools=tools)
     await agent.run()
 

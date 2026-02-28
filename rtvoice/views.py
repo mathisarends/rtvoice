@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from rtvoice.conversation.views import ConversationTurn
 
 
 class RealtimeModel(StrEnum):
@@ -71,6 +73,10 @@ class TurnDetection(BaseModel):
     threshold: float = 0.5
     prefix_padding_ms: int = 300
     silence_duration_ms: int = 500
+
+
+class AgentHistory(BaseModel):
+    turns: list[ConversationTurn] = Field(default_factory=list)
 
 
 class TranscriptListener:

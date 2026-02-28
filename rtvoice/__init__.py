@@ -4,6 +4,7 @@ from .service import RealtimeAgent
 from .subagents import SubAgent
 from .tools import Tools
 from .views import (
+    AgentHistory,
     AgentListener,
     AssistantVoice,
     RealtimeModel,
@@ -13,6 +14,7 @@ from .views import (
 )
 
 __all__ = [
+    "AgentHistory",
     "AgentListener",
     "AssistantVoice",
     "MCPServerStdio",

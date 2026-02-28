@@ -38,6 +38,7 @@ from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.subagents import SubAgent
 from rtvoice.tools import SpecialToolParameters, Tools
 from rtvoice.views import (
+    AgentHistory,
     AgentListener,
     AssistantVoice,
     NoiseReduction,
@@ -87,6 +88,7 @@ class RealtimeAgent(Generic[T]):
         self._voice = voice
         self._speech_speed = self._clip_speech_speed(speech_speed)
         self._transcription_model = transcription_model
+        self._user_transcription_enabled = transcription_model is not None
         self._noise_reduction = noise_reduction
         self._turn_detection = turn_detection or TurnDetection()
 
@@ -107,7 +109,9 @@ class RealtimeAgent(Generic[T]):
         self._mcp_tool_cache: list[tuple] = []
 
         self._event_bus = EventBus()
-        self._conversation_history = ConversationHistory(self._event_bus)
+        self._conversation_history = ConversationHistory(
+            self._event_bus, user_transcription_enabled=self._user_transcription_enabled
+        )
         self._tools.set_context(
             SpecialToolParameters(
                 event_bus=self._event_bus,
@@ -180,7 +184,7 @@ class RealtimeAgent(Generic[T]):
         if not self._transcript_listener:
             return
 
-        if not self._transcription_model:
+        if not self._user_transcription_enabled:
             logger.warning(
                 "TranscriptListener is set but no transcription_model defined – "
                 "on_user_completed will not be received."
@@ -218,7 +222,7 @@ class RealtimeAgent(Generic[T]):
         await asyncio.gather(*own_servers, *subagent_servers, return_exceptions=True)
         return self
 
-    async def run(self) -> None:
+    async def run(self) -> AgentHistory:
         logger.info("Starting agent...")
 
         # idempotent preparation to ensure MCP servers are connected before accepting tasks
@@ -232,6 +236,8 @@ class RealtimeAgent(Generic[T]):
             await self._stopped.wait()
         finally:
             await self.stop()
+
+        return AgentHistory(turns=self._conversation_history.turns)
 
     async def _connect_mcp_servers(self) -> None:
         if self._mcp_ready.is_set():

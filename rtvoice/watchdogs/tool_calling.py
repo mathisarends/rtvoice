@@ -14,10 +14,6 @@ from rtvoice.realtime.schemas import (
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.tools import Tools
 
-_DEFAULT_RESPONSE_INSTRUCTION = (
-    "The tool call has completed. Respond directly with the result."
-)
-
 logger = logging.getLogger(__name__)
 
 
@@ -57,9 +53,9 @@ class ToolCallingWatchdog:
             )
         )
         await self._websocket.send(
-            ConversationResponseCreateEvent.from_instructions(
-                tool.result_instruction or _DEFAULT_RESPONSE_INSTRUCTION
-            )
+            ConversationResponseCreateEvent.from_instructions(tool.result_instruction)
+            if tool.result_instruction
+            else ConversationResponseCreateEvent()
         )
 
     def _serialize(self, result: Any) -> str:

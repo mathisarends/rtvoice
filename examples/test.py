@@ -1,10 +1,18 @@
-from rtvoice import RealtimeAgent
+from rtvoice import RealtimeAgent, Tools
 
 
 async def main():
     instructions = """Du bist Jarvis. Antworte kurz und bündig. Wenn du eine Frage nicht beantworten kannst, sage "Das weiß ich leider nicht"."""
 
-    agent = RealtimeAgent(instructions=instructions)
+    tools = Tools()
+
+    @tools.action("get_current_time")
+    def get_current_time():
+        from datetime import datetime
+
+        return datetime.now().isoformat()
+
+    agent = RealtimeAgent(instructions=instructions, tools=tools)
     await agent.run()
 
 

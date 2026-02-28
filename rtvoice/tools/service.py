@@ -12,7 +12,6 @@ if TYPE_CHECKING:
 import logging
 
 from rtvoice.events.views import (
-    StopAgentCommand,
     SubAgentCalledEvent,
 )
 from rtvoice.mcp.server import MCPServer
@@ -20,7 +19,6 @@ from rtvoice.realtime.schemas import FunctionTool
 from rtvoice.tools.registry import ToolRegistry
 from rtvoice.tools.registry.views import Tool
 from rtvoice.tools.views import SpecialToolParameters
-from rtvoice.views import ActionResult
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +27,6 @@ class Tools:
     def __init__(self):
         self._registry = ToolRegistry()
         self._context: SpecialToolParameters = SpecialToolParameters()
-        self._register_default_tools()
 
     def set_context(self, context: SpecialToolParameters) -> None:
         self._context = context
@@ -133,13 +130,3 @@ class Tools:
             field: getattr(context, field)
             for field in SpecialToolParameters.model_fields
         }
-
-    def _register_default_tools(self) -> None:
-        @self.action("Stop the current realtime session.")
-        async def stop_session(event_bus: EventBus) -> ActionResult:
-            logger.info("Stop command received - dispatching stop event")
-
-            stop_event = StopAgentCommand()
-            await event_bus.dispatch(stop_event)
-
-            return ActionResult(success=True, message="Stopping agent session")

@@ -13,7 +13,7 @@ class TimingListener(AgentListener):
     def __init__(self):
         self._start = time.perf_counter()
 
-    async def on_agent_started(self) -> None:
+    async def on_agent_session_connected(self) -> None:
         elapsed = time.perf_counter() - self._start
         print(f"⏱️  Session ready in {elapsed:.3f}s")
 
@@ -63,7 +63,7 @@ async def main():
     agent = RealtimeAgent(
         instructions=instructions,
         subagents=[email_agent, summary_agent],
-        agent_listener=TimingListener(),
+        listener=TimingListener(),
     )
     await agent.run()
 

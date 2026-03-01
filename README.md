@@ -179,7 +179,7 @@ from rtvoice import RealtimeAgent
 from rtvoice.views import AgentListener
 
 class MyListener(AgentListener):
-    async def on_agent_started(self) -> None:
+    async def on_agent_session_connected(self) -> None:
         """Called when the WebSocket session is established and the agent is ready."""
         print("Ready.")
 
@@ -195,9 +195,9 @@ class MyListener(AgentListener):
         """Called when a subagent is dispatched with a task."""
         print(f"→ {agent_name}: {task}")
 
-    async def on_agent_error(self, type: str, message: str, code: str | None, param: str | None) -> None:
+    async def on_agent_error(self, error: AgentError) -> None:
         """Called on API-level errors."""
-        print(f"Error [{code}]: {message}")
+        print(f"Error: {error}")
 
 agent = RealtimeAgent(
     instructions="...",

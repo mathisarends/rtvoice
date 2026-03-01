@@ -1,6 +1,10 @@
+from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 
 from pydantic import BaseModel
+
+from rtvoice.conversation.views import ConversationTurn
 
 
 class RealtimeModel(StrEnum):
@@ -65,22 +69,51 @@ class NoiseReduction(StrEnum):
     FAR_FIELD = "far_field"
 
 
-class TurnDetection(BaseModel):
+class SemanticEagerness(StrEnum):
+    """How quickly semantic VAD decides the user has finished speaking."""
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    AUTO = "auto"
+
+
+class SemanticVAD(BaseModel):
+    """Semantic voice-activity detection.
+
+    The model waits until it understands the speaker has finished a thought —
+    more natural and fewer false cut-offs than energy-based detection.
+    """
+
+    eagerness: SemanticEagerness = SemanticEagerness.AUTO
+
+
+class ServerVAD(BaseModel):
+    """Energy/silence-based voice-activity detection."""
+
     threshold: float = 0.5
     prefix_padding_ms: int = 300
     silence_duration_ms: int = 500
 
 
-class TranscriptListener:
-    async def on_user_completed(self, transcript: str) -> None:
-        pass
+TurnDetection = SemanticVAD | ServerVAD
 
-    async def on_assistant_completed(self, transcript: str) -> None:
-        pass
+
+@dataclass
+class AgentError:
+    """Error information from the agent."""
+
+    type: str
+    message: str
+    code: str | None = None
+    param: str | None = None
+
+    def __str__(self) -> str:
+        return f"[{self.type}] {self.message}"
 
 
 class AgentListener:
-    async def on_agent_started(self) -> None:
+    async def on_agent_session_connected(self) -> None:
         pass
 
     async def on_agent_stopped(self) -> None:
@@ -92,7 +125,29 @@ class AgentListener:
     async def on_subagent_called(self, agent_name: str, task: str) -> None:
         pass
 
-    async def on_agent_error(
-        self, type: str, message: str, code: str | None, param: str | None
-    ) -> None:
+    async def on_agent_error(self, error: AgentError) -> None:
         pass
+
+    async def on_user_transcript(self, transcript: str) -> None:
+        pass
+
+    async def on_assistant_transcript(self, transcript: str) -> None:
+        pass
+
+    async def on_user_started_speaking(self) -> None:
+        pass
+
+    async def on_user_stopped_speaking(self) -> None:
+        pass
+
+    async def on_assistant_started_responding(self) -> None:
+        pass
+
+    async def on_assistant_stopped_responding(self) -> None:
+        pass
+
+
+class AgentResult(BaseModel):
+    turns: list[ConversationTurn]
+    duration_seconds: float
+    recording_path: Path | None = None

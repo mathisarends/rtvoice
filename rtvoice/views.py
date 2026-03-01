@@ -65,10 +65,34 @@ class NoiseReduction(StrEnum):
     FAR_FIELD = "far_field"
 
 
-class TurnDetection(BaseModel):
+class SemanticEagerness(StrEnum):
+    """How quickly semantic VAD decides the user has finished speaking."""
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    AUTO = "auto"
+
+
+class SemanticVAD(BaseModel):
+    """Semantic voice-activity detection.
+
+    The model waits until it understands the speaker has finished a thought —
+    more natural and fewer false cut-offs than energy-based detection.
+    """
+
+    eagerness: SemanticEagerness = SemanticEagerness.AUTO
+
+
+class ServerVAD(BaseModel):
+    """Energy/silence-based voice-activity detection."""
+
     threshold: float = 0.5
     prefix_padding_ms: int = 300
     silence_duration_ms: int = 500
+
+
+TurnDetection = SemanticVAD | ServerVAD
 
 
 class TranscriptListener:

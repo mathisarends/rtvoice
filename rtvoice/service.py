@@ -32,6 +32,8 @@ from rtvoice.realtime.schemas import (
     InputAudioTranscriptionConfig,
     NoiseReductionType,
     RealtimeSessionConfig,
+    SemanticVADConfig,
+    ServerVADConfig,
     ToolChoiceMode,
     TurnDetectionConfig,
 )
@@ -43,6 +45,7 @@ from rtvoice.views import (
     AssistantVoice,
     NoiseReduction,
     RealtimeModel,
+    SemanticVAD,
     TranscriptionModel,
     TranscriptListener,
     TurnDetection,
@@ -90,9 +93,10 @@ class RealtimeAgent(Generic[T]):
         self._transcription_model = transcription_model
         self._user_transcription_enabled = transcription_model is not None
         self._noise_reduction = noise_reduction
-        self._turn_detection = turn_detection or TurnDetection()
+        self._turn_detection: TurnDetection = (
+            turn_detection if turn_detection is not None else SemanticVAD()
+        )
 
-        # Clone to get a fresh registry each time
         self._tools = tools.clone() if tools else Tools()
         self._mcp_servers = mcp_servers or []
 
@@ -268,6 +272,16 @@ class RealtimeAgent(Generic[T]):
         logger.info("MCP server connected: %d tools loaded", len(tools))
         return [(tool, server) for tool in tools]
 
+    def _build_turn_detection_config(self) -> TurnDetectionConfig:
+        td = self._turn_detection
+        if isinstance(td, SemanticVAD):
+            return SemanticVADConfig(eagerness=td.eagerness.value)
+        return ServerVADConfig(
+            threshold=td.threshold,
+            prefix_padding_ms=td.prefix_padding_ms,
+            silence_duration_ms=td.silence_duration_ms,
+        )
+
     def _build_session_config(self) -> RealtimeSessionConfig:
         input_config = AudioInputConfig(
             transcription=(
@@ -278,11 +292,7 @@ class RealtimeAgent(Generic[T]):
             noise_reduction=InputAudioNoiseReductionConfig(
                 type=NoiseReductionType(self._noise_reduction)
             ),
-            turn_detection=TurnDetectionConfig(
-                threshold=self._turn_detection.threshold,
-                prefix_padding_ms=self._turn_detection.prefix_padding_ms,
-                silence_duration_ms=self._turn_detection.silence_duration_ms,
-            ),
+            turn_detection=self._build_turn_detection_config(),
         )
 
         audio_config = AudioConfig(

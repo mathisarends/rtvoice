@@ -175,11 +175,27 @@ class InputAudioNoiseReductionConfig(BaseModel):
     type: NoiseReductionType
 
 
-class TurnDetectionConfig(BaseModel):
+class ServerVADConfig(BaseModel):
     type: Literal["server_vad"] = "server_vad"
     threshold: float = 0.5
     prefix_padding_ms: int = 300
     silence_duration_ms: int = 500
+    create_response: bool = True
+    interrupt_response: bool = True
+    idle_timeout_ms: int | None = None
+
+
+class SemanticVADConfig(BaseModel):
+    type: Literal["semantic_vad"] = "semantic_vad"
+    eagerness: Literal["low", "medium", "high", "auto"] = "auto"
+    # low    = wait up to 8 s for a natural endpoint
+    # medium = wait up to 4 s (same as "auto" default)
+    # high   = wait up to 2 s (most responsive)
+    create_response: bool = True
+    interrupt_response: bool = True
+
+
+TurnDetectionConfig = ServerVADConfig | SemanticVADConfig
 
 
 class InputAudioTranscriptionConfig(BaseModel):
@@ -195,7 +211,7 @@ class AudioOutputConfig(BaseModel):
 class AudioInputConfig(BaseModel):
     format: AudioFormatConfig = Field(default_factory=AudioFormatConfig)
     turn_detection: TurnDetectionConfig | None = Field(
-        default_factory=TurnDetectionConfig
+        default_factory=SemanticVADConfig
     )
     transcription: InputAudioTranscriptionConfig | None = None
     noise_reduction: InputAudioNoiseReductionConfig | None = Field(

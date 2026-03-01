@@ -1,4 +1,5 @@
 import asyncio
+import threading
 from collections.abc import AsyncIterator
 
 import pyaudio
@@ -19,6 +20,8 @@ class MicrophoneInput(AudioInputDevice):
         self._audio: pyaudio.PyAudio | None = None
         self._stream = None
         self._active = False
+        self._read_complete = threading.Event()
+        self._read_complete.set()
 
     @property
     def is_active(self) -> bool:
@@ -39,11 +42,26 @@ class MicrophoneInput(AudioInputDevice):
         )
         self._active = True
 
+    def _safe_read(self) -> bytes | None:
+        self._read_complete.clear()
+        try:
+            if not self._active or not self._stream:
+                return None
+            return self._stream.read(self._chunk_size)
+        except OSError:
+            return None
+        finally:
+            self._read_complete.set()
+
     async def stop(self) -> None:
         if not self._active:
             return
 
         self._active = False
+
+        await asyncio.get_event_loop().run_in_executor(
+            None, self._read_complete.wait, 1.0
+        )
 
         if self._stream:
             self._stream.stop_stream()
@@ -57,6 +75,8 @@ class MicrophoneInput(AudioInputDevice):
     async def stream_chunks(self) -> AsyncIterator[bytes]:
         while self._active and self._stream:
             chunk = await asyncio.get_event_loop().run_in_executor(
-                None, self._stream.read, self._chunk_size
+                None, self._safe_read
             )
+            if chunk is None:
+                break
             yield chunk

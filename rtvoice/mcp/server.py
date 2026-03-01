@@ -79,6 +79,10 @@ class MCPServerStdio(MCPServer):
         self._tools_cache: list[FunctionTool] | None = None
 
     async def connect(self):
+        # Clean up any existing process before reconnecting (allows reuse after cleanup())
+        if self._process is not None:
+            await self.cleanup()
+
         self._process = await asyncio.create_subprocess_exec(
             self.command,
             *self.args,
@@ -126,6 +130,7 @@ class MCPServerStdio(MCPServer):
             self._process.terminate()
             await self._process.wait()
             self._process = None
+            self._tools_cache = None
 
     # ── JSON-RPC ────────────────────────────────────────────────────────
 

@@ -92,8 +92,10 @@ class RealtimeAgent(Generic[T]):
         self._noise_reduction = noise_reduction
         self._turn_detection = turn_detection or TurnDetection()
 
-        self._tools = tools or Tools()
+        # Clone to get a fresh registry each time
+        self._tools = tools.clone() if tools else Tools()
         self._mcp_servers = mcp_servers or []
+
         self._subagents = subagents or []
         for subagent in self._subagents:
             self._tools.register_subagent(subagent)
@@ -106,7 +108,6 @@ class RealtimeAgent(Generic[T]):
         self._stopped = asyncio.Event()
         self._stop_called = False
         self._mcp_ready = asyncio.Event()
-        self._mcp_tool_cache: list[tuple] = []
 
         self._event_bus = EventBus()
         self._conversation_history = ConversationHistory(
@@ -247,14 +248,8 @@ class RealtimeAgent(Generic[T]):
             self._mcp_ready.set()
             return
 
-        async def connect_one(server: MCPServer) -> list[tuple]:
-            await server.connect()
-            tools = await server.list_tools()
-            logger.info("MCP server connected: %d tools loaded", len(tools))
-            return [(tool, server) for tool in tools]
-
         results = await asyncio.gather(
-            *[connect_one(s) for s in self._mcp_servers],
+            *[self._connect_mcp_server(s) for s in self._mcp_servers],
             return_exceptions=True,
         )
 
@@ -264,9 +259,14 @@ class RealtimeAgent(Generic[T]):
                 continue
             for tool, server in result:
                 self._tools.register_mcp(tool, server)
-                self._mcp_tool_cache.append((tool, server))
 
         self._mcp_ready.set()
+
+    async def _connect_mcp_server(self, server: MCPServer) -> list[tuple]:
+        await server.connect()
+        tools = await server.list_tools()
+        logger.info("MCP server connected: %d tools loaded", len(tools))
+        return [(tool, server) for tool in tools]
 
     def _build_session_config(self) -> RealtimeSessionConfig:
         input_config = AudioInputConfig(

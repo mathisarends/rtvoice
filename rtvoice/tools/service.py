@@ -136,3 +136,12 @@ class Tools:
             field: getattr(context, field)
             for field in SpecialToolParameters.model_fields
         }
+
+    def clone(self) -> Tools:
+        new = Tools()
+        new._registry.tools = {
+            name: tool
+            for name, tool in self._registry.tools.items()
+            if not tool.is_subagent
+        }
+        return new

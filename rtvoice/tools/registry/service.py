@@ -9,7 +9,7 @@ from rtvoice.tools.registry.views import Tool
 
 class ToolRegistry:
     def __init__(self):
-        self._tools: dict[str, Tool] = {}
+        self.tools: dict[str, Tool] = {}
         self._schema_builder = ToolSchemaBuilder()
 
     def action(
@@ -35,10 +35,10 @@ class ToolRegistry:
         return decorator
 
     def get(self, name: str) -> Tool | None:
-        return self._tools.get(name)
+        return self.tools.get(name)
 
     def get_tool_schema(self) -> list[FunctionTool]:
-        return [tool.to_pydantic() for tool in self._tools.values()]
+        return [tool.to_pydantic() for tool in self.tools.values()]
 
     def _build_tool(
         self,
@@ -63,9 +63,9 @@ class ToolRegistry:
         )
 
     def _register_tool(self, tool: Tool) -> None:
-        if tool.name in self._tools:
+        if tool.name in self.tools:
             raise ValueError(f"Tool '{tool.name}' already registered")
-        self._tools[tool.name] = tool
+        self.tools[tool.name] = tool
 
     def register_mcp(self, tool: FunctionTool, server: MCPServer) -> None:
         async def handler(**kwargs):

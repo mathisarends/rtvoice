@@ -60,6 +60,7 @@ from rtvoice.watchdogs import (
     InterruptionWatchdog,
     LifecycleWatchdog,
     SpeechStateWatchdog,
+    SubAgentInteractionWatchdog,
     ToolCallingWatchdog,
     TranscriptionWatchdog,
     UserInactivityTimeoutWatchdog,
@@ -185,6 +186,11 @@ class RealtimeAgent(Generic[T]):
 
         self._error_watchdog = ErrorWatchdog(event_bus=self._event_bus)
         self._speech_state_watchdog = SpeechStateWatchdog(event_bus=self._event_bus)
+
+        self._subagent_interaction_watchdog = SubAgentInteractionWatchdog(
+            event_bus=self._event_bus,
+            websocket=self._websocket,
+        )
 
         if self._recording_path:
             self._recording_watchdog = AudioRecordingWatchdog(

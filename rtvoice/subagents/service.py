@@ -55,7 +55,6 @@ class SubAgent:
     def set_event_bus(self, event_bus: EventBus) -> None:
         self._event_bus = event_bus
 
-    # The done response of the agent is structured so we can use it to take more control of the voice agent
     def _register_done_tool(self) -> None:
         @self._tools.action(
             "Signal that the task is complete and return the final result to the user. "

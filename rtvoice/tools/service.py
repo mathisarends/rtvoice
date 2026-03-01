@@ -32,8 +32,21 @@ class Tools:
     def set_context(self, context: SpecialToolParameters) -> None:
         self._context = context
 
-    def action(self, description: str, **kwargs):
-        return self._registry.action(description, **kwargs)
+    def action(
+        self,
+        description: str,
+        name: str | None = None,
+        result_instruction: str | None = None,
+        suppress_response: bool = False,
+        is_subagent: bool = False,
+    ):
+        return self._registry.action(
+            description,
+            name=name,
+            result_instruction=result_instruction,
+            suppress_response=suppress_response,
+            is_subagent=is_subagent,
+        )
 
     def register_mcp(self, tool: FunctionTool, server: MCPServer) -> None:
         self._registry.register_mcp(tool, server)

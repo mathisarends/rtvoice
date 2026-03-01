@@ -17,8 +17,8 @@ class ToolRegistry:
         description: str,
         name: str | None = None,
         result_instruction: str | None = None,
-        suppress_response: bool = False,
-        is_subagent: bool = False,
+        is_long_running: bool = False,
+        holding_instruction: str | None = None,
     ):
         def decorator(func: Callable) -> Callable:
             tool = self._build_tool(
@@ -26,8 +26,8 @@ class ToolRegistry:
                 name=name or func.__name__,
                 description=description,
                 result_instruction=result_instruction,
-                suppress_response=suppress_response,
-                is_subagent=is_subagent,
+                is_long_running=is_long_running,
+                holding_instruction=holding_instruction,
             )
             self._register_tool(tool)
             return func
@@ -46,8 +46,8 @@ class ToolRegistry:
         name: str,
         description: str,
         result_instruction: str | None,
-        suppress_response: bool = False,
-        is_subagent: bool = False,
+        is_long_running: bool = False,
+        holding_instruction: str | None = None,
     ) -> Tool:
         bound_func = getattr(self, func.__name__, func)
         schema = self._schema_builder.build(func)
@@ -58,8 +58,8 @@ class ToolRegistry:
             function=bound_func,
             schema=schema,
             result_instruction=result_instruction,
-            suppress_response=suppress_response,
-            is_subagent=is_subagent,
+            is_long_running=is_long_running,
+            holding_instruction=holding_instruction,
         )
 
     def _register_tool(self, tool: Tool) -> None:

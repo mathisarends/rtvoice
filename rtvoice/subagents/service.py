@@ -23,7 +23,7 @@ class SubAgent:
         max_iterations: int = 10,
         handoff_instructions: str | None = None,
         result_instructions: str | None = None,
-        fire_and_forget: bool = False,
+        holding_instruction: str | None = None,
     ) -> None:
         self.name = name
         self.description = description
@@ -34,7 +34,7 @@ class SubAgent:
         self._max_iterations = max_iterations
         self.handoff_instructions = handoff_instructions
         self.result_instructions = result_instructions
-        self.fire_and_forget = fire_and_forget
+        self.holding_instruction = holding_instruction
 
         self._mcp_ready = asyncio.Event()
 

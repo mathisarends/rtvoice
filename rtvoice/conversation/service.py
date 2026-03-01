@@ -9,6 +9,7 @@ from rtvoice.events.views import (
 class ConversationHistory:
     def __init__(self, event_bus: EventBus):
         self._turns: list[ConversationTurn] = []
+
         event_bus.subscribe(UserTranscriptCompletedEvent, self._on_user)
         event_bus.subscribe(AssistantTranscriptCompletedEvent, self._on_assistant)
 

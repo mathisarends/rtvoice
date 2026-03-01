@@ -21,7 +21,6 @@ from rtvoice.events.views import (
     AssistantStoppedRespondingEvent,
     AssistantTranscriptCompletedEvent,
     StartAgentCommand,
-    SubAgentCalledEvent,
     UserInactivityTimeoutEvent,
     UserStartedSpeakingEvent,
     UserStoppedSpeakingEvent,
@@ -211,10 +210,6 @@ class RealtimeAgent(Generic[T]):
         )
         self._event_bus.subscribe(
             AssistantInterruptedEvent, lambda _: self._listener.on_agent_interrupted()
-        )
-        self._event_bus.subscribe(
-            SubAgentCalledEvent,
-            lambda e: self._listener.on_subagent_called(e.agent_name, e.task),
         )
         self._event_bus.subscribe(
             AgentErrorEvent, lambda e: self._listener.on_agent_error(e.error)

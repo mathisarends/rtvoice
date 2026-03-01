@@ -122,9 +122,6 @@ class AgentListener:
     async def on_agent_interrupted(self) -> None:
         pass
 
-    async def on_subagent_called(self, agent_name: str, task: str) -> None:
-        pass
-
     async def on_agent_error(self, error: AgentError) -> None:
         pass
 

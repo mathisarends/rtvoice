@@ -17,10 +17,14 @@ from rtvoice.events.views import (
     AgentSessionConnectedEvent,
     AgentStoppedEvent,
     AssistantInterruptedEvent,
+    AssistantStartedRespondingEvent,
+    AssistantStoppedRespondingEvent,
     AssistantTranscriptCompletedEvent,
     StartAgentCommand,
     SubAgentCalledEvent,
     UserInactivityTimeoutEvent,
+    UserStartedSpeakingEvent,
+    UserStoppedSpeakingEvent,
     UserTranscriptCompletedEvent,
 )
 from rtvoice.mcp import MCPServer
@@ -56,6 +60,7 @@ from rtvoice.watchdogs import (
     ErrorWatchdog,
     InterruptionWatchdog,
     LifecycleWatchdog,
+    SpeechStateWatchdog,
     ToolCallingWatchdog,
     TranscriptionWatchdog,
     UserInactivityTimeoutWatchdog,
@@ -180,6 +185,7 @@ class RealtimeAgent(Generic[T]):
         )
 
         self._error_watchdog = ErrorWatchdog(event_bus=self._event_bus)
+        self._speech_state_watchdog = SpeechStateWatchdog(event_bus=self._event_bus)
 
         if self._recording_path:
             self._recording_watchdog = AudioRecordingWatchdog(
@@ -191,16 +197,44 @@ class RealtimeAgent(Generic[T]):
         if not self._listener:
             return
 
-        self._event_bus.subscribe(UserTranscriptCompletedEvent, self._on_user_completed)
         self._event_bus.subscribe(
-            AssistantTranscriptCompletedEvent, self._on_assistant_completed
+            UserTranscriptCompletedEvent,
+            lambda e: self._listener.on_user_transcript(e.transcript),
         )
         self._event_bus.subscribe(
-            AgentSessionConnectedEvent, self._on_agent_session_connected
+            AssistantTranscriptCompletedEvent,
+            lambda e: self._listener.on_assistant_transcript(e.transcript),
         )
-        self._event_bus.subscribe(AssistantInterruptedEvent, self._on_agent_interrupted)
-        self._event_bus.subscribe(SubAgentCalledEvent, self._on_subagent_called)
-        self._event_bus.subscribe(AgentErrorEvent, self._on_agent_error)
+        self._event_bus.subscribe(
+            AgentSessionConnectedEvent,
+            lambda _: self._listener.on_agent_session_connected(),
+        )
+        self._event_bus.subscribe(
+            AssistantInterruptedEvent, lambda _: self._listener.on_agent_interrupted()
+        )
+        self._event_bus.subscribe(
+            SubAgentCalledEvent,
+            lambda e: self._listener.on_subagent_called(e.agent_name, e.task),
+        )
+        self._event_bus.subscribe(
+            AgentErrorEvent, lambda e: self._listener.on_agent_error(e.error)
+        )
+        self._event_bus.subscribe(
+            UserStartedSpeakingEvent,
+            lambda _: self._listener.on_user_started_speaking(),
+        )
+        self._event_bus.subscribe(
+            UserStoppedSpeakingEvent,
+            lambda _: self._listener.on_user_stopped_speaking(),
+        )
+        self._event_bus.subscribe(
+            AssistantStartedRespondingEvent,
+            lambda _: self._listener.on_assistant_started_responding(),
+        )
+        self._event_bus.subscribe(
+            AssistantStoppedRespondingEvent,
+            lambda _: self._listener.on_assistant_stopped_responding(),
+        )
 
     async def _on_inactivity_timeout(self, event: UserInactivityTimeoutEvent) -> None:
         logger.info(
@@ -264,16 +298,6 @@ class RealtimeAgent(Generic[T]):
         logger.info("MCP server connected: %d tools loaded", len(tools))
         return [(tool, server) for tool in tools]
 
-    def _build_turn_detection_config(self) -> TurnDetectionConfig:
-        td = self._turn_detection
-        if isinstance(td, SemanticVAD):
-            return SemanticVADConfig(eagerness=td.eagerness.value)
-        return ServerVADConfig(
-            threshold=td.threshold,
-            prefix_padding_ms=td.prefix_padding_ms,
-            silence_duration_ms=td.silence_duration_ms,
-        )
-
     def _build_session_config(self) -> RealtimeSessionConfig:
         input_config = AudioInputConfig(
             transcription=InputAudioTranscriptionConfig(
@@ -301,6 +325,16 @@ class RealtimeAgent(Generic[T]):
             tools=self._tools.get_tool_schema(),
         )
 
+    def _build_turn_detection_config(self) -> TurnDetectionConfig:
+        td = self._turn_detection
+        if isinstance(td, SemanticVAD):
+            return SemanticVADConfig(eagerness=td.eagerness)
+        return ServerVADConfig(
+            threshold=td.threshold,
+            prefix_padding_ms=td.prefix_padding_ms,
+            silence_duration_ms=td.silence_duration_ms,
+        )
+
     async def stop(self) -> None:
         if self._stop_called:
             return
@@ -318,25 +352,3 @@ class RealtimeAgent(Generic[T]):
 
         if self._listener:
             await self._listener.on_agent_stopped()
-
-    async def _on_user_completed(self, event: UserTranscriptCompletedEvent) -> None:
-        await self._listener.on_user_transcript(event.transcript)
-
-    async def _on_assistant_completed(
-        self, event: AssistantTranscriptCompletedEvent
-    ) -> None:
-        await self._listener.on_assistant_transcript(event.transcript)
-
-    async def _on_agent_session_connected(self, _: AgentSessionConnectedEvent) -> None:
-        await self._listener.on_agent_session_connected()
-
-    async def _on_agent_interrupted(self, _: AssistantInterruptedEvent) -> None:
-        await self._listener.on_agent_interrupted()
-
-    async def _on_subagent_called(self, event: SubAgentCalledEvent) -> None:
-        await self._listener.on_subagent_called(event.agent_name, event.task)
-
-    async def _on_agent_error(self, event: AgentErrorEvent) -> None:
-        await self._listener.on_agent_error(
-            event.type, event.message, event.code, event.param
-        )

@@ -195,9 +195,9 @@ class MyListener(AgentListener):
         """Called when a subagent is dispatched with a task."""
         print(f"→ {agent_name}: {task}")
 
-    async def on_agent_error(self, type: str, message: str, code: str | None, param: str | None) -> None:
+    async def on_agent_error(self, error: AgentError) -> None:
         """Called on API-level errors."""
-        print(f"Error [{code}]: {message}")
+        print(f"Error: {error}")
 
 agent = RealtimeAgent(
     instructions="...",

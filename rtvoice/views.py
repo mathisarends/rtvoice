@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
@@ -98,6 +99,19 @@ class ServerVAD(BaseModel):
 TurnDetection = SemanticVAD | ServerVAD
 
 
+@dataclass
+class AgentError:
+    """Error information from the agent."""
+
+    type: str
+    message: str
+    code: str | None = None
+    param: str | None = None
+
+    def __str__(self) -> str:
+        return f"[{self.type}] {self.message}"
+
+
 class AgentListener:
     async def on_agent_session_connected(self) -> None:
         pass
@@ -111,15 +125,25 @@ class AgentListener:
     async def on_subagent_called(self, agent_name: str, task: str) -> None:
         pass
 
-    async def on_agent_error(
-        self, type: str, message: str, code: str | None, param: str | None
-    ) -> None:
+    async def on_agent_error(self, error: AgentError) -> None:
         pass
 
     async def on_user_transcript(self, transcript: str) -> None:
         pass
 
     async def on_assistant_transcript(self, transcript: str) -> None:
+        pass
+
+    async def on_user_started_speaking(self) -> None:
+        pass
+
+    async def on_user_stopped_speaking(self) -> None:
+        pass
+
+    async def on_assistant_started_responding(self) -> None:
+        pass
+
+    async def on_assistant_stopped_responding(self) -> None:
         pass
 
 

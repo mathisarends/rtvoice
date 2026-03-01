@@ -6,6 +6,7 @@ from .tools import Tools
 from .views import (
     AgentListener,
     AssistantVoice,
+    NoiseReduction,
     RealtimeModel,
     SemanticEagerness,
     SemanticVAD,
@@ -18,6 +19,7 @@ __all__ = [
     "AgentListener",
     "AssistantVoice",
     "MCPServerStdio",
+    "NoiseReduction",
     "RealtimeAgent",
     "RealtimeModel",
     "SemanticEagerness",

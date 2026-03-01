@@ -60,8 +60,21 @@ class SubAgentCalledEvent(BaseModel):
 
 
 class AgentErrorEvent(BaseModel):
-    type: str
-    message: str
-    code: str | None = None
-    param: str | None = None
+    error: AgentErrorEvent
     event_id: str | None = None
+
+
+class UserStartedSpeakingEvent(BaseModel):
+    pass
+
+
+class UserStoppedSpeakingEvent(BaseModel):
+    pass
+
+
+class AssistantStartedRespondingEvent(BaseModel):
+    pass
+
+
+class AssistantStoppedRespondingEvent(BaseModel):
+    pass

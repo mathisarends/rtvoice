@@ -1,27 +1,25 @@
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from typing import TypeVar
-
-T = TypeVar("T")
-EventHandler = Callable[[T], Awaitable[None]]
 
 logger = logging.getLogger(__name__)
+
+type EventHandler[E] = Callable[[E], Awaitable[None]]
 
 
 class EventBus:
     def __init__(self):
-        self._handlers: dict[type, list[EventHandler]] = {}
+        self._handlers: dict[type, list] = {}
 
-    def subscribe(self, event_type: type[T], handler: EventHandler[T]) -> None:
+    def subscribe[E](self, event_type: type[E], handler: EventHandler[E]) -> None:
         self._handlers.setdefault(event_type, []).append(handler)
         logger.debug(f"Subscribed to {event_type.__name__}")
 
-    def unsubscribe(self, event_type: type[T], handler: EventHandler[T]) -> None:
+    def unsubscribe[E](self, event_type: type[E], handler: EventHandler[E]) -> None:
         if event_type in self._handlers and handler in self._handlers[event_type]:
             self._handlers[event_type].remove(handler)
 
-    async def dispatch(self, event: T) -> T:
+    async def dispatch[E](self, event: E) -> E:
         event_type = type(event)
         handlers = self._handlers.get(event_type, [])
 
@@ -31,8 +29,10 @@ class EventBus:
             logger.warning(f"No handlers registered for {event_type.__name__}")
             return event
 
-        tasks = [handler(event) for handler in handlers]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(
+            *[handler(event) for handler in handlers],
+            return_exceptions=True,
+        )
 
         for result in results:
             if isinstance(result, Exception):
@@ -42,35 +42,3 @@ class EventBus:
                 )
 
         return event
-
-    async def wait_for_event(
-        self,
-        event_type: type[T],
-        timeout: float | None = None,
-        predicate: Callable[[T], bool] | None = None,
-    ) -> T:
-        future: asyncio.Future[T] = asyncio.Future()
-
-        logger.debug(f"Waiting for {event_type.__name__} (timeout={timeout}s)")
-
-        async def handler(event: T) -> None:
-            if (predicate is None or predicate(event)) and not future.done():
-                future.set_result(event)
-
-        self.subscribe(event_type, handler)
-
-        try:
-            if timeout:
-                result = await asyncio.wait_for(future, timeout=timeout)
-            else:
-                result = await future
-
-            logger.debug(f"Received {event_type.__name__}")
-            return result
-        except TimeoutError:
-            logger.warning(
-                f"Timeout waiting for {event_type.__name__} after {timeout}s"
-            )
-            raise
-        finally:
-            self.unsubscribe(event_type, handler)

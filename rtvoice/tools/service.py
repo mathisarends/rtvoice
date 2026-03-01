@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import inspect
 import logging
 from typing import TYPE_CHECKING, Annotated, Any
@@ -12,9 +11,6 @@ if TYPE_CHECKING:
 
 
 from rtvoice.conversation import ConversationHistory
-from rtvoice.events.views import (
-    SubAgentCalledEvent,
-)
 from rtvoice.mcp.server import MCPServer
 from rtvoice.realtime.schemas import FunctionTool
 from rtvoice.tools.registry import ToolRegistry
@@ -37,15 +33,15 @@ class Tools:
         description: str,
         name: str | None = None,
         result_instruction: str | None = None,
-        suppress_response: bool = False,
-        is_subagent: bool = False,
+        is_long_running: bool = False,
+        holding_instruction: str | None = None,
     ):
         return self._registry.action(
             description,
             name=name,
             result_instruction=result_instruction,
-            suppress_response=suppress_response,
-            is_subagent=is_subagent,
+            is_long_running=is_long_running,
+            holding_instruction=holding_instruction,
         )
 
     def register_mcp(self, tool: FunctionTool, server: MCPServer) -> None:
@@ -63,33 +59,22 @@ class Tools:
             event_bus: EventBus,
             conversation_history: ConversationHistory,
         ) -> str:
-            await event_bus.dispatch(
-                SubAgentCalledEvent(agent_name=agent.name, task=task)
-            )
-
+            agent.set_event_bus(event_bus)
             context = conversation_history.format() if conversation_history else None
-
-            if agent.fire_and_forget:
-                asyncio.create_task(agent.run(task, context=context))
-                return (
-                    agent.result_instructions
-                    or "The task has been delegated to the agent and will be completed shortly."
-                )
-            else:
-                result = await agent.run(task, context=context)
-                return result.message or ""
+            result = await agent.run(task, context=context)
+            return result.message or ""
 
         description = agent.description
         if agent.handoff_instructions:
             description = f"{agent.description}\n\nHandoff instructions: {agent.handoff_instructions}"
 
         safe_name = agent.name.replace(" ", "_")
-        result_instructions = agent.result_instructions
         self._registry.action(
             description,
             name=safe_name,
-            result_instruction=result_instructions,
-            is_subagent=True,
+            result_instruction=agent.result_instructions,
+            is_long_running=True,
+            holding_instruction=agent.holding_instruction,
         )(_handoff)
 
     def get_tool_schema(self) -> list[FunctionTool]:
@@ -152,9 +137,5 @@ class Tools:
 
     def clone(self) -> Tools:
         new = Tools()
-        new._registry.tools = {
-            name: tool
-            for name, tool in self._registry.tools.items()
-            if not tool.is_subagent
-        }
+        new._registry.tools = self._registry.tools.copy()
         return new

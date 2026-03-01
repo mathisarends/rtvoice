@@ -1,9 +1,18 @@
+import asyncio
+from dataclasses import dataclass
+
 from pydantic import BaseModel
 
 
 class SubAgentDone(Exception):
     def __init__(self, result: str):
         self.result = result
+
+
+@dataclass
+class SubAgentClarificationNeeded(Exception):
+    question: str
+    answer_future: asyncio.Future
 
 
 class ToolCall(BaseModel):

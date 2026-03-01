@@ -21,7 +21,6 @@ from rtvoice.events.views import (
     AssistantStoppedRespondingEvent,
     AssistantTranscriptCompletedEvent,
     StartAgentCommand,
-    SubAgentCalledEvent,
     UserInactivityTimeoutEvent,
     UserStartedSpeakingEvent,
     UserStoppedSpeakingEvent,
@@ -61,6 +60,7 @@ from rtvoice.watchdogs import (
     InterruptionWatchdog,
     LifecycleWatchdog,
     SpeechStateWatchdog,
+    SubAgentInteractionWatchdog,
     ToolCallingWatchdog,
     TranscriptionWatchdog,
     UserInactivityTimeoutWatchdog,
@@ -187,6 +187,11 @@ class RealtimeAgent(Generic[T]):
         self._error_watchdog = ErrorWatchdog(event_bus=self._event_bus)
         self._speech_state_watchdog = SpeechStateWatchdog(event_bus=self._event_bus)
 
+        self._subagent_interaction_watchdog = SubAgentInteractionWatchdog(
+            event_bus=self._event_bus,
+            websocket=self._websocket,
+        )
+
         if self._recording_path:
             self._recording_watchdog = AudioRecordingWatchdog(
                 event_bus=self._event_bus,
@@ -211,10 +216,6 @@ class RealtimeAgent(Generic[T]):
         )
         self._event_bus.subscribe(
             AssistantInterruptedEvent, lambda _: self._listener.on_agent_interrupted()
-        )
-        self._event_bus.subscribe(
-            SubAgentCalledEvent,
-            lambda e: self._listener.on_subagent_called(e.agent_name, e.task),
         )
         self._event_bus.subscribe(
             AgentErrorEvent, lambda e: self._listener.on_agent_error(e.error)

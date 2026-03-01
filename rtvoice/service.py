@@ -72,7 +72,7 @@ class RealtimeAgent(Generic[T]):
         model: RealtimeModel = RealtimeModel.GPT_REALTIME_MINI,
         voice: AssistantVoice = AssistantVoice.MARIN,
         speech_speed: float = 1.0,
-        transcription_model: TranscriptionModel | None = None,
+        transcription_model: TranscriptionModel = TranscriptionModel.WHISPER_1,
         noise_reduction: NoiseReduction = NoiseReduction.FAR_FIELD,
         turn_detection: TurnDetection | None = None,
         tools: Tools | None = None,
@@ -91,7 +91,6 @@ class RealtimeAgent(Generic[T]):
         self._voice = voice
         self._speech_speed = self._clip_speech_speed(speech_speed)
         self._transcription_model = transcription_model
-        self._user_transcription_enabled = transcription_model is not None
         self._noise_reduction = noise_reduction
         self._turn_detection: TurnDetection = (
             turn_detection if turn_detection is not None else SemanticVAD()
@@ -114,9 +113,7 @@ class RealtimeAgent(Generic[T]):
         self._mcp_ready = asyncio.Event()
 
         self._event_bus = EventBus()
-        self._conversation_history = ConversationHistory(
-            self._event_bus, user_transcription_enabled=self._user_transcription_enabled
-        )
+        self._conversation_history = ConversationHistory(self._event_bus)
         self._tools.set_context(
             SpecialToolParameters(
                 event_bus=self._event_bus,
@@ -187,12 +184,6 @@ class RealtimeAgent(Generic[T]):
     def _setup_transcript_listener(self) -> None:
         if not self._transcript_listener:
             return
-
-        if not self._user_transcription_enabled:
-            logger.warning(
-                "TranscriptListener is set but no transcription_model defined – "
-                "on_user_completed will not be received."
-            )
 
         self._event_bus.subscribe(UserTranscriptCompletedEvent, self._on_user_completed)
         self._event_bus.subscribe(
@@ -283,10 +274,8 @@ class RealtimeAgent(Generic[T]):
 
     def _build_session_config(self) -> RealtimeSessionConfig:
         input_config = AudioInputConfig(
-            transcription=(
-                InputAudioTranscriptionConfig(model=self._transcription_model)
-                if self._transcription_model
-                else None
+            transcription=InputAudioTranscriptionConfig(
+                model=self._transcription_model
             ),
             noise_reduction=InputAudioNoiseReductionConfig(
                 type=NoiseReductionType(self._noise_reduction)

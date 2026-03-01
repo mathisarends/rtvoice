@@ -2,6 +2,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel
 
+from rtvoice.conversation.views import ConversationTurn
+
 
 class RealtimeModel(StrEnum):
     GPT_REALTIME = "gpt-realtime"
@@ -120,3 +122,8 @@ class AgentListener:
         self, type: str, message: str, code: str | None, param: str | None
     ) -> None:
         pass
+
+
+class AgentResult(BaseModel):
+    turns: list[ConversationTurn]
+    duration_seconds: float

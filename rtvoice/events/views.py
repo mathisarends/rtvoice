@@ -1,9 +1,16 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
 from pydantic import BaseModel
 
-from rtvoice.realtime.schemas import RealtimeSessionConfig
+if TYPE_CHECKING:
+    from rtvoice.realtime.schemas import RealtimeSessionConfig
 
 
-class StartAgentCommand(BaseModel):
+@dataclass
+class StartAgentCommand:
     session_config: RealtimeSessionConfig
 
 
@@ -12,10 +19,6 @@ class AgentStartedEvent(BaseModel):
 
 
 class AgentStoppedEvent(BaseModel):
-    pass
-
-
-class StopAgentCommand(BaseModel):
     pass
 
 

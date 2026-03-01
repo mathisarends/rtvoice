@@ -18,7 +18,6 @@ from rtvoice.events.views import (
     AssistantInterruptedEvent,
     AssistantTranscriptCompletedEvent,
     StartAgentCommand,
-    StopAgentCommand,
     SubAgentCalledEvent,
     UserInactivityTimeoutEvent,
     UserTranscriptCompletedEvent,
@@ -42,6 +41,7 @@ from rtvoice.subagents import SubAgent
 from rtvoice.tools import SpecialToolParameters, Tools
 from rtvoice.views import (
     AgentListener,
+    AgentResult,
     AssistantVoice,
     NoiseReduction,
     RealtimeModel,
@@ -151,7 +151,6 @@ class RealtimeAgent(Generic[T]):
         return clipped
 
     def _setup_shutdown_handlers(self) -> None:
-        self._event_bus.subscribe(StopAgentCommand, self._on_stop_command)
         self._event_bus.subscribe(
             UserInactivityTimeoutEvent, self._on_inactivity_timeout
         )
@@ -211,10 +210,6 @@ class RealtimeAgent(Generic[T]):
         self._event_bus.subscribe(SubAgentCalledEvent, self._on_subagent_called)
         self._event_bus.subscribe(AgentErrorEvent, self._on_agent_error)
 
-    async def _on_stop_command(self, _: StopAgentCommand) -> None:
-        logger.info("Received stop command - triggering shutdown")
-        asyncio.ensure_future(self.stop())
-
     async def _on_inactivity_timeout(self, event: UserInactivityTimeoutEvent) -> None:
         logger.info(
             "User inactivity timeout after %.1f seconds - triggering shutdown",
@@ -229,12 +224,11 @@ class RealtimeAgent(Generic[T]):
         await asyncio.gather(*own_servers, *subagent_servers, return_exceptions=True)
         return self
 
-    async def run(self) -> None:
+    async def run(self) -> AgentResult:
         logger.info("Starting agent...")
-
-        # idempotent preparation to ensure MCP servers are connected before accepting tasks
         await self.prepare()
 
+        started_at = asyncio.get_event_loop().time()
         session_config = self._build_session_config()
         await self._event_bus.dispatch(StartAgentCommand(session_config=session_config))
         logger.info("Agent started successfully")
@@ -243,6 +237,11 @@ class RealtimeAgent(Generic[T]):
             await self._stopped.wait()
         finally:
             await self.stop()
+
+        return AgentResult(
+            turns=self._conversation_history.turns,
+            duration_seconds=asyncio.get_event_loop().time() - started_at,
+        )
 
     async def _connect_mcp_servers(self) -> None:
         if self._mcp_ready.is_set():

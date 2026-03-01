@@ -3,9 +3,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
-from pydantic import BaseModel
-
-T = TypeVar("T", bound=BaseModel)
+T = TypeVar("T")
 EventHandler = Callable[[T], Awaitable[None]]
 
 logger = logging.getLogger(__name__)
@@ -13,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class EventBus:
     def __init__(self):
-        self._handlers: dict[type[BaseModel], list[EventHandler]] = {}
+        self._handlers: dict[type, list[EventHandler]] = {}
 
     def subscribe(self, event_type: type[T], handler: EventHandler[T]) -> None:
         self._handlers.setdefault(event_type, []).append(handler)

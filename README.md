@@ -1,410 +1,410 @@
 # rtvoice
 
-A Python framework for building voice agents powered by OpenAI's Realtime API. Built with clean architecture, event-driven design, and comprehensive watchdog patterns for production-ready voice applications.
+A Python framework for building voice agents on top of OpenAI's Realtime API. Handles audio streaming, interruption detection, tool calling, transcription, subagents, and MCP servers — so you can focus on your application logic.
 
-## Overview
+## Installation
 
-rtvoice provides a robust foundation for creating interactive voice agents with real-time audio streaming, function calling, interruption handling, and conversation management.
-
-### Architecture
-
-```mermaid
-graph TB
-    subgraph "User Interface"
-        MIC[Microphone Input]
-        SPEAKER[Speaker Output]
-    end
-
-    subgraph "rtvoice Agent"
-        AGENT[Agent]
-        BUS[Event Bus]
-        WS[WebSocket Client]
-
-        subgraph "Watchdogs"
-            AUDIO_IN[Audio Input Watchdog]
-            AUDIO_OUT[Audio Output Watchdog]
-            RT[Realtime Watchdog]
-            TRUNC[Truncation Watchdog]
-            INT[Interruption Watchdog]
-            TIMEOUT[Inactivity Watchdog]
-            TRANS[Transcription Watchdog]
-            TOOLS[Tool Calling Watchdog]
-            HIST[History Watchdog]
-            REC[Recording Watchdog]
-        end
-
-        TOOLS_REG[Tool Registry]
-    end
-
-    subgraph "OpenAI Realtime API"
-        OAI[OpenAI WebSocket]
-    end
-
-    MIC -->|Audio Stream| AUDIO_IN
-    AUDIO_IN -->|Base64 Chunks| BUS
-
-    BUS -->|Events| RT
-    RT -->|API Messages| WS
-    WS <-->|WebSocket| OAI
-
-    WS -->|Server Events| BUS
-    BUS -->|Audio Deltas| AUDIO_OUT
-    AUDIO_OUT -->|PCM Audio| SPEAKER
-
-    BUS -.->|Subscribe| INT
-    BUS -.->|Subscribe| TRUNC
-    BUS -.->|Subscribe| TIMEOUT
-    BUS -.->|Subscribe| TRANS
-    BUS -.->|Subscribe| TOOLS
-    BUS -.->|Subscribe| HIST
-    BUS -.->|Subscribe| REC
-
-    TOOLS -->|Execute| TOOLS_REG
-
-    INT -->|Cancel Response| WS
-    TRUNC -->|Truncate Message| WS
-    TIMEOUT -->|Stop Agent| AGENT
-
-    style AGENT fill:#e1f5ff
-    style BUS fill:#fff4e1
-    style OAI fill:#e8f5e9
+```bash
+pip install rtvoice
 ```
 
-## Features
+Requires Python 3.13+ and an `OPENAI_API_KEY` environment variable (or pass `api_key=` directly).
 
-### Core Capabilities
-- ✅ **Real-time Audio Streaming**: Bidirectional audio using OpenAI's Realtime API
-- ✅ **Event-Driven Architecture**: Clean separation of concerns with EventBus pattern
-- ✅ **Interruption Handling**: Natural conversation flow with mid-response interruption
-- ✅ **Tool Calling**: Function execution with automatic parameter validation
-- ✅ **Transcription**: Optional speech-to-text for both user and assistant
-- ✅ **Recording**: Full conversation recording support
-- ✅ **Inactivity Timeout**: Automatic session management
+---
 
-### Advanced Features
-- ✅ **Message Truncation**: Precise conversation state management during interruptions
-- ✅ **Speech Speed Control**: Dynamic adjustment of assistant response speed
-- ✅ **Volume Control**: Runtime audio output adjustment
-- ✅ **Conversation History**: Complete turn-by-turn conversation tracking
-- ✅ **Custom Audio Devices**: Pluggable audio input/output interfaces
-
-
-### Basic Usage
+## Quick Start
 
 ```python
 import asyncio
-from rtvoice import Agent, Tools
-from rtvoice.views import AssistantVoice, RealtimeModel
+from rtvoice import RealtimeAgent
 
 async def main():
-    tools = Tools()
-
-    @tools.action("Get weather information")
-    async def get_weather(location: str) -> str:
-        return f"Weather in {location}: Sunny, 22°C"
-
-    # Initialize agent
-    agent = Agent(
-        instructions="You are a helpful voice assistant.",
-        model=RealtimeModel.GPT_REALTIME_MINI,
-        voice=AssistantVoice.MARIN,
-        speech_speed=1.0,
-        tools=tools,
-        api_key="your-openai-api-key"
+    agent = RealtimeAgent(
+        instructions="You are a helpful voice assistant. Answer concisely.",
     )
+    await agent.run()
 
-    # Start conversation
-    async with agent:
-        # Agent runs until user says "stop" or timeout occurs
-        pass
-
-    # Get conversation history
-    history = await agent.stop()
-    print(f"Conversation had {len(history.conversation_turns)} turns")
-
-if __name__ == "__main__":
-    asyncio.run(main())
+asyncio.run(main())
 ```
 
-## Architecture Overview
+---
 
-### Event Bus Pattern
-All components communicate through a central EventBus, enabling:
-- **Loose coupling**: Components don't directly depend on each other
-- **Easy testing**: Mock events for unit tests
-- **Clear event flow**: All interactions are traceable
-- **Extensible**: Add new watchdogs without modifying existing code
+## Configuration
 
-### Watchdog Pattern
-Specialized watchdogs monitor and react to specific events:
+`RealtimeAgent` accepts the following parameters:
 
-| Watchdog | Responsibility |
-|----------|---------------|
-| **AudioInputWatchdog** | Streams microphone audio to the API |
-| **AudioOutputWatchdog** | Plays assistant audio responses |
-| **LifecycleWatchdog** | Manages WebSocket communication with OpenAI |
-| **InterruptionWatchdog** | Handles user interruptions during responses |
-| **TruncationWatchdog** | Manages conversation state during interruptions |
-| **ToolCallingWatchdog** | Executes function calls from the assistant |
-| **TranscriptionWatchdog** | Tracks speech-to-text output |
-| **TimeoutWatchdog** | Monitors user inactivity and triggers shutdown |
-| **HistoryWatchdog** | Maintains conversation turn history |
-| **RecordingWatchdog** | Records full conversation audio |
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `instructions` | `str` | `""` | System prompt for the assistant |
+| `model` | `RealtimeModel` | `GPT_REALTIME_MINI` | Which Realtime model to use |
+| `voice` | `AssistantVoice` | `MARIN` | Voice of the assistant |
+| `speech_speed` | `float` | `1.0` | Playback speed, clamped to `0.5–1.5` |
+| `transcription_model` | `TranscriptionModel \| None` | `None` | Enable speech-to-text (user + assistant) |
+| `noise_reduction` | `NoiseReduction` | `FAR_FIELD` | Microphone noise reduction mode |
+| `turn_detection` | `TurnDetection \| None` | defaults | VAD sensitivity settings |
+| `tools` | `Tools \| None` | `None` | Callable tools the assistant can invoke |
+| `subagents` | `list[SubAgent] \| None` | `None` | Specialist agents to delegate tasks to |
+| `mcp_servers` | `list[MCPServer] \| None` | `None` | MCP servers to connect to |
+| `audio_input` | `AudioInputDevice \| None` | `MicrophoneInput()` | Custom audio source |
+| `audio_output` | `AudioOutputDevice \| None` | `SpeakerOutput()` | Custom audio sink |
+| `transcript_listener` | `TranscriptListener \| None` | `None` | Callbacks for transcript events |
+| `agent_listener` | `AgentListener \| None` | `None` | Callbacks for lifecycle events |
+| `inactivity_timeout_seconds` | `float` | `10.0` | Auto-stop after this many seconds of silence |
+| `api_key` | `str \| None` | `None` | OpenAI API key (falls back to env var) |
 
-### Event Flow Example
+### Models & Voices
+
+```python
+from rtvoice.views import RealtimeModel, AssistantVoice
+
+# Models
+RealtimeModel.GPT_REALTIME       # gpt-realtime
+RealtimeModel.GPT_REALTIME_MINI  # gpt-realtime-mini (default)
+
+# Voices
+AssistantVoice.MARIN    # default
+AssistantVoice.ALLOY
+AssistantVoice.ASH
+AssistantVoice.CORAL
+AssistantVoice.ECHO
+AssistantVoice.NOVA
+AssistantVoice.SAGE
+AssistantVoice.SHIMMER
+# ... and more
+```
+
+### Turn Detection
+
+```python
+from rtvoice.views import TurnDetection
+
+agent = RealtimeAgent(
+    instructions="...",
+    turn_detection=TurnDetection(
+        threshold=0.5,              # VAD sensitivity (0.0–1.0)
+        prefix_padding_ms=300,      # Audio included before speech onset
+        silence_duration_ms=500,    # Silence needed to end a turn
+    ),
+)
+```
+
+---
+
+## Tools
+
+Tools are Python functions decorated with `@tools.action(...)`. The assistant can call them during a conversation. Both sync and async functions are supported.
+
+```python
+import asyncio
+from typing import Annotated
+from rtvoice import RealtimeAgent, Tools
+
+tools = Tools()
+
+@tools.action("Look up the current weather for a city.")
+async def get_weather(
+    city: Annotated[str, "The city to get weather for."],
+) -> str:
+    return f"Weather in {city}: 18°C, partly cloudy."
+
+@tools.action("Send an email to a recipient.")
+async def send_email(
+    recipient: Annotated[str, "Email address."],
+    subject: Annotated[str, "Email subject."],
+    body: Annotated[str, "Email body."],
+) -> str:
+    # ... your email logic
+    return f"Email sent to {recipient}."
+
+agent = RealtimeAgent(
+    instructions="You are a helpful assistant. You can check weather and send emails.",
+    tools=tools,
+)
+
+asyncio.run(agent.run())
+```
+
+### Injected Parameters
+
+Tools can declare special parameters that are automatically injected by the framework — no need to pass them from the LLM:
+
+| Parameter name | Type | Description |
+|---|---|---|
+| `event_bus` | `EventBus` | The agent's internal event bus |
+| `context` | `T` | Custom context object passed to `RealtimeAgent(context=...)` |
+| `conversation_history` | `ConversationHistory` | Full conversation history so far |
+
+```python
+from rtvoice.conversation import ConversationHistory
+
+@tools.action("Summarize the conversation so far.")
+async def summarize(conversation_history: ConversationHistory) -> str:
+    return conversation_history.format()
+```
+
+---
+
+## Transcript Listener
+
+Implement `TranscriptListener` to react to completed speech turns. Requires `transcription_model` to be set for user transcription.
+
+```python
+from rtvoice import RealtimeAgent
+from rtvoice.views import TranscriptionModel, TranscriptListener
+
+class ConsolePrinter(TranscriptListener):
+    async def on_user_completed(self, transcript: str) -> None:
+        print(f"User: {transcript}")
+
+    async def on_assistant_completed(self, transcript: str) -> None:
+        print(f"Assistant: {transcript}")
+
+agent = RealtimeAgent(
+    instructions="...",
+    transcription_model=TranscriptionModel.WHISPER_1,
+    transcript_listener=ConsolePrinter(),
+)
+```
+
+Both callbacks are optional — override only what you need.
+
+---
+
+## Agent Listener
+
+`AgentListener` provides hooks into the agent's lifecycle. Useful for logging, metrics, or UI state.
+
+```python
+from rtvoice import RealtimeAgent
+from rtvoice.views import AgentListener
+
+class MyListener(AgentListener):
+    async def on_agent_started(self) -> None:
+        """Called when the WebSocket session is established and the agent is ready."""
+        print("Ready.")
+
+    async def on_agent_stopped(self) -> None:
+        """Called when the agent shuts down cleanly."""
+        print("Stopped.")
+
+    async def on_agent_interrupted(self) -> None:
+        """Called when the assistant is interrupted mid-response by the user."""
+        print("Interrupted.")
+
+    async def on_subagent_called(self, agent_name: str, task: str) -> None:
+        """Called when a subagent is dispatched with a task."""
+        print(f"→ {agent_name}: {task}")
+
+    async def on_agent_error(self, type: str, message: str, code: str | None, param: str | None) -> None:
+        """Called on API-level errors."""
+        print(f"Error [{code}]: {message}")
+
+agent = RealtimeAgent(
+    instructions="...",
+    agent_listener=MyListener(),
+)
+```
+
+---
+
+## SubAgents
+
+SubAgents let the main voice agent delegate specialized tasks to dedicated LLM agents. The main agent sees them as regular tools and decides autonomously when to call them.
+
+```python
+import asyncio
+from typing import Annotated
+from llmify import ChatOpenAI
+from rtvoice import RealtimeAgent, SubAgent, Tools
+
+# 1. Build tools for the subagent
+tools = Tools()
+
+@tools.action("Fetch the current weather for a city.")
+def get_weather(city: Annotated[str, "The city name."]) -> str:
+    return f"Weather in {city}: 12°C, cloudy."
+
+# 2. Define the subagent
+weather_agent = SubAgent(
+    name="Weather Assistant",
+    description=(
+        "Looks up current weather conditions for any city. "
+        "Use this whenever the user asks about weather or temperature."
+    ),
+    instructions="You are a weather assistant. Use the get_weather tool and answer concisely.",
+    llm=ChatOpenAI(model="gpt-4o-mini"),
+    tools=tools,
+)
+
+# 3. Attach to the main agent
+agent = RealtimeAgent(
+    instructions="You are a voice assistant. For weather questions, delegate to the Weather Assistant.",
+    subagents=[weather_agent],
+)
+
+asyncio.run(agent.run())
+```
+
+### SubAgent Options
+
+| Parameter | Description |
+|---|---|
+| `name` | Identifier shown to the main agent as the tool name |
+| `description` | Tells the main agent *when* to call this subagent |
+| `instructions` | System prompt for the subagent's own LLM |
+| `llm` | The `BaseChatModel` to use (e.g. `ChatOpenAI`) |
+| `tools` | Tools available to the subagent |
+| `mcp_servers` | MCP servers to attach to the subagent |
+| `max_iterations` | Maximum LLM turns before giving up (default: `10`) |
+| `handoff_instructions` | Extra instructions appended to `description` — guides the main agent on *how* to hand off |
+| `result_instructions` | Text the main agent receives immediately, before the subagent finishes (useful with `fire_and_forget`) |
+| `fire_and_forget` | If `True`, the main agent continues immediately without waiting for the result |
+
+### How SubAgents Work
+
+When the main voice agent decides to call a subagent, the framework:
+
+1. Dispatches a `SubAgentCalledEvent` (triggers `on_subagent_called` on your listener)
+2. Passes the current conversation history as context
+3. Runs the subagent's internal ReAct loop (tool calls → LLM → tool calls …)
+4. Returns the final result back to the main voice agent as a tool result
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant AudioIn
+    participant VoiceAgent
+    participant SubAgent
+    participant SubAgentLLM
+
+    User->>VoiceAgent: "What's the weather in Berlin?"
+    VoiceAgent->>SubAgent: handoff(task="weather in Berlin", context=...)
+    SubAgent->>SubAgentLLM: invoke with tools
+    SubAgentLLM->>SubAgent: call get_weather("Berlin")
+    SubAgent->>SubAgentLLM: tool result
+    SubAgentLLM->>SubAgent: done("12°C, cloudy")
+    SubAgent->>VoiceAgent: SubAgentResult(message="12°C, cloudy")
+    VoiceAgent->>User: speaks the result
+```
+
+### Fire & Forget
+
+For long-running tasks (e.g. sending an email), use `fire_and_forget=True`. The main agent gets back `result_instructions` immediately and the subagent runs in the background.
+
+```python
+email_agent = SubAgent(
+    name="email_agent",
+    description="Sends an email. Use when the user wants to send an email.",
+    instructions="You are an email assistant. Send the email and confirm.",
+    llm=ChatOpenAI(model="gpt-4o-mini"),
+    tools=email_tools,
+    fire_and_forget=True,
+    result_instructions="The email is being sent in the background.",
+)
+```
+
+---
+
+## MCP Servers
+
+Connect any MCP-compatible tool server to the agent or to individual subagents.
+
+```python
+from rtvoice import RealtimeAgent
+from rtvoice.mcp import MCPServerStdio
+
+agent = RealtimeAgent(
+    instructions="...",
+    mcp_servers=[
+        MCPServerStdio(
+            command="python",
+            args=["my_mcp_server.py"],
+        )
+    ],
+)
+```
+
+`MCPServerStdio` spawns a subprocess and communicates over stdin/stdout using the MCP protocol. All tools exposed by the server are automatically registered and made available to the LLM.
+
+---
+
+## Event Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Microphone
     participant EventBus
-    participant Realtime
+    participant WebSocket
     participant OpenAI
-    participant AudioOut
+    participant Speaker
 
-    User->>AudioIn: Speaks
-    AudioIn->>EventBus: InputAudioBufferAppendEvent
-    EventBus->>Realtime: Handle audio event
-    Realtime->>OpenAI: Send audio (WebSocket)
-    OpenAI->>Realtime: ResponseOutputAudioDeltaEvent
-    Realtime->>EventBus: Dispatch audio delta
-    EventBus->>AudioOut: Play audio chunk
-    AudioOut->>User: Hears response
+    User->>Microphone: speaks
+    Microphone->>EventBus: audio chunk
+    EventBus->>WebSocket: forward audio
+    WebSocket->>OpenAI: stream audio (WS)
 
-    Note over User,AudioOut: User interrupts
-    User->>AudioIn: Speaks again
-    AudioIn->>EventBus: InputAudioBufferSpeechStartedEvent
-    EventBus->>Interruption: Detect interruption
-    Interruption->>OpenAI: ResponseCancelEvent
-    Interruption->>OpenAI: OutputAudioBufferClearEvent
+    OpenAI->>WebSocket: speech detected
+    OpenAI->>WebSocket: audio response delta
+    WebSocket->>EventBus: audio delta event
+    EventBus->>Speaker: play chunk
+    Speaker->>User: hears response
+
+    Note over User,Speaker: User interrupts mid-response
+    User->>Microphone: speaks again
+    Microphone->>EventBus: speech started
+    EventBus->>WebSocket: cancel response
+    WebSocket->>OpenAI: ResponseCancelEvent
+
+    Note over User,Speaker: Tool call
+    OpenAI->>WebSocket: function call requested
+    WebSocket->>EventBus: tool call event
+    EventBus->>EventBus: execute tool
+    EventBus->>WebSocket: tool result
+    WebSocket->>OpenAI: submit result
 ```
 
-### Key Events
-
-#### Server Events (from OpenAI)
-```python
-ResponseCreatedEvent                    # Assistant starts responding
-ResponseOutputAudioDeltaEvent          # Audio chunk received
-ResponseDoneEvent                      # Response completed
-InputAudioBufferSpeechStartedEvent     # User starts speaking
-InputAudioBufferSpeechStoppedEvent     # User stops speaking
-FunctionCallItem                       # Tool call requested
-InputAudioTranscriptionCompleted       # Transcription ready
-```
-
-#### Client Events (to OpenAI)
-```python
-InputAudioBufferAppendEvent            # Send audio to API
-ResponseCancelEvent                    # Cancel current response
-ResponseCreateEvent                    # Request new response
-SessionUpdateEvent                     # Update session config
-ConversationItemTruncateEvent         # Truncate conversation item
-```
-
-#### Internal Events
-```python
-AgentStartedEvent                      # Agent initialization complete
-AgentStoppedEvent                      # Agent shutdown initiated
-StopAgentCommand                       # Trigger agent shutdown
-UserInactivityTimeoutEvent            # Timeout occurred
-```
-
-## Built-in Tools
-
-The framework includes several built-in tools:
-
-```python
-@tools.action("Get the current local time")
-def get_current_time() -> str:
-    """Returns current time in HH:MM:SS format"""
-
-@tools.action("Adjust volume level")
-async def adjust_volume(level: float) -> str:
-    """Set audio output volume (0.0-1.0)"""
-
-@tools.action("Change assistant's talking speed")
-async def change_assistant_response_speed(instructions: str) -> str:
-    """Adjust speech speed with 'faster' or 'slower'"""
-
-@tools.action("Stop the assistant run")
-async def stop_assistant_run() -> str:
-    """End the conversation"""
-```
-
-## Custom Tools
-
-Add your own tools easily:
-
-```python
-from typing import Annotated
-from rtvoice import Tools
-
-tools = Tools()
-
-@tools.action("Search for information")
-async def search(
-    query: Annotated[str, "The search query"],
-    max_results: Annotated[int, "Maximum number of results"] = 5
-) -> str:
-    # Your implementation
-    results = await search_database(query, limit=max_results)
-    return f"Found {len(results)} results"
-
-@tools.action(
-    description="Book a restaurant reservation",
-    response_instruction="Confirm the booking details to the user"
-)
-async def book_restaurant(
-    restaurant: Annotated[str, "Restaurant name"],
-    time: Annotated[str, "Reservation time (HH:MM)"],
-    guests: Annotated[int, "Number of guests"]
-) -> str:
-    # Your booking logic
-    return f"Booked table for {guests} at {restaurant} for {time}"
-```
-
-## Configuration
-
-### Agent Parameters
-
-```python
-Agent(
-    instructions: str = "",                          # System prompt
-    model: RealtimeModel = RealtimeModel.GPT_REALTIME_MINI,
-    voice: AssistantVoice = AssistantVoice.MARIN,   # Voice selection
-    speech_speed: float = 1.0,                       # 0.5 - 1.5
-    transcription_model: TranscriptionModel | None = None,
-    tools: Tools | None = None,
-    recording_output_path: str | None = None,
-    api_key: str | None = None,
-    audio_input: AudioInputDevice | None = None,
-    audio_output: AudioOutputDevice | None = None,
-)
-```
-
-### Available Voices
-
-- `AssistantVoice.ALLOY`
-- `AssistantVoice.ECHO`
-- `AssistantVoice.SHIMMER`
-- `AssistantVoice.ASH`
-- `AssistantVoice.BALLAD`
-- `AssistantVoice.CORAL`
-- `AssistantVoice.SAGE`
-- `AssistantVoice.VERSE`
-- `AssistantVoice.MARIN` (default)
-
-### Available Models
-
-- `RealtimeModel.GPT_REALTIME` - gpt-4o-realtime-preview-2024-12-17
-- `RealtimeModel.GPT_REALTIME_MINI` - gpt-4o-mini-realtime-preview-2024-12-17 (default)
+---
 
 ## Custom Audio Devices
 
-Implement custom audio sources/outputs:
+Implement `AudioInputDevice` or `AudioOutputDevice` to use any audio source or sink — useful for testing, embedded hardware, or telephony integrations.
 
 ```python
-from rtvoice.audio.devices import AudioInputDevice, AudioOutputDevice
 from collections.abc import AsyncIterator
+from rtvoice.audio.devices import AudioInputDevice, AudioOutputDevice
 
 class CustomMicrophone(AudioInputDevice):
-    async def start(self) -> None:
-        # Initialize your audio source
-        pass
-
-    async def stop(self) -> None:
-        # Cleanup
-        pass
+    async def start(self) -> None: ...
+    async def stop(self) -> None: ...
 
     async def stream_chunks(self) -> AsyncIterator[bytes]:
         while self.is_active:
-            chunk = await self.read_audio()  # Your implementation
-            yield chunk
+            yield await self._read_audio_chunk()
 
     @property
     def is_active(self) -> bool:
         return self._active
 
 class CustomSpeaker(AudioOutputDevice):
-    async def start(self) -> None:
-        # Initialize audio output
-        pass
+    async def start(self) -> None: ...
+    async def stop(self) -> None: ...
+    async def play_chunk(self, chunk: bytes) -> None: ...
+    async def clear_buffer(self) -> None: ...
 
-    async def stop(self) -> None:
-        # Cleanup
-        pass
+    @property
+    def is_playing(self) -> bool:
+        return self._playing
 
-    async def play_chunk(self, chunk: bytes) -> None:
-        # Play audio chunk
-        pass
-
-    async def clear_buffer(self) -> None:
-        # Clear any queued audio
-        pass
-
-# Use custom devices
-agent = Agent(
+agent = RealtimeAgent(
+    instructions="...",
     audio_input=CustomMicrophone(),
-    audio_output=CustomSpeaker()
+    audio_output=CustomSpeaker(),
 )
 ```
 
-## Advanced Usage
-
-### Access Event Bus
-
-```python
-agent = Agent(...)
-
-# Subscribe to events
-async def on_transcription(event):
-    print(f"Transcribed: {event.transcript}")
-
-agent.event_bus.subscribe(
-    InputAudioTranscriptionCompleted,
-    on_transcription
-)
-```
-
-### Recording Conversations
-
-```python
-agent = Agent(
-    recording_output_path="conversations/session_001.wav"
-)
-```
-
-### Conversation History
-
-```python
-history = await agent.stop()
-
-for turn in history.conversation_turns:
-    print(f"{turn.role}: {turn.content}")
-```
+---
 
 ## Requirements
 
 - Python 3.13+
-- OpenAI API key with Realtime API access
-- PyAudio for audio I/O
-- WebSockets for API communication
-- Pydantic for data validation
-
-## Installation from Source
-
-```bash
-git clone https://github.com/yourusername/rtvoice.git
-cd rtvoice
-uv pip install -e .
-```
-
-## Environment Variables
-
-```bash
-# Required
-OPENAI_API_KEY=your-api-key-here
-
-# Optional
-RTVOICE_LOG_LEVEL=DEBUG
-```
+- OpenAI API key with Realtime API access (`OPENAI_API_KEY` env var)

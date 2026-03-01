@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from rtvoice.events import EventBus
+from rtvoice.events.views import UserTranscriptCompletedEvent
 from rtvoice.realtime.schemas import (
     ConversationItemCreateEvent,
     ConversationResponseCreateEvent,
@@ -16,6 +17,7 @@ from rtvoice.realtime.schemas import (
     ToolChoiceMode,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
+from rtvoice.subagents.views import SubAgentClarificationNeeded
 from rtvoice.tools import Tools
 from rtvoice.tools.registry.views import Tool
 
@@ -45,10 +47,17 @@ class ToolCallingWatchdog:
         self._tools = tools
         self._websocket = websocket
         self._pending: list[_PendingToolCall] = []
+        self._pending_clarification: SubAgentClarificationNeeded | None = None
 
         self._event_bus.subscribe(FunctionCallItem, self._handle_tool_call)
         self._event_bus.subscribe(ResponseCreatedEvent, self._on_response_created)
         self._event_bus.subscribe(ResponseDoneEvent, self._on_response_done)
+        self._event_bus.subscribe(
+            SubAgentClarificationNeeded, self._on_clarification_needed
+        )
+        self._event_bus.subscribe(
+            UserTranscriptCompletedEvent, self._on_user_transcript
+        )
 
     async def _handle_tool_call(self, event: FunctionCallItem) -> None:
         tool = self._tools.get(event.name)
@@ -159,6 +168,25 @@ class ToolCallingWatchdog:
                     pending.tool_name,
                 )
                 break
+
+    async def _on_clarification_needed(
+        self, event: SubAgentClarificationNeeded
+    ) -> None:
+        self._pending_clarification = event
+        await self._websocket.send(
+            ConversationResponseCreateEvent.from_instructions(
+                f"Ask the user the following question naturally and conversationally: "
+                f'"{event.question}"'
+            )
+        )
+
+    async def _on_user_transcript(self, event: UserTranscriptCompletedEvent) -> None:
+        if self._pending_clarification is None:
+            return
+
+        clarification = self._pending_clarification
+        self._pending_clarification = None
+        clarification.answer_future.set_result(event.transcript)
 
     def _serialize(self, result: Any) -> str:
         if result is None:

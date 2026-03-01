@@ -4,6 +4,8 @@ import inspect
 import logging
 from typing import TYPE_CHECKING, Annotated, Any
 
+from rtvoice.events import EventBus
+
 if TYPE_CHECKING:
     from rtvoice.subagents import SubAgent
 
@@ -54,8 +56,10 @@ class Tools:
                 Be specific and add enough context for the agent to complete the task without further clarification.
                 """,
             ],
+            event_bus: EventBus,
             conversation_history: ConversationHistory,
         ) -> str:
+            agent.set_event_bus(event_bus)
             context = conversation_history.format() if conversation_history else None
             result = await agent.run(task, context=context)
             return result.message or ""

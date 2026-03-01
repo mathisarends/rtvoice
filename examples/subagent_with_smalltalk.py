@@ -1,20 +1,25 @@
 """
-Small Talk Bridging example
-===========================
-Demonstrates the Small Talk Bridging pattern: when a slow SubAgent is
-called, the voice assistant immediately produces a one-sentence bridging
-response ("Let me check that for you!") while the SubAgent runs in the
-background.  Once the SubAgent finishes, the holding response has already
-ended naturally and the final result is delivered without any awkward
-silence or interrupted speech.
+Clarification + Small Talk Bridging example
+============================================
+Demonstrates two patterns working together:
+
+1. **Clarification**: When the Booking Agent lacks essential info (party size),
+   it calls ``clarify()`` - the main agent asks the user, waits for their voice
+   reply, then feeds the answer back so the SubAgent can continue.
+
+2. **Small Talk Bridging**: Once all details are known, the booking runs in the
+   background while the main agent says a natural holding phrase.
 
 Flow
 ----
 User   : "Book me a table at Mario's tonight at 8."
-Agent  : "Let me arrange that for you!"          ← holding response
-         [SubAgent runs in background ~2 s]
-Agent  : "Done! Table for two at Mario's tonight ← result response
-          at 8 PM, confirmed as booking #42."
+Agent  : "For how many people?"                    ← clarify(), SubAgent pauses
+User   : "Two please."                             ← answer_future resolved
+         [SubAgent continues with party_size=2]
+Agent  : "I'm reserving that table right now!"    ← holding response
+         [reserve_table runs ~2 s in background]
+Agent  : "Done! Table for two at Mario's tonight  ← result response
+          at 8 PM, confirmed as booking #BK0001."
 """
 
 import asyncio
@@ -63,24 +68,23 @@ def build_booking_agent() -> SubAgent:
             "to book, reserve, or make a dining reservation."
         ),
         handoff_instructions=(
-            "Always include restaurant name, date, time, and party size in the task. "
-            "Infer reasonable defaults from context (e.g. today's date, party of 2)."
+            "Include restaurant name, date, and time in the task if the user mentioned them. "
+            "Do NOT guess party size – the agent will ask if it is missing."
         ),
         instructions=(
             "You are a restaurant booking assistant. "
-            "Use the reserve_table tool to complete bookings. "
-            "Confirm all details clearly in your done() call."
+            "You MUST know: restaurant, date, time, and party size before booking. "
+            "If party size is not provided in the task, use clarify() to ask the user. "
+            "Then call reserve_table() and finally done() with the confirmation."
         ),
         tools=build_booking_tools(),
         llm=ChatOpenAI(model="gpt-4o-mini", temperature=0.2),
-        # One sentence the assistant says WHILE the booking runs in the background.
         holding_instruction=(
             "The booking is being arranged right now. "
             "Say ONE warm, brief sentence to the user while they wait "
             "(e.g. 'I'm reserving that table for you right now!'). "
             "Then stop immediately. Do not mention the result yet."
         ),
-        # How to present the finished result.
         result_instructions=(
             "The booking is complete. Present the confirmation naturally and "
             "conversationally – mention the restaurant, time, and booking ID."

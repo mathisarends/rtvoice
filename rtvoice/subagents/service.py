@@ -1,11 +1,21 @@
+from __future__ import annotations
+
 import asyncio
 import logging
-from typing import Annotated, Self
+from typing import TYPE_CHECKING, Annotated, Self
 
 from llmify import BaseChatModel, SystemMessage, ToolResultMessage, UserMessage
 
+if TYPE_CHECKING:
+    from rtvoice.events import EventBus
+
 from rtvoice.mcp import MCPServer
-from rtvoice.subagents.views import SubAgentDone, SubAgentResult, ToolCall
+from rtvoice.subagents.views import (
+    SubAgentClarificationNeeded,
+    SubAgentDone,
+    SubAgentResult,
+    ToolCall,
+)
 from rtvoice.tools import Tools
 
 logger = logging.getLogger(__name__)
@@ -36,10 +46,16 @@ class SubAgent:
         self.result_instructions = result_instructions
         self.holding_instruction = holding_instruction
 
+        self._event_bus: EventBus | None = None
         self._mcp_ready = asyncio.Event()
 
         self._register_done_tool()
+        self._register_clarify_tool()
 
+    def set_event_bus(self, event_bus: EventBus) -> None:
+        self._event_bus = event_bus
+
+    # The done response of the agent is structured so we can use it to take more control of the voice agent
     def _register_done_tool(self) -> None:
         @self._tools.action(
             "Signal that the task is complete and return the final result to the user. "
@@ -49,6 +65,21 @@ class SubAgent:
             result: Annotated[str, "The final answer or result to return to the user."],
         ) -> str:
             raise SubAgentDone(result)
+
+    def _register_clarify_tool(self) -> None:
+        @self._tools.action(
+            "Ask the user a clarifying question when essential information is missing. "
+            "Use sparingly – only when you cannot proceed without the answer."
+        )
+        async def clarify(
+            question: Annotated[str, "The question to ask the user."],
+        ) -> str:
+            loop = asyncio.get_running_loop()
+            answer_future: asyncio.Future[str] = loop.create_future()
+            raise SubAgentClarificationNeeded(
+                question=question,
+                answer_future=answer_future,
+            )
 
     async def prepare(self) -> Self:
         await self._connect_mcp_servers()
@@ -91,6 +122,35 @@ class SubAgent:
                         message=done.result,
                         tool_calls=executed_tool_calls,
                     )
+                except SubAgentClarificationNeeded as clarification:
+                    logger.info(
+                        "SubAgent '%s' needs clarification: %s",
+                        self.name,
+                        clarification.question,
+                    )
+
+                    if self._event_bus is None:
+                        raise RuntimeError(
+                            f"SubAgent '{self.name}' needs clarification but has no EventBus. "
+                            "Call set_event_bus() before running."
+                        ) from clarification
+
+                    await self._event_bus.dispatch(clarification)
+                    answer = await clarification.answer_future
+
+                    logger.info("SubAgent '%s' got answer: %s", self.name, answer)
+
+                    executed_tool_calls.append(
+                        ToolCall(
+                            name=tool_call.name,
+                            arguments=tool_call.tool,
+                            result=answer,
+                        )
+                    )
+                    messages.append(
+                        ToolResultMessage(tool_call_id=tool_call.id, content=answer)
+                    )
+                    continue
 
                 executed_tool_calls.append(
                     ToolCall(

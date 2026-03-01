@@ -2,7 +2,7 @@ import logging
 
 from rtvoice.events import EventBus
 from rtvoice.events.views import (
-    AgentStartedEvent,
+    AgentSessionConnectedEvent,
     AgentStoppedEvent,
     StartAgentCommand,
 )
@@ -50,7 +50,7 @@ class LifecycleWatchdog:
         session_update = SessionUpdateEvent(session=self._session_config)
         await self._websocket.send(session_update)
 
-        await self._event_bus.dispatch(AgentStartedEvent())
+        await self._event_bus.dispatch(AgentSessionConnectedEvent())
         logger.info("Agent session ready")
 
     async def _on_agent_stopped(self, _: AgentStoppedEvent) -> None:

@@ -6,7 +6,7 @@ from contextlib import suppress
 from rtvoice.audio.session import AudioSession
 from rtvoice.events import EventBus
 from rtvoice.events.views import (
-    AgentStartedEvent,
+    AgentSessionConnectedEvent,
     AgentStoppedEvent,
     AudioPlaybackCompletedEvent,
 )
@@ -20,13 +20,15 @@ from rtvoice.realtime.schemas import (
 logger = logging.getLogger(__name__)
 
 
-class AudioWatchdog:
+class AudioPlayerWatchdog:
     def __init__(self, event_bus: EventBus, session: AudioSession):
         self._event_bus = event_bus
         self._session = session
         self._streaming_task: asyncio.Task | None = None
 
-        self._event_bus.subscribe(AgentStartedEvent, self._on_agent_started)
+        self._event_bus.subscribe(
+            AgentSessionConnectedEvent, self._on_agent_session_connected
+        )
         self._event_bus.subscribe(AgentStoppedEvent, self._on_agent_stopped)
         self._event_bus.subscribe(ResponseOutputAudioDeltaEvent, self._on_audio_delta)
         self._event_bus.subscribe(
@@ -34,7 +36,7 @@ class AudioWatchdog:
         )
         self._event_bus.subscribe(ResponseDoneEvent, self._on_response_done)
 
-    async def _on_agent_started(self, _: AgentStartedEvent) -> None:
+    async def _on_agent_session_connected(self, _: AgentSessionConnectedEvent) -> None:
         await self._session.start()
         self._streaming_task = asyncio.create_task(self._stream_audio())
         logger.info("Audio started")

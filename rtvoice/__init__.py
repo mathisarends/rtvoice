@@ -11,7 +11,6 @@ from .views import (
     SemanticVAD,
     ServerVAD,
     TranscriptionModel,
-    TranscriptListener,
     TurnDetection,
 )
 
@@ -26,7 +25,6 @@ __all__ = [
     "ServerVAD",
     "SubAgent",
     "Tools",
-    "TranscriptListener",
     "TranscriptionModel",
     "TurnDetection",
     "configure_logging",

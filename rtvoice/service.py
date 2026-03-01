@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from pathlib import Path
 from typing import Generic, Self, TypeVar
 
 from rtvoice.audio import (
@@ -13,7 +14,7 @@ from rtvoice.conversation import ConversationHistory
 from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentErrorEvent,
-    AgentStartedEvent,
+    AgentSessionConnectedEvent,
     AgentStoppedEvent,
     AssistantInterruptedEvent,
     AssistantTranscriptCompletedEvent,
@@ -47,11 +48,11 @@ from rtvoice.views import (
     RealtimeModel,
     SemanticVAD,
     TranscriptionModel,
-    TranscriptListener,
     TurnDetection,
 )
 from rtvoice.watchdogs import (
-    AudioWatchdog,
+    AudioPlayerWatchdog,
+    AudioRecordingWatchdog,
     ErrorWatchdog,
     InterruptionWatchdog,
     LifecycleWatchdog,
@@ -80,10 +81,10 @@ class RealtimeAgent(Generic[T]):
         mcp_servers: list[MCPServer] | None = None,
         audio_input: AudioInputDevice | None = None,
         audio_output: AudioOutputDevice | None = None,
-        transcript_listener: TranscriptListener | None = None,
-        agent_listener: AgentListener | None = None,
+        listener: AgentListener | None = None,
         context: T | None = None,
         inactivity_timeout_seconds: float = 10.0,
+        recording_path: str | Path | None = None,
         api_key: str | None = None,
     ):
         self._instructions = instructions
@@ -103,10 +104,10 @@ class RealtimeAgent(Generic[T]):
         for subagent in self._subagents:
             self._tools.register_subagent(subagent)
 
-        self._transcript_listener = transcript_listener
-        self._agent_listener = agent_listener
+        self._listener = listener
         self._inactivity_timeout_seconds = inactivity_timeout_seconds
         self._context = context
+        self._recording_path = Path(recording_path) if recording_path else None
 
         self._stopped = asyncio.Event()
         self._stop_called = False
@@ -132,8 +133,7 @@ class RealtimeAgent(Generic[T]):
 
         self._setup_shutdown_handlers()
         self._setup_watchdogs(audio_session)
-        self._setup_transcript_listener()
-        self._setup_agent_listener()
+        self._setup_listener()
 
     def _clip_speech_speed(self, speed: float) -> float:
         clipped = max(0.5, min(speed, 1.5))
@@ -156,7 +156,7 @@ class RealtimeAgent(Generic[T]):
         self,
         audio_session: AudioSession,
     ) -> None:
-        self._audio_watchdog = AudioWatchdog(
+        self._audio_player_watchdog = AudioPlayerWatchdog(
             event_bus=self._event_bus,
             session=audio_session,
         )
@@ -181,22 +181,23 @@ class RealtimeAgent(Generic[T]):
 
         self._error_watchdog = ErrorWatchdog(event_bus=self._event_bus)
 
-    def _setup_transcript_listener(self) -> None:
-        if not self._transcript_listener:
+        if self._recording_path:
+            self._recording_watchdog = AudioRecordingWatchdog(
+                event_bus=self._event_bus,
+                output_path=self._recording_path,
+            )
+
+    def _setup_listener(self) -> None:
+        if not self._listener:
             return
 
         self._event_bus.subscribe(UserTranscriptCompletedEvent, self._on_user_completed)
         self._event_bus.subscribe(
             AssistantTranscriptCompletedEvent, self._on_assistant_completed
         )
-
-    def _setup_agent_listener(self) -> None:
-        if not self._agent_listener:
-            return
-
         self._event_bus.subscribe(
-            AgentStartedEvent, self._on_agent_started
-        )  # fires after session is ready
+            AgentSessionConnectedEvent, self._on_agent_session_connected
+        )
         self._event_bus.subscribe(AssistantInterruptedEvent, self._on_agent_interrupted)
         self._event_bus.subscribe(SubAgentCalledEvent, self._on_subagent_called)
         self._event_bus.subscribe(AgentErrorEvent, self._on_agent_error)
@@ -232,6 +233,7 @@ class RealtimeAgent(Generic[T]):
         return AgentResult(
             turns=self._conversation_history.turns,
             duration_seconds=asyncio.get_event_loop().time() - started_at,
+            recording_path=self._recording_path,
         )
 
     async def _connect_mcp_servers(self) -> None:
@@ -314,27 +316,27 @@ class RealtimeAgent(Generic[T]):
         self._stopped.set()
         logger.info("Agent stopped successfully")
 
-        if self._agent_listener:
-            await self._agent_listener.on_agent_stopped()
+        if self._listener:
+            await self._listener.on_agent_stopped()
 
     async def _on_user_completed(self, event: UserTranscriptCompletedEvent) -> None:
-        await self._transcript_listener.on_user_completed(event.transcript)
+        await self._listener.on_user_transcript(event.transcript)
 
     async def _on_assistant_completed(
         self, event: AssistantTranscriptCompletedEvent
     ) -> None:
-        await self._transcript_listener.on_assistant_completed(event.transcript)
+        await self._listener.on_assistant_transcript(event.transcript)
 
-    async def _on_agent_started(self, _: AgentStartedEvent) -> None:
-        await self._agent_listener.on_agent_started()
+    async def _on_agent_session_connected(self, _: AgentSessionConnectedEvent) -> None:
+        await self._listener.on_agent_session_connected()
 
     async def _on_agent_interrupted(self, _: AssistantInterruptedEvent) -> None:
-        await self._agent_listener.on_agent_interrupted()
+        await self._listener.on_agent_interrupted()
 
     async def _on_subagent_called(self, event: SubAgentCalledEvent) -> None:
-        await self._agent_listener.on_subagent_called(event.agent_name, event.task)
+        await self._listener.on_subagent_called(event.agent_name, event.task)
 
     async def _on_agent_error(self, event: AgentErrorEvent) -> None:
-        await self._agent_listener.on_agent_error(
+        await self._listener.on_agent_error(
             event.type, event.message, event.code, event.param
         )

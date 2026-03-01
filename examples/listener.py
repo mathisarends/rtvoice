@@ -3,7 +3,7 @@ from rtvoice.views import AgentListener
 
 
 class LifecycleLogger(AgentListener):
-    async def on_agent_started(self) -> None:
+    async def on_agent_session_connected(self) -> None:
         print("Agent gestartet")
 
     async def on_agent_interrupted(self) -> None:
@@ -13,7 +13,7 @@ class LifecycleLogger(AgentListener):
 async def main():
     agent = RealtimeAgent(
         instructions="Du bist Jarvis. Antworte kurz und bündig.",
-        agent_listener=LifecycleLogger(),
+        listener=LifecycleLogger(),
     )
     await agent.run()
 

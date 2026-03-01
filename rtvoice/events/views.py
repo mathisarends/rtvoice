@@ -14,7 +14,7 @@ class StartAgentCommand:
     session_config: RealtimeSessionConfig
 
 
-class AgentStartedEvent(BaseModel):
+class AgentSessionConnectedEvent(BaseModel):
     pass
 
 

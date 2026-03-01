@@ -1,4 +1,5 @@
 from enum import StrEnum
+from pathlib import Path
 
 from pydantic import BaseModel
 
@@ -97,16 +98,8 @@ class ServerVAD(BaseModel):
 TurnDetection = SemanticVAD | ServerVAD
 
 
-class TranscriptListener:
-    async def on_user_completed(self, transcript: str) -> None:
-        pass
-
-    async def on_assistant_completed(self, transcript: str) -> None:
-        pass
-
-
 class AgentListener:
-    async def on_agent_started(self) -> None:
+    async def on_agent_session_connected(self) -> None:
         pass
 
     async def on_agent_stopped(self) -> None:
@@ -123,7 +116,14 @@ class AgentListener:
     ) -> None:
         pass
 
+    async def on_user_transcript(self, transcript: str) -> None:
+        pass
+
+    async def on_assistant_transcript(self, transcript: str) -> None:
+        pass
+
 
 class AgentResult(BaseModel):
     turns: list[ConversationTurn]
     duration_seconds: float
+    recording_path: Path | None = None

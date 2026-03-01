@@ -179,7 +179,7 @@ from rtvoice import RealtimeAgent
 from rtvoice.views import AgentListener
 
 class MyListener(AgentListener):
-    async def on_agent_started(self) -> None:
+    async def on_agent_session_connected(self) -> None:
         """Called when the WebSocket session is established and the agent is ready."""
         print("Ready.")
 

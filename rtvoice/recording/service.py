@@ -5,11 +5,15 @@ from pathlib import Path
 
 
 class AudioRecorder:
-    def __init__(self, sample_rate: int = 24000):
+    def __init__(self, path: str | Path, sample_rate: int = 24000):
         self.sample_rate = sample_rate
+        self._path = Path(path)
+        self._path.parent.mkdir(parents=True, exist_ok=True)
         self._start_time: float | None = None
         self._user_chunks: list[tuple[float, bytes]] = []
-        self._assistant_chunks: list[tuple[float, bytes]] = []
+        self._assistant_audio: bytearray = bytearray()
+        self._assistant_start_time: float | None = None
+        self._last_audio_time: float | None = None
 
     def _now(self) -> float:
         loop = asyncio.get_event_loop()
@@ -21,33 +25,50 @@ class AudioRecorder:
         self._user_chunks.append((self._now(), data))
 
     def record_assistant(self, data: bytes) -> None:
-        self._assistant_chunks.append((self._now(), data))
+        if self._assistant_start_time is None:
+            self._assistant_start_time = self._now()
+        self._assistant_audio.extend(data)
 
-    def save(self, path: str | Path) -> None:
-        total_samples = self._total_samples()
+    def mark_end(self) -> None:
+        assistant_duration = len(self._assistant_audio) / 2 / self.sample_rate
+        assistant_end = (self._assistant_start_time or 0) + assistant_duration
+        self._last_audio_time = max(self._last_user_end(), assistant_end)
+
+    def save(self) -> None:
+        total_samples = int((self._last_audio_time or 0) * self.sample_rate)
+
+        if total_samples == 0:
+            return
+
         user_track = self._render_track(self._user_chunks, total_samples)
-        assistant_track = self._render_track(self._assistant_chunks, total_samples)
 
-        stereo = bytearray()
+        assistant_offset_samples = int(
+            (self._assistant_start_time or 0) * self.sample_rate
+        )
+        assistant_track = bytearray(total_samples * 2)
+        offset_bytes = assistant_offset_samples * 2
+        usable = self._assistant_audio[: total_samples * 2 - offset_bytes]
+        if offset_bytes < total_samples * 2:
+            assistant_track[offset_bytes : offset_bytes + len(usable)] = usable
+
+        mono = bytearray()
         for i in range(total_samples):
-            l_sample = struct.unpack_from("<h", user_track, i * 2)[0]
-            r_sample = struct.unpack_from("<h", assistant_track, i * 2)[0]
-            stereo += struct.pack("<hh", l_sample, r_sample)
+            u = struct.unpack_from("<h", user_track, i * 2)[0]
+            a = struct.unpack_from("<h", assistant_track, i * 2)[0]
+            mixed = max(-32768, min(32767, u + a))
+            mono += struct.pack("<h", mixed)
 
-        with wave.open(str(path), "wb") as f:
-            f.setnchannels(2)
+        with wave.open(str(self._path), "wb") as f:
+            f.setnchannels(1)
             f.setsampwidth(2)
             f.setframerate(self.sample_rate)
-            f.writeframes(bytes(stereo))
+            f.writeframes(bytes(mono))
 
-    def _total_samples(self) -> int:
-        def last_sample(chunks: list[tuple[float, bytes]]) -> int:
-            if not chunks:
-                return 0
-            ts, data = chunks[-1]
-            return int(ts * self.sample_rate) + len(data) // 2
-
-        return max(last_sample(self._user_chunks), last_sample(self._assistant_chunks))
+    def _last_user_end(self) -> float:
+        if not self._user_chunks:
+            return 0.0
+        ts, data = self._user_chunks[-1]
+        return ts + len(data) / 2 / self.sample_rate
 
     def _render_track(
         self, chunks: list[tuple[float, bytes]], total_samples: int

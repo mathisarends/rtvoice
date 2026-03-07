@@ -1,3 +1,0 @@
-# RealtimeAgent
-
-::: rtvoice.service.RealtimeAgent

@@ -1,6 +1,9 @@
 import logging
 import queue
 import threading
+from typing import Annotated
+
+from typing_extensions import Doc
 
 from rtvoice.audio.devices import AudioOutputDevice
 
@@ -8,7 +11,31 @@ logger = logging.getLogger(__name__)
 
 
 class SpeakerOutput(AudioOutputDevice):
-    def __init__(self, device_index: int | None = None, sample_rate: int = 24000):
+    """Default speaker output powered by PyAudio.
+
+    Plays raw 16-bit PCM audio through the system speaker using a
+    dedicated background thread, keeping the async event loop unblocked.
+    Requires the `pyaudio` package — install it with
+    `pip install rtvoice[audio]`.
+
+    Example:
+        ```python
+        speaker = SpeakerOutput(sample_rate=24000)
+        agent = RealtimeAgent(audio_output=speaker)
+        ```
+    """
+
+    def __init__(
+        self,
+        device_index: Annotated[
+            int | None,
+            Doc("PyAudio device index. Defaults to the system default output device."),
+        ] = None,
+        sample_rate: Annotated[
+            int,
+            Doc("Sample rate in Hz. Must match the model's output rate (24 000 Hz)."),
+        ] = 24000,
+    ):
         self._device_index = device_index
         self._sample_rate = sample_rate
         self._audio = None

@@ -1,4 +1,4 @@
-# Views
+# Configuration
 
 Configuration types, enums, and data classes used across `rtvoice`.
 
@@ -24,11 +24,6 @@ Configuration types, enums, and data classes used across `rtvoice`.
 
 ::: rtvoice.views.ServerVAD
 
-## Listener
-
-::: rtvoice.views.AgentListener
-
-::: rtvoice.views.AgentError
 
 ## Results
 

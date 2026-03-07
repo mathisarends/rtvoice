@@ -4,13 +4,13 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 
 
-class SubAgentDone(Exception):
+class SupervisorAgentDone(Exception):
     def __init__(self, result: str):
         self.result = result
 
 
 @dataclass
-class SubAgentClarificationNeeded(Exception):
+class SupervisorAgentClarificationNeeded(Exception):
     question: str
     answer_future: asyncio.Future
 
@@ -21,7 +21,7 @@ class ToolCall(BaseModel):
     result: str
 
 
-class SubAgentResult(BaseModel):
+class SupervisorAgentResult(BaseModel):
     success: bool = True
     message: str | None = None
     tool_calls: list[ToolCall] = []

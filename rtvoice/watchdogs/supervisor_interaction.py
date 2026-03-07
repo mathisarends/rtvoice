@@ -7,26 +7,26 @@ from rtvoice.realtime.schemas import (
     ToolChoiceMode,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
-from rtvoice.subagents.views import SubAgentClarificationNeeded
+from rtvoice.supervisor.views import SupervisorAgentClarificationNeeded
 
 logger = logging.getLogger(__name__)
 
 
-class SubAgentInteractionWatchdog:
+class SupervisorInteractionWatchdog:
     def __init__(self, event_bus: EventBus, websocket: RealtimeWebSocket):
         self._event_bus = event_bus
         self._websocket = websocket
-        self._pending_clarification: SubAgentClarificationNeeded | None = None
+        self._pending_clarification: SupervisorAgentClarificationNeeded | None = None
 
         self._event_bus.subscribe(
-            SubAgentClarificationNeeded, self._on_clarification_needed
+            SupervisorAgentClarificationNeeded, self._on_clarification_needed
         )
         self._event_bus.subscribe(
             UserTranscriptCompletedEvent, self._on_user_transcript
         )
 
     async def _on_clarification_needed(
-        self, event: SubAgentClarificationNeeded
+        self, event: SupervisorAgentClarificationNeeded
     ) -> None:
         logger.debug("Clarification needed: %s", event.question)
         self._pending_clarification = event

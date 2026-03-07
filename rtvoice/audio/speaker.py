@@ -2,8 +2,6 @@ import logging
 import queue
 import threading
 
-import pyaudio
-
 from rtvoice.audio.devices import AudioOutputDevice
 
 logger = logging.getLogger(__name__)
@@ -13,7 +11,7 @@ class SpeakerOutput(AudioOutputDevice):
     def __init__(self, device_index: int | None = None, sample_rate: int = 24000):
         self._device_index = device_index
         self._sample_rate = sample_rate
-        self._audio: pyaudio.PyAudio | None = None
+        self._audio = None
         self._stream = None
         self._active = False
 
@@ -28,6 +26,14 @@ class SpeakerOutput(AudioOutputDevice):
     async def start(self) -> None:
         if self._active:
             return
+
+        try:
+            import pyaudio
+        except ImportError as e:
+            raise ImportError(
+                "pyaudio is required for SpeakerOutput. "
+                "Install it with: pip install rtvoice[audio]"
+            ) from e
 
         self._audio = pyaudio.PyAudio()
         self._stream = self._audio.open(

@@ -5,7 +5,7 @@ Demonstrates two patterns working together:
 
 1. **Clarification**: When the Booking Agent lacks essential info (party size),
    it calls ``clarify()`` - the main agent asks the user, waits for their voice
-   reply, then feeds the answer back so the SubAgent can continue.
+   reply, then feeds the answer back so the SupervisorAgent can continue.
 
 2. **Small Talk Bridging**: Once all details are known, the booking runs in the
    background while the main agent says a natural holding phrase.
@@ -13,9 +13,9 @@ Demonstrates two patterns working together:
 Flow
 ----
 User   : "Book me a table at Mario's tonight at 8."
-Agent  : "For how many people?"                    ← clarify(), SubAgent pauses
+Agent  : "For how many people?"                    ← clarify(), SupervisorAgent pauses
 User   : "Two please."                             ← answer_future resolved
-         [SubAgent continues with party_size=2]
+         [SupervisorAgent continues with party_size=2]
 Agent  : "I'm reserving that table right now!"    ← holding response
          [reserve_table runs ~2 s in background]
 Agent  : "Done! Table for two at Mario's tonight  ← result response
@@ -27,7 +27,7 @@ from typing import Annotated
 
 from llmify import ChatOpenAI
 
-from rtvoice import RealtimeAgent, SubAgent, Tools
+from rtvoice import RealtimeAgent, SupervisorAgent, Tools
 
 # ---------------------------------------------------------------------------
 # Mock booking tool (simulates ~2 s network latency)
@@ -60,8 +60,8 @@ def build_booking_tools() -> Tools:
     return tools
 
 
-def build_booking_agent() -> SubAgent:
-    return SubAgent(
+def build_booking_agent() -> SupervisorAgent:
+    return SupervisorAgent(
         name="Booking Agent",
         description=(
             "Reserves restaurant tables. Use this agent whenever the user wants "
@@ -99,7 +99,7 @@ async def main() -> None:
             "For restaurant reservations, delegate to the Booking Agent. "
             "For all other requests, answer directly."
         ),
-        subagents=[build_booking_agent()],
+        SupervisorAgents=[build_booking_agent()],
     )
 
     await agent.run()

@@ -1,14 +1,12 @@
 import asyncio
 import logging
 from pathlib import Path
-from typing import Generic, Self, TypeVar
+from typing import Self
 
 from rtvoice.audio import (
     AudioInputDevice,
     AudioOutputDevice,
     AudioSession,
-    MicrophoneInput,
-    SpeakerOutput,
 )
 from rtvoice.conversation import ConversationHistory
 from rtvoice.events import EventBus
@@ -27,21 +25,8 @@ from rtvoice.events.views import (
     UserTranscriptCompletedEvent,
 )
 from rtvoice.mcp import MCPServer
-from rtvoice.realtime.schemas import (
-    AudioConfig,
-    AudioInputConfig,
-    AudioOutputConfig,
-    InputAudioNoiseReductionConfig,
-    InputAudioTranscriptionConfig,
-    NoiseReductionType,
-    RealtimeSessionConfig,
-    SemanticVADConfig,
-    ServerVADConfig,
-    ToolChoiceMode,
-    TurnDetectionConfig,
-)
 from rtvoice.realtime.websocket import RealtimeWebSocket
-from rtvoice.subagents import SubAgent
+from rtvoice.supervisor import SupervisorAgent
 from rtvoice.tools import SpecialToolParameters, Tools
 from rtvoice.views import (
     AgentListener,
@@ -60,18 +45,16 @@ from rtvoice.watchdogs import (
     InterruptionWatchdog,
     LifecycleWatchdog,
     SpeechStateWatchdog,
-    SubAgentInteractionWatchdog,
+    SupervisorInteractionWatchdog,
     ToolCallingWatchdog,
     TranscriptionWatchdog,
     UserInactivityTimeoutWatchdog,
 )
 
-T = TypeVar("T")
-
 logger = logging.getLogger(__name__)
 
 
-class RealtimeAgent(Generic[T]):
+class RealtimeAgent[T]:
     def __init__(
         self,
         instructions: str = "",
@@ -82,35 +65,46 @@ class RealtimeAgent(Generic[T]):
         noise_reduction: NoiseReduction = NoiseReduction.FAR_FIELD,
         turn_detection: TurnDetection | None = None,
         tools: Tools | None = None,
-        subagents: list[SubAgent] | None = None,
+        supervisor_agent: SupervisorAgent | None = None,
         mcp_servers: list[MCPServer] | None = None,
         audio_input: AudioInputDevice | None = None,
         audio_output: AudioOutputDevice | None = None,
-        listener: AgentListener | None = None,
         context: T | None = None,
-        inactivity_timeout_seconds: float = 10.0,
+        listener: AgentListener | None = None,
+        inactivity_timeout_seconds: float | None = None,
+        inactivity_timeout_enabled: bool = False,
         recording_path: str | Path | None = None,
         api_key: str | None = None,
     ):
+        if supervisor_agent and mcp_servers:
+            logger.warning(
+                "mcp_servers are set on RealtimeAgent alongside a supervisor. "
+                "Consider attaching MCP servers to the SupervisorAgent instead."
+            )
+
         self._instructions = instructions
         self._model = model
         self._voice = voice
         self._speech_speed = self._clip_speech_speed(speech_speed)
         self._transcription_model = transcription_model
         self._noise_reduction = noise_reduction
-        self._turn_detection: TurnDetection = (
-            turn_detection if turn_detection is not None else SemanticVAD()
-        )
-
-        self._tools = tools.clone() if tools else Tools()
+        self._turn_detection: TurnDetection = turn_detection or SemanticVAD()
         self._mcp_servers = mcp_servers or []
+        self._supervisor_agent = supervisor_agent
 
-        self._subagents = subagents or []
-        for subagent in self._subagents:
-            self._tools.register_subagent(subagent)
+        if inactivity_timeout_seconds is not None and not inactivity_timeout_enabled:
+            logger.warning(
+                "inactivity_timeout_seconds is set but inactivity_timeout_enabled is False. "
+                "The timeout will not be active."
+            )
+
+        self._should_enable_inactivity_timeout = (
+            inactivity_timeout_enabled and inactivity_timeout_seconds is not None
+        )
 
         self._listener = listener
         self._inactivity_timeout_seconds = inactivity_timeout_seconds
+        self._inactivity_timeout_enabled = inactivity_timeout_enabled
         self._context = context
         self._recording_path = Path(recording_path) if recording_path else None
 
@@ -120,6 +114,8 @@ class RealtimeAgent(Generic[T]):
 
         self._event_bus = EventBus()
         self._conversation_history = ConversationHistory(self._event_bus)
+
+        self._tools = tools.clone() if tools else Tools()
         self._tools.set_context(
             SpecialToolParameters(
                 event_bus=self._event_bus,
@@ -127,18 +123,31 @@ class RealtimeAgent(Generic[T]):
                 conversation_history=self._conversation_history,
             )
         )
+        if self._supervisor_agent:
+            self._tools.register_supervisor_agent(self._supervisor_agent)
+
         self._websocket = RealtimeWebSocket(
             model=self._model, event_bus=self._event_bus, api_key=api_key
         )
 
         audio_session = AudioSession(
-            input_device=audio_input or MicrophoneInput(),
-            output_device=audio_output or SpeakerOutput(),
+            input_device=audio_input or self._default_audio_input(),
+            output_device=audio_output or self._default_audio_output(),
         )
 
         self._setup_shutdown_handlers()
         self._setup_watchdogs(audio_session)
         self._setup_listener()
+
+    def _default_audio_input(self) -> AudioInputDevice:
+        from rtvoice.audio import MicrophoneInput
+
+        return MicrophoneInput()
+
+    def _default_audio_output(self) -> AudioOutputDevice:
+        from rtvoice.audio import SpeakerOutput
+
+        return SpeakerOutput()
 
     def _clip_speech_speed(self, speed: float) -> float:
         clipped = max(0.5, min(speed, 1.5))
@@ -157,10 +166,7 @@ class RealtimeAgent(Generic[T]):
             UserInactivityTimeoutEvent, self._on_inactivity_timeout
         )
 
-    def _setup_watchdogs(
-        self,
-        audio_session: AudioSession,
-    ) -> None:
+    def _setup_watchdogs(self, audio_session: AudioSession) -> None:
         self._audio_player_watchdog = AudioPlayerWatchdog(
             event_bus=self._event_bus,
             session=audio_session,
@@ -173,24 +179,26 @@ class RealtimeAgent(Generic[T]):
             websocket=self._websocket,
             session=audio_session,
         )
-        self._user_inactivity_timeout_watchdog = UserInactivityTimeoutWatchdog(
-            event_bus=self._event_bus,
-            timeout_seconds=self._inactivity_timeout_seconds,
-        )
         self._transcription_watchdog = TranscriptionWatchdog(event_bus=self._event_bus)
         self._tool_calling_watchdog = ToolCallingWatchdog(
             event_bus=self._event_bus,
             tools=self._tools,
             websocket=self._websocket,
         )
-
         self._error_watchdog = ErrorWatchdog(event_bus=self._event_bus)
         self._speech_state_watchdog = SpeechStateWatchdog(event_bus=self._event_bus)
 
-        self._subagent_interaction_watchdog = SubAgentInteractionWatchdog(
-            event_bus=self._event_bus,
-            websocket=self._websocket,
-        )
+        if self._should_enable_inactivity_timeout:
+            self._user_inactivity_timeout_watchdog = UserInactivityTimeoutWatchdog(
+                event_bus=self._event_bus,
+                timeout_seconds=self._inactivity_timeout_seconds,
+            )
+
+        if self._supervisor_agent:
+            self._supervisor_interaction_watchdog = SupervisorInteractionWatchdog(
+                event_bus=self._event_bus,
+                websocket=self._websocket,
+            )
 
         if self._recording_path:
             self._recording_watchdog = AudioRecordingWatchdog(
@@ -245,10 +253,11 @@ class RealtimeAgent(Generic[T]):
         asyncio.ensure_future(self.stop())
 
     async def prepare(self) -> Self:
-        own_servers = [self._connect_mcp_servers()]
-        subagent_servers = [subagent.prepare() for subagent in self._subagents]
+        tasks = [self._connect_mcp_servers()]
+        if self._supervisor_agent:
+            tasks.append(self._supervisor_agent.prepare())
 
-        await asyncio.gather(*own_servers, *subagent_servers, return_exceptions=True)
+        await asyncio.gather(*tasks, return_exceptions=True)
         return self
 
     async def run(self) -> AgentResult:
@@ -256,8 +265,18 @@ class RealtimeAgent(Generic[T]):
         await self.prepare()
 
         started_at = asyncio.get_event_loop().time()
-        session_config = self._build_session_config()
-        await self._event_bus.dispatch(StartAgentCommand(session_config=session_config))
+        await self._event_bus.dispatch(
+            StartAgentCommand(
+                model=self._model,
+                instructions=self._instructions,
+                voice=self._voice,
+                speech_speed=self._speech_speed,
+                transcription_model=self._transcription_model,
+                noise_reduction=self._noise_reduction,
+                turn_detection=self._turn_detection,
+                tools=self._tools,
+            )
+        )
         logger.info("Agent started successfully")
 
         try:
@@ -298,43 +317,6 @@ class RealtimeAgent(Generic[T]):
         tools = await server.list_tools()
         logger.info("MCP server connected: %d tools loaded", len(tools))
         return [(tool, server) for tool in tools]
-
-    def _build_session_config(self) -> RealtimeSessionConfig:
-        input_config = AudioInputConfig(
-            transcription=InputAudioTranscriptionConfig(
-                model=self._transcription_model
-            ),
-            noise_reduction=InputAudioNoiseReductionConfig(
-                type=NoiseReductionType(self._noise_reduction)
-            ),
-            turn_detection=self._build_turn_detection_config(),
-        )
-
-        audio_config = AudioConfig(
-            output=AudioOutputConfig(
-                speed=self._speech_speed,
-                voice=self._voice.value,
-            ),
-            input=input_config,
-        )
-
-        return RealtimeSessionConfig(
-            model=self._model,
-            instructions=self._instructions,
-            audio=audio_config,
-            tool_choice=ToolChoiceMode.AUTO,
-            tools=self._tools.get_tool_schema(),
-        )
-
-    def _build_turn_detection_config(self) -> TurnDetectionConfig:
-        td = self._turn_detection
-        if isinstance(td, SemanticVAD):
-            return SemanticVADConfig(eagerness=td.eagerness)
-        return ServerVADConfig(
-            threshold=td.threshold,
-            prefix_padding_ms=td.prefix_padding_ms,
-            silence_duration_ms=td.silence_duration_ms,
-        )
 
     async def stop(self) -> None:
         if self._stop_called:

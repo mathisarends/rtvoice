@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 from rtvoice.events import EventBus
 
 if TYPE_CHECKING:
-    from rtvoice.subagents import SubAgent
+    from rtvoice.supervisor import SupervisorAgent
 
 
 from rtvoice.conversation import ConversationHistory
@@ -47,7 +47,7 @@ class Tools:
     def register_mcp(self, tool: FunctionTool, server: MCPServer) -> None:
         self._registry.register_mcp(tool, server)
 
-    def register_subagent(self, agent: SubAgent) -> None:
+    def register_supervisor_agent(self, agent: SupervisorAgent) -> None:
         async def _handoff(
             task: Annotated[
                 str,

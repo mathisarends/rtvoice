@@ -434,14 +434,18 @@ wheels = [
 
 [[package]]
 name = "rtvoice"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "py-llmify" },
-    { name = "pyaudio" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "websockets" },
+]
+
+[package.optional-dependencies]
+audio = [
+    { name = "pyaudio" },
 ]
 
 [package.dev-dependencies]
@@ -453,11 +457,12 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "py-llmify", specifier = ">=0.1.4" },
-    { name = "pyaudio", specifier = ">=0.2.14" },
+    { name = "pyaudio", marker = "extra == 'audio'", specifier = ">=0.2.14" },
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "websockets", specifier = ">=15.0.1" },
 ]
+provides-extras = ["audio"]
 
 [package.metadata.requires-dev]
 dev = [

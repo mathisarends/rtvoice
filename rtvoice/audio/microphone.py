@@ -2,8 +2,6 @@ import asyncio
 import threading
 from collections.abc import AsyncIterator
 
-import pyaudio
-
 from rtvoice.audio.devices import AudioInputDevice
 
 
@@ -17,7 +15,7 @@ class MicrophoneInput(AudioInputDevice):
         self._device_index = device_index
         self._sample_rate = sample_rate
         self._chunk_size = chunk_size
-        self._audio: pyaudio.PyAudio | None = None
+        self._audio = None
         self._stream = None
         self._active = False
         self._read_complete = threading.Event()
@@ -30,6 +28,14 @@ class MicrophoneInput(AudioInputDevice):
     async def start(self) -> None:
         if self._active:
             return
+
+        try:
+            import pyaudio
+        except ImportError as e:
+            raise ImportError(
+                "pyaudio is required for MicrophoneInput. "
+                "Install it with: pip install rtvoice[audio]"
+            ) from e
 
         self._audio = pyaudio.PyAudio()
         self._stream = self._audio.open(

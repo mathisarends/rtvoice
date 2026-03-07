@@ -1,7 +1,7 @@
 from ._logging import configure_logging
 from .mcp import MCPServerStdio
 from .service import RealtimeAgent
-from .subagents import SubAgent
+from .supervisor import SupervisorAgent
 from .tools import Tools
 from .views import (
     AgentListener,
@@ -25,7 +25,7 @@ __all__ = [
     "SemanticEagerness",
     "SemanticVAD",
     "ServerVAD",
-    "SubAgent",
+    "SupervisorAgent",
     "Tools",
     "TranscriptionModel",
     "TurnDetection",

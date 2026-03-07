@@ -3,7 +3,7 @@ from typing import Annotated
 
 from llmify import ChatOpenAI
 
-from rtvoice import RealtimeAgent, SubAgent, Tools
+from rtvoice import RealtimeAgent, SupervisorAgent, Tools
 
 _MOCK_WEATHER = {
     "berlin": "12°C, partly cloudy",
@@ -28,7 +28,7 @@ def build_weather_tools() -> Tools:
 
 
 async def main() -> None:
-    weather_agent = SubAgent(
+    weather_agent = SupervisorAgent(
         name="Weather Assistant",
         description="Looks up current weather conditions for any city.",
         handoff_instructions=(
@@ -48,7 +48,7 @@ async def main() -> None:
             "You are a friendly voice assistant. Answer general questions directly. "
             "For weather-related questions, delegate to the Weather Assistant."
         ),
-        subagents=[weather_agent],
+        SupervisorAgents=[weather_agent],
     )
 
     await agent.run()

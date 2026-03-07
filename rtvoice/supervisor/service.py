@@ -10,10 +10,10 @@ if TYPE_CHECKING:
     from rtvoice.events import EventBus
 
 from rtvoice.mcp import MCPServer
-from rtvoice.subagents.views import (
-    SubAgentClarificationNeeded,
-    SubAgentDone,
-    SubAgentResult,
+from rtvoice.supervisor.views import (
+    SupervisorAgentClarificationNeeded,
+    SupervisorAgentDone,
+    SupervisorAgentResult,
     ToolCall,
 )
 from rtvoice.tools import Tools
@@ -21,7 +21,7 @@ from rtvoice.tools import Tools
 logger = logging.getLogger(__name__)
 
 
-class SubAgent:
+class SupervisorAgent:
     def __init__(
         self,
         name: str,
@@ -63,7 +63,7 @@ class SubAgent:
         def done(
             result: Annotated[str, "The final answer or result to return to the user."],
         ) -> str:
-            raise SubAgentDone(result)
+            raise SupervisorAgentDone(result)
 
     def _register_clarify_tool(self) -> None:
         @self._tools.action(
@@ -75,7 +75,7 @@ class SubAgent:
         ) -> str:
             loop = asyncio.get_running_loop()
             answer_future: asyncio.Future[str] = loop.create_future()
-            raise SubAgentClarificationNeeded(
+            raise SupervisorAgentClarificationNeeded(
                 question=question,
                 answer_future=answer_future,
             )
@@ -84,7 +84,7 @@ class SubAgent:
         await self._connect_mcp_servers()
         return self
 
-    async def run(self, task: str, context: str | None = None) -> SubAgentResult:
+    async def run(self, task: str, context: str | None = None) -> SupervisorAgentResult:
         await self.prepare()
 
         tool_schema = self._tools.get_json_tool_schema()
@@ -106,7 +106,7 @@ class SubAgent:
             response = await self._llm.invoke(messages, tools=tool_schema)
 
             if not response.has_tool_calls:
-                return SubAgentResult(
+                return SupervisorAgentResult(
                     message=response.content, tool_calls=executed_tool_calls
                 )
 
@@ -115,29 +115,31 @@ class SubAgent:
             for tool_call in response.tool_calls:
                 try:
                     result = await self._tools.execute(tool_call.name, tool_call.tool)
-                except SubAgentDone as done:
-                    return SubAgentResult(
+                except SupervisorAgentDone as done:
+                    return SupervisorAgentResult(
                         success=True,
                         message=done.result,
                         tool_calls=executed_tool_calls,
                     )
-                except SubAgentClarificationNeeded as clarification:
+                except SupervisorAgentClarificationNeeded as clarification:
                     logger.info(
-                        "SubAgent '%s' needs clarification: %s",
+                        "SupervisorAgent '%s' needs clarification: %s",
                         self.name,
                         clarification.question,
                     )
 
                     if self._event_bus is None:
                         raise RuntimeError(
-                            f"SubAgent '{self.name}' needs clarification but has no EventBus. "
+                            f"SupervisorAgent '{self.name}' needs clarification but has no EventBus. "
                             "Call set_event_bus() before running."
                         ) from clarification
 
                     await self._event_bus.dispatch(clarification)
                     answer = await clarification.answer_future
 
-                    logger.info("SubAgent '%s' got answer: %s", self.name, answer)
+                    logger.info(
+                        "SupervisorAgent '%s' got answer: %s", self.name, answer
+                    )
 
                     executed_tool_calls.append(
                         ToolCall(
@@ -163,7 +165,7 @@ class SubAgent:
                     ToolResultMessage(tool_call_id=tool_call.id, content=str(result))
                 )
 
-        return SubAgentResult(
+        return SupervisorAgentResult(
             message="Max iterations reached without a final answer.",
             success=False,
             tool_calls=executed_tool_calls,
@@ -190,6 +192,6 @@ class SubAgent:
 
         for result in results:
             if isinstance(result, Exception):
-                logger.error("SubAgent MCP server failed: %s", result)
+                logger.error("SupervisorAgent MCP server failed: %s", result)
 
         self._mcp_ready.set()

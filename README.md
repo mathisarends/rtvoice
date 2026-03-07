@@ -1,6 +1,6 @@
 # rtvoice
 
-A Python framework for building voice agents on top of OpenAI's Realtime API. Handles audio streaming, interruption detection, tool calling, transcription, subagents, and MCP servers — so you can focus on your application logic.
+A Python framework for building voice agents on top of OpenAI's Realtime API. Handles audio streaming, interruption detection, tool calling, transcription, SupervisorAgents, and MCP servers — so you can focus on your application logic.
 
 ## Installation
 
@@ -43,7 +43,7 @@ asyncio.run(main())
 | `noise_reduction` | `NoiseReduction` | `FAR_FIELD` | Microphone noise reduction mode |
 | `turn_detection` | `TurnDetection \| None` | defaults | VAD sensitivity settings |
 | `tools` | `Tools \| None` | `None` | Callable tools the assistant can invoke |
-| `subagents` | `list[SubAgent] \| None` | `None` | Specialist agents to delegate tasks to |
+| `SupervisorAgents` | `list[SupervisorAgent] \| None` | `None` | Specialist agents to delegate tasks to |
 | `mcp_servers` | `list[MCPServer] \| None` | `None` | MCP servers to connect to |
 | `audio_input` | `AudioInputDevice \| None` | `MicrophoneInput()` | Custom audio source |
 | `audio_output` | `AudioOutputDevice \| None` | `SpeakerOutput()` | Custom audio sink |
@@ -191,8 +191,8 @@ class MyListener(AgentListener):
         """Called when the assistant is interrupted mid-response by the user."""
         print("Interrupted.")
 
-    async def on_subagent_called(self, agent_name: str, task: str) -> None:
-        """Called when a subagent is dispatched with a task."""
+    async def on_SupervisorAgent_called(self, agent_name: str, task: str) -> None:
+        """Called when a SupervisorAgent is dispatched with a task."""
         print(f"→ {agent_name}: {task}")
 
     async def on_agent_error(self, error: AgentError) -> None:
@@ -207,25 +207,25 @@ agent = RealtimeAgent(
 
 ---
 
-## SubAgents
+## SupervisorAgents
 
-SubAgents let the main voice agent delegate specialized tasks to dedicated LLM agents. The main agent sees them as regular tools and decides autonomously when to call them.
+SupervisorAgents let the main voice agent delegate specialized tasks to dedicated LLM agents. The main agent sees them as regular tools and decides autonomously when to call them.
 
 ```python
 import asyncio
 from typing import Annotated
 from llmify import ChatOpenAI
-from rtvoice import RealtimeAgent, SubAgent, Tools
+from rtvoice import RealtimeAgent, SupervisorAgent, Tools
 
-# 1. Build tools for the subagent
+# 1. Build tools for the SupervisorAgent
 tools = Tools()
 
 @tools.action("Fetch the current weather for a city.")
 def get_weather(city: Annotated[str, "The city name."]) -> str:
     return f"Weather in {city}: 12°C, cloudy."
 
-# 2. Define the subagent
-weather_agent = SubAgent(
+# 2. Define the SupervisorAgent
+weather_agent = SupervisorAgent(
     name="Weather Assistant",
     description=(
         "Looks up current weather conditions for any city. "
@@ -239,59 +239,59 @@ weather_agent = SubAgent(
 # 3. Attach to the main agent
 agent = RealtimeAgent(
     instructions="You are a voice assistant. For weather questions, delegate to the Weather Assistant.",
-    subagents=[weather_agent],
+    SupervisorAgents=[weather_agent],
 )
 
 asyncio.run(agent.run())
 ```
 
-### SubAgent Options
+### SupervisorAgent Options
 
 | Parameter | Description |
 |---|---|
 | `name` | Identifier shown to the main agent as the tool name |
-| `description` | Tells the main agent *when* to call this subagent |
-| `instructions` | System prompt for the subagent's own LLM |
+| `description` | Tells the main agent *when* to call this SupervisorAgent |
+| `instructions` | System prompt for the SupervisorAgent's own LLM |
 | `llm` | The `BaseChatModel` to use (e.g. `ChatOpenAI`) |
-| `tools` | Tools available to the subagent |
-| `mcp_servers` | MCP servers to attach to the subagent |
+| `tools` | Tools available to the SupervisorAgent |
+| `mcp_servers` | MCP servers to attach to the SupervisorAgent |
 | `max_iterations` | Maximum LLM turns before giving up (default: `10`) |
 | `handoff_instructions` | Extra instructions appended to `description` — guides the main agent on *how* to hand off |
-| `result_instructions` | Text the main agent receives immediately, before the subagent finishes (useful with `fire_and_forget`) |
+| `result_instructions` | Text the main agent receives immediately, before the SupervisorAgent finishes (useful with `fire_and_forget`) |
 | `fire_and_forget` | If `True`, the main agent continues immediately without waiting for the result |
 
-### How SubAgents Work
+### How SupervisorAgents Work
 
-When the main voice agent decides to call a subagent, the framework:
+When the main voice agent decides to call a SupervisorAgent, the framework:
 
-1. Dispatches a `SubAgentCalledEvent` (triggers `on_subagent_called` on your listener)
+1. Dispatches a `SupervisorAgentCalledEvent` (triggers `on_SupervisorAgent_called` on your listener)
 2. Passes the current conversation history as context
-3. Runs the subagent's internal ReAct loop (tool calls → LLM → tool calls …)
+3. Runs the SupervisorAgent's internal ReAct loop (tool calls → LLM → tool calls …)
 4. Returns the final result back to the main voice agent as a tool result
 
 ```mermaid
 sequenceDiagram
     participant User
     participant VoiceAgent
-    participant SubAgent
-    participant SubAgentLLM
+    participant SupervisorAgent
+    participant SupervisorAgentLLM
 
     User->>VoiceAgent: "What's the weather in Berlin?"
-    VoiceAgent->>SubAgent: handoff(task="weather in Berlin", context=...)
-    SubAgent->>SubAgentLLM: invoke with tools
-    SubAgentLLM->>SubAgent: call get_weather("Berlin")
-    SubAgent->>SubAgentLLM: tool result
-    SubAgentLLM->>SubAgent: done("12°C, cloudy")
-    SubAgent->>VoiceAgent: SubAgentResult(message="12°C, cloudy")
+    VoiceAgent->>SupervisorAgent: handoff(task="weather in Berlin", context=...)
+    SupervisorAgent->>SupervisorAgentLLM: invoke with tools
+    SupervisorAgentLLM->>SupervisorAgent: call get_weather("Berlin")
+    SupervisorAgent->>SupervisorAgentLLM: tool result
+    SupervisorAgentLLM->>SupervisorAgent: done("12°C, cloudy")
+    SupervisorAgent->>VoiceAgent: SupervisorAgentResult(message="12°C, cloudy")
     VoiceAgent->>User: speaks the result
 ```
 
 ### Fire & Forget
 
-For long-running tasks (e.g. sending an email), use `fire_and_forget=True`. The main agent gets back `result_instructions` immediately and the subagent runs in the background.
+For long-running tasks (e.g. sending an email), use `fire_and_forget=True`. The main agent gets back `result_instructions` immediately and the SupervisorAgent runs in the background.
 
 ```python
-email_agent = SubAgent(
+email_agent = SupervisorAgent(
     name="email_agent",
     description="Sends an email. Use when the user wants to send an email.",
     instructions="You are an email assistant. Send the email and confirm.",
@@ -306,7 +306,7 @@ email_agent = SubAgent(
 
 ## MCP Servers
 
-Connect any MCP-compatible tool server to the agent or to individual subagents.
+Connect any MCP-compatible tool server to the agent or to individual SupervisorAgents.
 
 ```python
 from rtvoice import RealtimeAgent

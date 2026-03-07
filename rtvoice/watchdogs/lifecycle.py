@@ -22,6 +22,7 @@ from rtvoice.realtime.schemas import (
     TurnDetectionConfig,
 )
 from rtvoice.realtime.websocket.service import RealtimeWebSocket
+from rtvoice.shared.decorators import timed
 from rtvoice.views import SemanticVAD, TurnDetection
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ class LifecycleWatchdog:
 
         await self._websocket.send(event)
 
+    @timed()
     async def _on_start_agent_command(self, command: StartAgentCommand) -> None:
         logger.info("Starting agent session")
 

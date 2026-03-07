@@ -59,7 +59,13 @@ class Tools:
             event_bus: EventBus,
             conversation_history: ConversationHistory,
         ) -> str:
-            agent.set_event_bus(event_bus)
+            agent.set_special_parameters(
+                SpecialToolParameters(
+                    event_bus=event_bus,
+                    conversation_history=conversation_history,
+                    context=self._context.context,
+                )
+            )
             context = conversation_history.format() if conversation_history else None
             result = await agent.run(task, context=context)
             return result.message or ""

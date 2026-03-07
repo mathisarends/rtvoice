@@ -8,6 +8,7 @@ from pydantic import BaseModel
 if TYPE_CHECKING:
     from rtvoice.tools import RealtimeTools
     from rtvoice.views import (
+        AgentError,
         AssistantVoice,
         NoiseReduction,
         RealtimeModel,
@@ -69,7 +70,7 @@ class AudioPlaybackCompletedEvent(BaseModel):
 
 
 class AgentErrorEvent(BaseModel):
-    error: AgentErrorEvent
+    error: AgentError
     event_id: str | None = None
 
 

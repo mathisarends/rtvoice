@@ -3,7 +3,6 @@ import json
 import logging
 import os
 from contextlib import suppress
-from typing import Self
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, ValidationError
@@ -45,13 +44,6 @@ class RealtimeWebSocket:
     @property
     def is_connected(self) -> bool:
         return self._is_connected
-
-    async def __aenter__(self) -> Self:
-        await self.connect()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        await self.close()
 
     async def connect(self) -> None:
         if self._ws:

@@ -170,8 +170,7 @@ class MCPServerStdio(MCPServer):
             await self._process.wait()
             self._process = None
             self._tools_cache = None
-
-    # ── Internal ──────────────────────────────────────────────────────────────
+            self._msg_id = 0
 
     @staticmethod
     def _parse_tool(tool: MCPToolDefinition) -> FunctionTool:

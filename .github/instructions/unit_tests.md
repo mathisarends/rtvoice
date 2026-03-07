@@ -1,6 +1,6 @@
 ---
 name: Test Writing Standards
-description: Clean test writing guidelines for ux-agent
+description: Clean test writing guidelines for rtvoice
 applyTo: "tests/**/*.py"
 ---
 

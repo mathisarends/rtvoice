@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import TYPE_CHECKING, Annotated, Any, Self
 
 from llmify import (
     BaseChatModel,
@@ -141,13 +141,11 @@ class SupervisorAgent:
         self._register_done_tool()
         self._register_clarify_tool()
 
-    def set_event_bus(self, event_bus: EventBus) -> None:
+    def _inject(self, *, event_bus: EventBus, context: Any = None) -> None:
         self._event_bus = event_bus
-
-    def set_special_parameters(self, params: SpecialToolParameters) -> None:
-        self._tools.set_context(params)
-        if params.event_bus:
-            self._event_bus = params.event_bus
+        self._tools.set_context(
+            SpecialToolParameters(event_bus=event_bus, context=context)
+        )
 
     def _register_done_tool(self) -> None:
         @self._tools.action(
@@ -296,7 +294,7 @@ class SupervisorAgent:
         if self._event_bus is None:
             raise RuntimeError(
                 f"SupervisorAgent '{self.name}' needs clarification but has no EventBus. "
-                "Call set_event_bus() before running."
+                "Ensure the agent is registered via RealtimeAgent."
             ) from clarification
 
         await self._event_bus.dispatch(clarification)

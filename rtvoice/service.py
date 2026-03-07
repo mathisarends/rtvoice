@@ -291,6 +291,8 @@ class RealtimeAgent[T]:
         return clipped
 
     def _register_supervisor_agent(self, agent: SupervisorAgent) -> None:
+        agent._inject(event_bus=self._event_bus, context=self._context)
+
         async def _handoff(
             task: Annotated[
                 str,
@@ -299,16 +301,8 @@ class RealtimeAgent[T]:
                     "Be specific and include enough context for the agent to act without clarification."
                 ),
             ],
-            event_bus: EventBus,
             conversation_history: ConversationHistory,
         ) -> str:
-            agent.set_special_parameters(
-                SpecialToolParameters(
-                    event_bus=event_bus,
-                    conversation_history=conversation_history,
-                    context=self._context,
-                )
-            )
             context = conversation_history.format() if conversation_history else None
             result = await agent.run(task, context=context)
             return result.message or ""

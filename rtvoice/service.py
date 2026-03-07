@@ -64,8 +64,8 @@ class RealtimeAgent[T]:
     WebSocket connection, tool calling, optional supervisor handoffs,
     MCP server integration, and inactivity timeouts.
 
-    Call [prepare()][rtvoice.agent.RealtimeAgent.prepare] before
-    [run()][rtvoice.agent.RealtimeAgent.run] to prewarm connections
+    Call [prepare()][rtvoice.service.RealtimeAgent.prepare] before
+    [run()][rtvoice.service.RealtimeAgent.run] to prewarm connections
     and avoid startup delays.
 
     Example:
@@ -76,7 +76,7 @@ class RealtimeAgent[T]:
             inactivity_timeout_seconds=30,
             inactivity_timeout_enabled=True,
         )
-        result = await agent.prepare().run()
+        result = await agent.run()
         ```
     """
 
@@ -333,7 +333,7 @@ class RealtimeAgent[T]:
     def _setup_watchdogs(self, audio_session: AudioSession) -> None:
         self._audio_player_watchdog = AudioPlayerWatchdog(
             event_bus=self._event_bus,
-            session=audio_session,
+            audio_session=audio_session,
         )
         self._lifecycle_watchdog = LifecycleWatchdog(
             event_bus=self._event_bus, websocket=self._websocket
@@ -341,7 +341,7 @@ class RealtimeAgent[T]:
         self._interruption_watchdog = InterruptionWatchdog(
             event_bus=self._event_bus,
             websocket=self._websocket,
-            session=audio_session,
+            audio_session=audio_session,
         )
         if self._transcription_enabled:
             self._transcription_watchdog = TranscriptionWatchdog(

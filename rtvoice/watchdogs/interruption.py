@@ -25,11 +25,11 @@ class InterruptionWatchdog:
         self,
         event_bus: EventBus,
         websocket: RealtimeWebSocket,
-        session: AudioSession,
+        audio_session: AudioSession,
     ):
         self._event_bus = event_bus
         self._websocket = websocket
-        self._session = session
+        self._audio_session = audio_session
 
         self._response_id: str | None = None
         self._item_id: str | None = None
@@ -71,7 +71,7 @@ class InterruptionWatchdog:
     async def _on_user_started_speaking(
         self, _: InputAudioBufferSpeechStartedEvent
     ) -> None:
-        if not self._assistant_is_speaking and not self._session.is_playing:
+        if not self._assistant_is_speaking and not self._audio_session.is_playing:
             return
 
         logger.info("Barge-in detected - cancelling response")

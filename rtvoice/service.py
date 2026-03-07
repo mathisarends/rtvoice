@@ -26,6 +26,7 @@ from rtvoice.events.views import (
 )
 from rtvoice.mcp import MCPServer
 from rtvoice.realtime.websocket import RealtimeWebSocket
+from rtvoice.shared.decorators import timed
 from rtvoice.supervisor import SupervisorAgent
 from rtvoice.tools import SpecialToolParameters, Tools
 from rtvoice.views import (
@@ -252,19 +253,10 @@ class RealtimeAgent[T]:
         )
         asyncio.ensure_future(self.stop())
 
-    async def prepare(self) -> Self:
-        tasks = [self._connect_mcp_servers()]
-        if self._supervisor_agent:
-            tasks.append(self._supervisor_agent.prepare())
-
-        await asyncio.gather(*tasks, return_exceptions=True)
-        return self
-
     async def run(self) -> AgentResult:
         logger.info("Starting agent...")
         await self.prepare()
 
-        started_at = asyncio.get_event_loop().time()
         await self._event_bus.dispatch(
             StartAgentCommand(
                 model=self._model,
@@ -286,38 +278,43 @@ class RealtimeAgent[T]:
 
         return AgentResult(
             turns=self._conversation_history.turns,
-            duration_seconds=asyncio.get_event_loop().time() - started_at,
             recording_path=self._recording_path,
         )
 
-    async def _connect_mcp_servers(self) -> None:
-        if self._mcp_ready.is_set():
-            return
+    @timed()
+    async def prepare(self) -> Self:
+        """Prewarms MCP and supervisor connections so the agent starts without delay on run()."""
+        tasks = [self._connect_mcp_servers()]
+        if self._supervisor_agent:
+            tasks.append(self._supervisor_agent.prepare())
 
-        if not self._mcp_servers:
+        await asyncio.gather(*tasks, return_exceptions=True)
+        return self
+
+    async def _connect_mcp_servers(self) -> None:
+        if self._mcp_ready.is_set() or not self._mcp_servers:
             self._mcp_ready.set()
             return
 
         results = await asyncio.gather(
-            *[self._connect_mcp_server(s) for s in self._mcp_servers],
+            *[self._connect_and_register_mcp_server(s) for s in self._mcp_servers],
             return_exceptions=True,
         )
 
         for result in results:
             if isinstance(result, Exception):
                 logger.error("MCP server connection failed: %s", result)
-                continue
-            for tool, server in result:
-                self._tools.register_mcp(tool, server)
 
         self._mcp_ready.set()
 
-    async def _connect_mcp_server(self, server: MCPServer) -> list[tuple]:
+    async def _connect_and_register_mcp_server(self, server: MCPServer) -> None:
         await server.connect()
         tools = await server.list_tools()
+        for tool in tools:
+            self._tools.register_mcp(tool, server)
         logger.info("MCP server connected: %d tools loaded", len(tools))
-        return [(tool, server) for tool in tools]
 
+    @timed()
     async def stop(self) -> None:
         if self._stop_called:
             return

@@ -146,5 +146,4 @@ class AgentListener:
 
 class AgentResult(BaseModel):
     turns: list[ConversationTurn]
-    duration_seconds: float
     recording_path: Path | None = None

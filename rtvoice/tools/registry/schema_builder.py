@@ -1,5 +1,6 @@
 import collections.abc
 import inspect
+import types
 from collections.abc import Callable
 from typing import Annotated, Any, ClassVar, Union, get_args, get_origin, get_type_hints
 
@@ -78,7 +79,7 @@ class ToolSchemaBuilder:
         actual_type, _ = self._extract_type_and_description(type_hint)
         origin = get_origin(actual_type)
 
-        if origin is Union:
+        if origin is Union or isinstance(actual_type, types.UnionType):
             non_none_args = [
                 arg for arg in get_args(actual_type) if arg is not type(None)
             ]
@@ -100,7 +101,7 @@ class ToolSchemaBuilder:
 
     def _unwrap_optional(self, type_hint: Any) -> Any:
         origin = get_origin(type_hint)
-        if origin is Union:
+        if origin is Union or isinstance(type_hint, types.UnionType):
             non_none_types = [
                 arg for arg in get_args(type_hint) if arg is not type(None)
             ]
@@ -113,7 +114,7 @@ class ToolSchemaBuilder:
     ) -> FunctionParameterProperty:
         origin = get_origin(python_type)
 
-        if origin is Union:
+        if origin is Union or isinstance(python_type, types.UnionType):
             return self._handle_union_type(python_type, description)
 
         if origin is list:

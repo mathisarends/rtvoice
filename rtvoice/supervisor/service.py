@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Annotated, Self
 
 from llmify import (
     BaseChatModel,
+    Message,
     SystemMessage,
     ToolCall,
     ToolResultMessage,
@@ -212,14 +213,7 @@ class SupervisorAgent:
         """
         await self.prepare()
 
-        messages = [SystemMessage(self._instructions)]
-        if context:
-            messages.append(
-                UserMessage(
-                    f"<conversation_history>\n{context}\n</conversation_history>"
-                )
-            )
-        messages.append(UserMessage(f"<task>\n{task}\n</task>"))
+        messages = self._build_messages(task=task, context=context)
 
         tool_schema = self._tools.get_json_tool_schema()
         executed_tool_calls: list[ToolCall] = []
@@ -247,6 +241,17 @@ class SupervisorAgent:
             success=False,
             tool_calls=executed_tool_calls,
         )
+
+    def _build_messages(self, task: str, context: str | None) -> list[Message]:
+        messages = [SystemMessage(self._instructions)]
+        if context:
+            messages.append(
+                UserMessage(
+                    f"<conversation_history>\n{context}\n</conversation_history>"
+                )
+            )
+        messages.append(UserMessage(f"<task>\n{task}\n</task>"))
+        return messages
 
     async def _execute_tool_call(
         self,

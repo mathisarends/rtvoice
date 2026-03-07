@@ -1,7 +1,9 @@
 import asyncio
 import logging
 from pathlib import Path
-from typing import Self
+from typing import Annotated, Self
+
+from typing_extensions import Doc
 
 from rtvoice.audio import (
     AudioInputDevice,
@@ -28,7 +30,7 @@ from rtvoice.mcp import MCPServer
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
 from rtvoice.supervisor import SupervisorAgent
-from rtvoice.tools import SpecialToolParameters, Tools
+from rtvoice.tools import RealtimeTools, SpecialToolParameters, Tools
 from rtvoice.views import (
     AgentListener,
     AgentResult,
@@ -56,26 +58,140 @@ logger = logging.getLogger(__name__)
 
 
 class RealtimeAgent[T]:
+    """Event-driven voice agent using the OpenAI Realtime API.
+
+    Manages the full lifecycle of a real-time voice session: audio I/O,
+    WebSocket connection, tool calling, optional supervisor handoffs,
+    MCP server integration, and inactivity timeouts.
+
+    Call [prepare()][rtvoice.agent.RealtimeAgent.prepare] before
+    [run()][rtvoice.agent.RealtimeAgent.run] to prewarm connections
+    and avoid startup delays.
+
+    Example:
+        ```python
+        agent = RealtimeAgent(
+            instructions="You are Jarvis, a helpful home assistant.",
+            voice=AssistantVoice.MARIN,
+            inactivity_timeout_seconds=30,
+            inactivity_timeout_enabled=True,
+        )
+        result = await agent.prepare().run()
+        ```
+    """
+
     def __init__(
         self,
-        instructions: str = "",
-        model: RealtimeModel = RealtimeModel.GPT_REALTIME_MINI,
-        voice: AssistantVoice = AssistantVoice.MARIN,
-        speech_speed: float = 1.0,
-        transcription_model: TranscriptionModel = TranscriptionModel.WHISPER_1,
-        noise_reduction: NoiseReduction = NoiseReduction.FAR_FIELD,
-        turn_detection: TurnDetection | None = None,
-        tools: Tools | None = None,
-        supervisor_agent: SupervisorAgent | None = None,
-        mcp_servers: list[MCPServer] | None = None,
-        audio_input: AudioInputDevice | None = None,
-        audio_output: AudioOutputDevice | None = None,
-        context: T | None = None,
-        listener: AgentListener | None = None,
-        inactivity_timeout_seconds: float | None = None,
-        inactivity_timeout_enabled: bool = False,
-        recording_path: str | Path | None = None,
-        api_key: str | None = None,
+        *,
+        instructions: Annotated[
+            str,
+            Doc("System prompt defining the assistant's personality and behavior."),
+        ] = "",
+        model: Annotated[
+            RealtimeModel,
+            Doc("Realtime model variant to use. Defaults to `GPT_REALTIME_MINI`."),
+        ] = RealtimeModel.GPT_REALTIME_MINI,
+        voice: Annotated[
+            AssistantVoice,
+            Doc("TTS voice used for assistant responses."),
+        ] = AssistantVoice.MARIN,
+        speech_speed: Annotated[
+            float,
+            Doc(
+                "Playback speed of the assistant's voice. "
+                "Automatically clamped to `[0.5, 1.5]`."
+            ),
+        ] = 1.0,
+        transcription_model: Annotated[
+            TranscriptionModel | None,
+            Doc(
+                "STT model used to produce `UserTranscriptCompletedEvent` transcripts. "
+                "Pass `None` to disable transcription entirely."
+            ),
+        ] = TranscriptionModel.WHISPER_1,
+        noise_reduction: Annotated[
+            NoiseReduction,
+            Doc(
+                "Microphone noise reduction profile. Use `FAR_FIELD` for desktop mics."
+            ),
+        ] = NoiseReduction.FAR_FIELD,
+        turn_detection: Annotated[
+            TurnDetection | None,
+            Doc(
+                "Voice activity detection strategy. "
+                "Defaults to `SemanticVAD` when `None`."
+            ),
+        ] = None,
+        tools: Annotated[
+            Tools | None,
+            Doc(
+                "Pre-registered tool set exposed to the model. "
+                "Tools receive the shared `context` and `event_bus` automatically."
+            ),
+        ] = None,
+        supervisor_agent: Annotated[
+            SupervisorAgent | None,
+            Doc(
+                "Optional sub-agent reachable via an auto-registered handoff tool. "
+                "Prefer attaching MCP servers to the supervisor rather than the agent."
+            ),
+        ] = None,
+        mcp_servers: Annotated[
+            list[MCPServer] | None,
+            Doc(
+                "MCP servers connected during `prepare()`. "
+                "Their tools are registered and forwarded to the model."
+            ),
+        ] = None,
+        audio_input: Annotated[
+            AudioInputDevice | None,
+            Doc("Audio input device. Defaults to `MicrophoneInput`."),
+        ] = None,
+        audio_output: Annotated[
+            AudioOutputDevice | None,
+            Doc("Audio output device. Defaults to `SpeakerOutput`."),
+        ] = None,
+        context: Annotated[
+            T | None,
+            Doc(
+                "Shared context object forwarded to all tool handlers "
+                "and the supervisor agent."
+            ),
+        ] = None,
+        listener: Annotated[
+            AgentListener | None,
+            Doc(
+                "Callback interface for session lifecycle events "
+                "(transcripts, speaking state, errors, …)."
+            ),
+        ] = None,
+        inactivity_timeout_seconds: Annotated[
+            float | None,
+            Doc(
+                "Seconds of user silence before the agent stops automatically. "
+                "Has no effect unless `inactivity_timeout_enabled=True`."
+            ),
+        ] = None,
+        inactivity_timeout_enabled: Annotated[
+            bool,
+            Doc(
+                "Activates the inactivity timeout watchdog. "
+                "Requires `inactivity_timeout_seconds` to be set."
+            ),
+        ] = False,
+        recording_path: Annotated[
+            str | Path | None,
+            Doc(
+                "If provided, the full session audio is recorded to this path "
+                "via `AudioRecordingWatchdog`."
+            ),
+        ] = None,
+        api_key: Annotated[
+            str | None,
+            Doc(
+                "OpenAI API key. Falls back to the `OPENAI_API_KEY` environment variable."
+            ),
+        ] = None,
     ):
         if supervisor_agent and mcp_servers:
             logger.warning(
@@ -87,6 +203,15 @@ class RealtimeAgent[T]:
         self._model = model
         self._voice = voice
         self._speech_speed = self._clip_speech_speed(speech_speed)
+
+        if transcription_model is None and supervisor_agent:
+            logger.warning(
+                "transcription_model is None but a supervisor_agent is attached. "
+                "Transcription is required for supervisor handoffs — "
+                "defaulting to TranscriptionModel.WHISPER_1."
+            )
+            transcription_model = TranscriptionModel.WHISPER_1
+
         self._transcription_model = transcription_model
         self._noise_reduction = noise_reduction
         self._turn_detection: TurnDetection = turn_detection or SemanticVAD()
@@ -116,7 +241,9 @@ class RealtimeAgent[T]:
         self._event_bus = EventBus()
         self._conversation_history = ConversationHistory(self._event_bus)
 
-        self._tools = tools.clone() if tools else Tools()
+        self._tools = RealtimeTools()
+        if tools:
+            self._tools._registry.tools = tools._registry.tools.copy()
         self._tools.set_context(
             SpecialToolParameters(
                 event_bus=self._event_bus,
@@ -125,7 +252,7 @@ class RealtimeAgent[T]:
             )
         )
         if self._supervisor_agent:
-            self._tools.register_supervisor_agent(self._supervisor_agent)
+            self._register_supervisor_agent(self._supervisor_agent)
 
         self._websocket = RealtimeWebSocket(
             model=self._model, event_bus=self._event_bus, api_key=api_key
@@ -162,6 +289,41 @@ class RealtimeAgent[T]:
 
         return clipped
 
+    def _register_supervisor_agent(self, agent: SupervisorAgent) -> None:
+        async def _handoff(
+            task: Annotated[
+                str,
+                Doc(
+                    "The task or question to delegate to this agent. "
+                    "Be specific and include enough context for the agent to act without clarification."
+                ),
+            ],
+            event_bus: EventBus,
+            conversation_history: ConversationHistory,
+        ) -> str:
+            agent.set_special_parameters(
+                SpecialToolParameters(
+                    event_bus=event_bus,
+                    conversation_history=conversation_history,
+                    context=self._context,
+                )
+            )
+            context = conversation_history.format() if conversation_history else None
+            result = await agent.run(task, context=context)
+            return result.message or ""
+
+        description = agent.description
+        if agent.handoff_instructions:
+            description = f"{agent.description}\n\nHandoff instructions: {agent.handoff_instructions}"
+
+        self._tools.action(
+            description,
+            name=agent.name.replace(" ", "_"),
+            result_instruction=agent.result_instructions,
+            is_long_running=True,
+            holding_instruction=agent.holding_instruction,
+        )(_handoff)
+
     def _setup_shutdown_handlers(self) -> None:
         self._event_bus.subscribe(
             UserInactivityTimeoutEvent, self._on_inactivity_timeout
@@ -180,7 +342,11 @@ class RealtimeAgent[T]:
             websocket=self._websocket,
             session=audio_session,
         )
-        self._transcription_watchdog = TranscriptionWatchdog(event_bus=self._event_bus)
+        if self._transcription_model is not None:
+            self._transcription_watchdog = TranscriptionWatchdog(
+                event_bus=self._event_bus
+            )
+
         self._tool_calling_watchdog = ToolCallingWatchdog(
             event_bus=self._event_bus,
             tools=self._tools,
@@ -253,7 +419,18 @@ class RealtimeAgent[T]:
         )
         asyncio.ensure_future(self.stop())
 
-    async def run(self) -> AgentResult:
+    async def run(
+        self,
+    ) -> Annotated[
+        AgentResult,
+        Doc("Conversation history and recording path after the session ends."),
+    ]:
+        """Start the agent and block until the session ends.
+
+        Dispatches a `StartAgentCommand` to kick off audio I/O and the WebSocket
+        connection, then waits until `stop()` is called — either manually, via
+        inactivity timeout, or through an error watchdog.
+        """
         logger.info("Starting agent...")
         await self.prepare()
 
@@ -282,8 +459,15 @@ class RealtimeAgent[T]:
         )
 
     @timed()
-    async def prepare(self) -> Self:
-        """Prewarms MCP and supervisor connections so the agent starts without delay on run()."""
+    async def prepare(
+        self,
+    ) -> Annotated[Self, Doc("Returns `self` for optional chaining with `run()`.")]:
+        """Prewarm MCP and supervisor connections before `run()`.
+
+        Calling this explicitly avoids a cold-start delay when the session begins.
+        Safe to call multiple times — subsequent calls are no-ops for MCP servers
+        that are already connected.
+        """
         tasks = [self._connect_mcp_servers()]
         if self._supervisor_agent:
             tasks.append(self._supervisor_agent.prepare())
@@ -316,6 +500,12 @@ class RealtimeAgent[T]:
 
     @timed()
     async def stop(self) -> None:
+        """Gracefully shut down the agent.
+
+        Cleans up all MCP server connections, dispatches `AgentStoppedEvent`,
+        and signals the `run()` coroutine to return. Idempotent — safe to call
+        multiple times.
+        """
         if self._stop_called:
             return
         self._stop_called = True

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from rtvoice.tools import Tools
+    from rtvoice.tools import RealtimeTools
     from rtvoice.views import (
         AssistantVoice,
         NoiseReduction,
@@ -22,10 +22,10 @@ class StartAgentCommand:
     instructions: str
     voice: AssistantVoice
     speech_speed: float
-    transcription_model: TranscriptionModel
+    transcription_model: TranscriptionModel | None
     noise_reduction: NoiseReduction
     turn_detection: TurnDetection
-    tools: Tools
+    tools: RealtimeTools
 
 
 class AgentSessionConnectedEvent(BaseModel):

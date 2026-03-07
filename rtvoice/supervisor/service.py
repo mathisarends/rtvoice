@@ -11,6 +11,9 @@ from llmify import (
     ToolResultMessage,
     UserMessage,
 )
+from typing_extensions import Doc
+
+from rtvoice.shared.decorators import timed
 
 if TYPE_CHECKING:
     from rtvoice.events import EventBus
@@ -21,31 +24,110 @@ from rtvoice.supervisor.views import (
     SupervisorAgentDone,
     SupervisorAgentResult,
 )
-from rtvoice.tools import Tools
+from rtvoice.tools import AgentTools
 from rtvoice.tools.views import SpecialToolParameters
 
 logger = logging.getLogger(__name__)
 
 
 class SupervisorAgent:
+    """Agentic sub-agent that can be delegated tasks from a `RealtimeAgent`.
+
+    Runs an LLM-driven tool-calling loop to complete a given task, with built-in
+    support for clarification questions, MCP server integration, and handoff
+    from a parent voice agent.
+
+    The agent exposes two special tools to the LLM automatically:
+
+    - **done** — signals task completion and returns the final result.
+    - **clarify** — asks the user a question via the parent `EventBus` when
+      essential information is missing.
+
+    Example:
+        ```python
+        agent = SupervisorAgent(
+            name="calendar_agent",
+            description="Manages the user's calendar.",
+            instructions="You are a calendar assistant ...",
+            llm=OpenAIChat(model="gpt-4o"),
+        )
+        result = await agent.run("Schedule a meeting with Alice tomorrow at 3pm.")
+        ```
+    """
+
     def __init__(
         self,
-        name: str,
-        description: str,
-        instructions: str,
-        llm: BaseChatModel | None = None,
-        tools: Tools | None = None,
-        mcp_servers: list[MCPServer] | None = None,
-        max_iterations: int = 10,
-        handoff_instructions: str | None = None,
-        result_instructions: str | None = None,
-        holding_instruction: str | None = None,
+        name: Annotated[
+            str,
+            Doc(
+                "Unique identifier for this agent. Used as the tool name when "
+                "registered as a handoff target in a `RealtimeAgent` "
+                "(spaces are replaced with underscores)."
+            ),
+        ],
+        description: Annotated[
+            str,
+            Doc(
+                "Short description shown to the parent LLM so it knows when "
+                "to delegate tasks to this agent."
+            ),
+        ],
+        instructions: Annotated[
+            str,
+            Doc("System prompt defining this agent's capabilities and behavior."),
+        ],
+        llm: Annotated[
+            BaseChatModel | None,
+            Doc(
+                "LLM backend for the tool-calling loop. Must support tool/function calling."
+            ),
+        ] = None,
+        tools: Annotated[
+            AgentTools | None,
+            Doc("Pre-registered tools available to the agent during its run loop."),
+        ] = None,
+        mcp_servers: Annotated[
+            list[MCPServer] | None,
+            Doc(
+                "MCP servers connected during `prepare()`. Their tools are registered automatically."
+            ),
+        ] = None,
+        max_iterations: Annotated[
+            int,
+            Doc(
+                "Maximum number of LLM invocations before the loop aborts. "
+                "Guards against infinite tool-calling cycles."
+            ),
+        ] = 10,
+        handoff_instructions: Annotated[
+            str | None,
+            Doc(
+                "Extra instructions appended to the handoff tool description "
+                "shown to the parent `RealtimeAgent`'s LLM."
+            ),
+        ] = None,
+        result_instructions: Annotated[
+            str | None,
+            Doc(
+                "Instructions for how the parent agent should present the result "
+                "returned by this agent to the user."
+            ),
+        ] = None,
+        holding_instruction: Annotated[
+            str | None,
+            Doc(
+                "Message the parent agent says to the user while this agent is "
+                "working (e.g. *'One moment, checking your calendar…'*)."
+            ),
+        ] = None,
     ) -> None:
         self.name = name
         self.description = description
         self._instructions = instructions
         self._llm = llm
-        self._tools = tools or Tools()
+        self._tools = AgentTools()
+        if tools:
+            self._tools._registry.tools = tools._registry.tools.copy()
         self._mcp_servers = mcp_servers or []
         self._max_iterations = max_iterations
         self.handoff_instructions = handoff_instructions
@@ -92,13 +174,42 @@ class SupervisorAgent:
                 answer_future=answer_future,
             )
 
-    async def prepare(self) -> Self:
-        """Prewarms MCP connections so the agent starts without delay on run()."""
+    @timed()
+    async def prepare(
+        self,
+    ) -> Annotated[Self, Doc("Returns `self` for optional chaining.")]:
+        """Prewarm MCP connections before `run()`.
+
+        Safe to call multiple times — a no-op if servers are already connected.
+        """
         if not self._mcp_ready.is_set():
             await self._connect_mcp_servers()
         return self
 
-    async def run(self, task: str, context: str | None = None) -> SupervisorAgentResult:
+    @timed()
+    async def run(
+        self,
+        task: Annotated[str, Doc("The task or question to complete.")],
+        context: Annotated[
+            str | None,
+            Doc(
+                "Optional conversation history from the parent voice session, "
+                "injected as a `<conversation_history>` block so the agent has "
+                "full context without re-asking the user."
+            ),
+        ] = None,
+    ) -> Annotated[
+        SupervisorAgentResult,
+        Doc(
+            "Final result including the message, success flag, and executed tool calls."
+        ),
+    ]:
+        """Run the tool-calling loop until the task is complete or `max_iterations` is reached.
+
+        Calls `prepare()` automatically if not already done. Terminates when the
+        LLM calls the `done` tool, when it responds without tool calls, or when
+        `max_iterations` is exhausted.
+        """
         await self.prepare()
 
         messages = [SystemMessage(self._instructions)]

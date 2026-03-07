@@ -213,6 +213,7 @@ class RealtimeAgent[T]:
             transcription_model = TranscriptionModel.WHISPER_1
 
         self._transcription_model = transcription_model
+        self._transcription_enabled = transcription_model
         self._noise_reduction = noise_reduction
         self._turn_detection: TurnDetection = turn_detection or SemanticVAD()
         self._mcp_servers = mcp_servers or []
@@ -342,7 +343,7 @@ class RealtimeAgent[T]:
             websocket=self._websocket,
             session=audio_session,
         )
-        if self._transcription_model is not None:
+        if self._transcription_enabled:
             self._transcription_watchdog = TranscriptionWatchdog(
                 event_bus=self._event_bus
             )

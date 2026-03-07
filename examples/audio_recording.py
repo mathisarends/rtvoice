@@ -19,7 +19,6 @@ async def main():
     result = await agent.run()
 
     print("\n--- Session beendet ---")
-    print(f"Dauer: {result.duration_seconds:.1f}s")
     print(f"Recording: {result.recording_path}")
 
 

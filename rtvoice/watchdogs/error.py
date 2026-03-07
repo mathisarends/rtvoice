@@ -17,8 +17,6 @@ class ErrorWatchdog:
         agent_error = AgentError(
             type=event.error.type,
             message=event.error.message,
-            code=event.error.code,
-            param=event.error.param,
         )
         logger.error(
             "OpenAI error: %s (event_id=%s)",

@@ -45,18 +45,6 @@ class TestActionDecorator:
 
         assert registry.get("long_task").holding_instruction == "Please wait..."
 
-    def test_is_long_running_defaults_to_false(self, registry: ToolRegistry) -> None:
-        @registry.action(description="Quick task")
-        def quick() -> None: ...
-
-        assert registry.get("quick").is_long_running is False
-
-    def test_is_long_running_can_be_set(self, registry: ToolRegistry) -> None:
-        @registry.action(description="Slow task", is_long_running=True)
-        def slow() -> None: ...
-
-        assert registry.get("slow").is_long_running is True
-
     def test_decorator_returns_original_function(self, registry: ToolRegistry) -> None:
         def greet(name: str) -> str:
             return f"Hello {name}"

@@ -56,6 +56,7 @@ from rtvoice.watchdogs import (
     LifecycleWatchdog,
     SessionWatchdog,
     SpeechStateWatchdog,
+    SupervisorWatchdog,
     ToolCallingWatchdog,
     TranscriptionWatchdog,
     UserInactivityTimeoutWatchdog,
@@ -325,7 +326,6 @@ class RealtimeAgent[T]:
             description,
             name=agent_name,
             result_instruction=agent.result_instructions,
-            is_long_running=True,
             holding_instruction=agent.holding_instruction,
         )
         async def _handoff(
@@ -386,16 +386,28 @@ class RealtimeAgent[T]:
                 event_bus=self._event_bus
             )
 
+        supervisor_tool_name = (
+            self._supervisor_agent.name.replace(" ", "_")
+            if self._supervisor_agent
+            else None
+        )
         self._tool_calling_watchdog = ToolCallingWatchdog(
             event_bus=self._event_bus,
             tools=self._tools,
             websocket=self._websocket,
-            cancel_tool=self._cancel_tool,
+            supervisor_tool_names={supervisor_tool_name}
+            if supervisor_tool_name
+            else None,
         )
         if self._supervisor_agent:
-            self._tool_calling_watchdog.register_supervisor(
-                self._supervisor_agent.name.replace(" ", "_"),
-                self._supervisor_agent,
+            self._supervisor_watchdog = SupervisorWatchdog(
+                event_bus=self._event_bus,
+                tools=self._tools,
+                websocket=self._websocket,
+                cancel_tool=self._cancel_tool,
+            )
+            self._supervisor_watchdog.register_supervisor(
+                supervisor_tool_name, self._supervisor_agent
             )
         self._error_watchdog = ErrorWatchdog(event_bus=self._event_bus)
         self._speech_state_watchdog = SpeechStateWatchdog(event_bus=self._event_bus)

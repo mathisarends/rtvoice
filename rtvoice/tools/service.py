@@ -57,7 +57,6 @@ class Tools:
         description: str,
         name: str | None = None,
         result_instruction: str | None = None,
-        is_long_running: bool = False,
         holding_instruction: str | None = None,
     ):
         """Register a function as a tool the model can call.
@@ -76,11 +75,8 @@ class Tools:
                 function name.
             result_instruction: Optional instruction appended to the tool result
                 telling the model how to interpret or present the output.
-            is_long_running: Set to `True` for tools that take more than a second
-                or two. Enables a holding message so the assistant can inform the
-                user that it is working.
-            holding_instruction: Message spoken by the assistant while a
-                long-running tool is executing. Requires `is_long_running=True`.
+            holding_instruction: Message spoken by the assistant while the
+                supervisor is running in the background.
 
         Returns:
             A decorator that registers the decorated function and returns it unchanged.
@@ -95,21 +91,12 @@ class Tools:
                 result_instruction="Summarise the weather in one sentence.",
             )
             async def get_weather(city: str) -> str: ...
-
-
-            @tools.action(
-                "Run a slow background job",
-                is_long_running=True,
-                holding_instruction="Give me a moment, I'm running the job now.",
-            )
-            async def slow_job(task: str) -> str: ...
             ```
         """
         return self._registry.action(
             description,
             name=name,
             result_instruction=result_instruction,
-            is_long_running=is_long_running,
             holding_instruction=holding_instruction,
         )
 

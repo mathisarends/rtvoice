@@ -24,8 +24,8 @@ class PendingToolCall:
     tool_name: str
     result_task: asyncio.Task
     tool: Tool
+    channel: SupervisorChannel
+    supervisor_run: PendingSupervisorRun
     holding_response_id: str | None = None
     holding_done: asyncio.Event = field(default_factory=asyncio.Event)
-    channel: SupervisorChannel | None = None
     channel_task: asyncio.Task | None = None
-    supervisor_run: PendingSupervisorRun | None = None

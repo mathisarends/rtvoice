@@ -6,7 +6,7 @@ from rtvoice.realtime.schemas import (
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.supervisor.channel import StatusMessage, UserQuestion
-from rtvoice.watchdogs.tool_calling.views import PendingToolCall
+from rtvoice.watchdogs.supervisor.views import PendingToolCall
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +20,8 @@ class ChannelRelay:
             return
 
         async for event in pending.channel.events():
-            if pending.supervisor_run:
-                await pending.supervisor_run.response_done.wait()
-                pending.supervisor_run.response_done.clear()
+            await pending.supervisor_run.response_done.wait()
+            pending.supervisor_run.response_done.clear()
 
             if isinstance(event, StatusMessage):
                 logger.debug(
@@ -35,10 +34,9 @@ class ChannelRelay:
                     pending.tool_name,
                     event.question,
                 )
-                if pending.supervisor_run:
-                    pending.supervisor_run.pending_clarification_future = (
-                        event.answer_future
-                    )
+                pending.supervisor_run.pending_clarification_future = (
+                    event.answer_future
+                )
                 await self._send_clarification(event.question)
 
     async def _send_status(self, message: str) -> None:

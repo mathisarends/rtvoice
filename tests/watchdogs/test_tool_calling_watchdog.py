@@ -63,19 +63,15 @@ def make_function_call_item(
 def make_immediate_tool(name: str = "get_weather") -> MagicMock:
     tool = MagicMock(spec=Tool)
     tool.name = name
-    tool.is_long_running = False
     tool.result_instruction = None
     tool.holding_instruction = None
     return tool
 
 
-def make_long_running_tool(name: str = "slow_job") -> MagicMock:
-    tool = MagicMock(spec=Tool)
-    tool.name = name
-    tool.is_long_running = True
-    tool.result_instruction = None
-    tool.holding_instruction = None
-    return tool
+def make_supervisor_agent() -> MagicMock:
+    agent = MagicMock()
+    agent._attach_channel.side_effect = lambda channel: channel.close()
+    return agent
 
 
 def make_response_created(response_id: str = "resp_hold") -> ResponseCreatedEvent:
@@ -169,7 +165,11 @@ class TestUnknownTool:
         tools.execute.assert_not_called()
 
 
-class TestLongRunningTool:
+class TestSupervisorTool:
+    @pytest.fixture(autouse=True)
+    def register_supervisor(self, watchdog: ToolCallingWatchdog) -> None:
+        watchdog.register_supervisor("slow_job", make_supervisor_agent())
+
     @pytest.mark.asyncio
     async def test_long_running_sends_holding_response_immediately(
         self,
@@ -178,7 +178,7 @@ class TestLongRunningTool:
         websocket: AsyncMock,
         tools: MagicMock,
     ) -> None:
-        tools.get.return_value = make_long_running_tool()
+        tools.get.return_value = make_immediate_tool(name="slow_job")
 
         await event_bus.dispatch(make_function_call_item(name="slow_job"))
 
@@ -194,7 +194,7 @@ class TestLongRunningTool:
         websocket: AsyncMock,
         tools: MagicMock,
     ) -> None:
-        tools.get.return_value = make_long_running_tool()
+        tools.get.return_value = make_immediate_tool(name="slow_job")
         tools.execute = AsyncMock(return_value="job_done")
 
         await event_bus.dispatch(
@@ -202,7 +202,7 @@ class TestLongRunningTool:
         )
         await event_bus.dispatch(make_response_created("resp_hold"))
         await event_bus.dispatch(make_response_done("resp_hold"))
-        await asyncio.sleep(0)
+        await asyncio.sleep(0.05)
 
         sent_types = [type(c.args[0]) for c in websocket.send.call_args_list]
         assert ConversationItemCreateEvent in sent_types
@@ -215,7 +215,7 @@ class TestLongRunningTool:
         websocket: AsyncMock,
         tools: MagicMock,
     ) -> None:
-        tools.get.return_value = make_long_running_tool(name="slow_job")
+        tools.get.return_value = make_immediate_tool(name="slow_job")
 
         _block = asyncio.Event()
 
@@ -241,6 +241,10 @@ class TestLongRunningTool:
 
 
 class TestResponseTracking:
+    @pytest.fixture(autouse=True)
+    def register_supervisor(self, watchdog: ToolCallingWatchdog) -> None:
+        watchdog.register_supervisor("slow_job", make_supervisor_agent())
+
     @pytest.mark.asyncio
     async def test_response_created_assigns_holding_response_id(
         self,
@@ -248,7 +252,7 @@ class TestResponseTracking:
         watchdog: ToolCallingWatchdog,
         tools: MagicMock,
     ) -> None:
-        tools.get.return_value = make_long_running_tool()
+        tools.get.return_value = make_immediate_tool(name="slow_job")
         _block = asyncio.Event()
 
         async def blocking_execute(name: str, arguments: dict):
@@ -268,12 +272,12 @@ class TestResponseTracking:
         watchdog: ToolCallingWatchdog,
         tools: MagicMock,
     ) -> None:
-        tools.get.return_value = make_long_running_tool()
+        tools.get.return_value = make_immediate_tool(name="slow_job")
         tools.execute = AsyncMock(return_value="done")
 
         await event_bus.dispatch(make_function_call_item(name="slow_job"))
         await event_bus.dispatch(make_response_created("resp_hold"))
         await event_bus.dispatch(make_response_done("resp_hold"))
-        await asyncio.sleep(0)
+        await asyncio.sleep(0.05)
 
         assert len(watchdog._pending) == 0

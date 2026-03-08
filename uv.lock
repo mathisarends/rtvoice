@@ -877,7 +877,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "py-llmify", specifier = ">=0.1.4" },
+    { name = "py-llmify", specifier = "==0.1.4" },
     { name = "pyaudio", marker = "extra == 'audio'", specifier = ">=0.2.14" },
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "python-dotenv", specifier = ">=1.2.1" },

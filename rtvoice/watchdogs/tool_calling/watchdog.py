@@ -11,6 +11,8 @@ from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentBusyEvent,
     AssistantInterruptedEvent,
+    CancelSupervisorCommand,
+    UpdateSessionToolsCommand,
     UserTranscriptCompletedEvent,
 )
 from rtvoice.realtime.schemas import (
@@ -42,14 +44,22 @@ _DEFAULT_HOLDING_INSTRUCTION = (
 )
 
 
+# TODO: Refactor this
 class ToolCallingWatchdog:
-    def __init__(self, event_bus: EventBus, tools: Tools, websocket: RealtimeWebSocket):
+    def __init__(
+        self,
+        event_bus: EventBus,
+        tools: Tools,
+        websocket: RealtimeWebSocket,
+        cancel_tool: Tool | None = None,
+    ):
         self._event_bus = event_bus
         self._tools = tools
         self._websocket = websocket
         self._pending: list[PendingToolCall] = []
         self._supervisor_agents: dict[str, SupervisorAgent] = {}
         self._channel_relay = ChannelRelay(websocket)
+        self._cancel_tool = cancel_tool
 
         self._event_bus.subscribe(FunctionCallItem, self._handle_tool_call)
         self._event_bus.subscribe(ResponseCreatedEvent, self._on_response_created)
@@ -58,6 +68,7 @@ class ToolCallingWatchdog:
             UserTranscriptCompletedEvent, self._on_clarification_response
         )
         self._event_bus.subscribe(AssistantInterruptedEvent, self._on_interrupted)
+        self._event_bus.subscribe(CancelSupervisorCommand, self._on_cancel_supervisor)
 
     def register_supervisor(self, tool_name: str, agent: SupervisorAgent) -> None:
         self._supervisor_agents[tool_name] = agent
@@ -90,12 +101,20 @@ class ToolCallingWatchdog:
         else:
             await self._handle_immediate(event, tool)
 
+    async def _eject_cancel_tool(self) -> None:
+        if self._cancel_tool:
+            self._tools.eject_tool(self._cancel_tool.name)
+            await self._event_bus.dispatch(
+                UpdateSessionToolsCommand(tools=self._tools.get_tool_schema())
+            )
+
     async def _handle_long_running(self, event: FunctionCallItem, tool: Tool) -> None:
         channel: SupervisorChannel | None = None
         supervisor = self._supervisor_agents.get(event.name)
         if supervisor:
             channel = SupervisorChannel()
             supervisor._attach_channel(channel)
+            await self._inject_cancel_tool()
 
         result_task = asyncio.create_task(
             self._tools.execute(event.name, event.arguments or {})
@@ -119,6 +138,16 @@ class ToolCallingWatchdog:
             )
         )
         asyncio.create_task(self._deliver_result(pending))
+
+    async def _inject_cancel_tool(self) -> None:
+        if (
+            self._cancel_tool
+            and self._cancel_tool.name not in self._tools._registry.tools
+        ):
+            self._tools.inject_tool(self._cancel_tool)
+            await self._event_bus.dispatch(
+                UpdateSessionToolsCommand(tools=self._tools.get_tool_schema())
+            )
 
     async def _deliver_result(self, pending: PendingToolCall) -> None:
         await pending.holding_done.wait()
@@ -165,6 +194,9 @@ class ToolCallingWatchdog:
 
         if not self._pending:
             await self._event_bus.dispatch(AgentBusyEvent(busy=False))
+
+        if pending.channel and not any(p.channel for p in self._pending):
+            await self._eject_cancel_tool()
 
     async def _handle_immediate(self, event: FunctionCallItem, tool: Tool) -> None:
         result = await self._tools.execute(event.name, event.arguments or {})
@@ -235,18 +267,40 @@ class ToolCallingWatchdog:
                 pending.supervisor_run.pending_clarification_future = None
 
     async def _on_interrupted(self, _: AssistantInterruptedEvent) -> None:
-        if not self._pending:
+        non_supervisor = [p for p in self._pending if not p.channel]
+        if not non_supervisor:
             return
         logger.info(
-            "Interruption detected — cancelling %d pending tool(s)", len(self._pending)
+            "Interruption — cancelling %d non-supervisor tool(s)", len(non_supervisor)
         )
-        for pending in self._pending:
-            if pending.channel:
-                pending.channel.cancel()
+        for pending in non_supervisor:
+            pending.result_task.cancel()
+            self._pending.remove(pending)
+        if not self._pending:
+            await self._event_bus.dispatch(AgentBusyEvent(busy=False))
+
+    async def _on_cancel_supervisor(self, _: CancelSupervisorCommand) -> None:
+        supervisor_tasks = [p for p in self._pending if p.channel]
+        if not supervisor_tasks:
+            return
+        logger.info(
+            "Cancelling %d supervisor task(s) by request", len(supervisor_tasks)
+        )
+        for pending in supervisor_tasks:
+            if (
+                pending.supervisor_run
+                and pending.supervisor_run.pending_clarification_future
+                and not pending.supervisor_run.pending_clarification_future.done()
+            ):
+                pending.supervisor_run.pending_clarification_future.cancel()
             if pending.channel_task and not pending.channel_task.done():
                 pending.channel_task.cancel()
+            pending.channel.cancel()
             pending.result_task.cancel()
-        self._pending.clear()
+            self._pending.remove(pending)
+        if not self._pending:
+            await self._event_bus.dispatch(AgentBusyEvent(busy=False))
+        await self._eject_cancel_tool()
 
     def _serialize(self, result: Any) -> str:
         if isinstance(result, VoidResult):

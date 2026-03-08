@@ -46,6 +46,12 @@ class Tools:
     def set_context(self, context: SpecialToolParameters) -> None:
         self._context = context
 
+    def inject_tool(self, tool: Tool) -> None:
+        self._registry.tools[tool.name] = tool
+
+    def eject_tool(self, name: str) -> None:
+        self._registry.tools.pop(name, None)
+
     def action(
         self,
         description: str,
@@ -122,29 +128,14 @@ class Tools:
         """
         return self._registry.get(name)
 
+    def get_tool_schema(self) -> list[FunctionTool]:
+        return self._registry.get_tool_schema()
+
     async def execute(
         self,
         name: str,
         arguments: dict[str, Any],
     ) -> Any:
-        """Execute a registered tool by name with the given arguments.
-
-        Special parameters (`event_bus`, `conversation_history`, `context`) are
-        injected automatically from the shared context — do not include them in
-        `arguments`.
-
-        Args:
-            name: Name of the tool to execute.
-            arguments: Arguments provided by the model, as a plain dict.
-
-        Returns:
-            The return value of the tool function.
-
-        Raises:
-            KeyError: If no tool with the given name is registered.
-            ValueError: If a required parameter cannot be resolved from the
-                model arguments or the injected context.
-        """
         tool = self._registry.get(name)
         if not tool:
             raise KeyError(f"Tool '{name}' not found in registry")

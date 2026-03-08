@@ -65,10 +65,7 @@ class SupervisorChannel:
         self._cancel_event.set()
 
     def close(self) -> None:
-        # Flush buffered statuses before closing
-        if self._pending_statuses:
-            bundled = self._flush_pending()
-            self._queue.put_nowait(StatusMessage(message=bundled))
+        self._pending_statuses.clear()
         self._close_event.set()
 
     async def events(self) -> AsyncIterator[SupervisorChannelEvent]:

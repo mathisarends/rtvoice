@@ -20,6 +20,7 @@ from rtvoice.events.views import (
     AssistantStartedRespondingEvent,
     AssistantStoppedRespondingEvent,
     AssistantTranscriptCompletedEvent,
+    CancelSupervisorCommand,
     StartAgentCommand,
     UpdateSpeechSpeedCommand,
     UserInactivityCountdownEvent,
@@ -30,10 +31,12 @@ from rtvoice.events.views import (
 )
 from rtvoice.mcp import MCPServer
 from rtvoice.realtime.providers import OpenAIProvider, RealtimeProvider
+from rtvoice.realtime.schemas import FunctionParameters
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
 from rtvoice.supervisor import SupervisorAgent
 from rtvoice.tools import RealtimeTools, SpecialToolParameters
+from rtvoice.tools.registry.views import Tool
 from rtvoice.views import (
     AgentListener,
     AgentResult,
@@ -268,6 +271,7 @@ class RealtimeAgent[T]:
                 conversation_history=self._conversation_history,
             )
         )
+        self._cancel_tool: Tool | None = None
         if self._supervisor_agent:
             self._register_supervisor_agent(self._supervisor_agent)
 
@@ -311,6 +315,19 @@ class RealtimeAgent[T]:
     def _register_supervisor_agent(self, agent: SupervisorAgent) -> None:
         agent._inject(event_bus=self._event_bus, context=self._context)
 
+        description = agent.description
+        if agent.handoff_instructions:
+            description = f"{agent.description}\n\nHandoff instructions: {agent.handoff_instructions}"
+
+        agent_name = agent.name.replace(" ", "_")
+
+        @self._tools.action(
+            description,
+            name=agent_name,
+            result_instruction=agent.result_instructions,
+            is_long_running=True,
+            holding_instruction=agent.holding_instruction,
+        )
         async def _handoff(
             task: Annotated[
                 str,
@@ -325,17 +342,20 @@ class RealtimeAgent[T]:
             result = await agent.run(task, context=context)
             return result.message or ""
 
-        description = agent.description
-        if agent.handoff_instructions:
-            description = f"{agent.description}\n\nHandoff instructions: {agent.handoff_instructions}"
+        async def _cancel_agent(event_bus: EventBus) -> str:
+            await event_bus.dispatch(CancelSupervisorCommand())
+            return "The agent task has been cancelled."
 
-        self._tools.action(
-            description,
-            name=agent.name.replace(" ", "_"),
-            result_instruction=agent.result_instructions,
-            is_long_running=True,
-            holding_instruction=agent.holding_instruction,
-        )(_handoff)
+        self._cancel_tool = Tool(
+            name="cancel_agent",
+            description=(
+                "Cancel the currently running background agent. "
+                "Call this when the user explicitly wants to stop, cancel, or abandon the ongoing task."
+            ),
+            function=_cancel_agent,
+            schema=FunctionParameters(),
+            result_instruction="Tell the user naturally that the task has been cancelled.",
+        )
 
     def _setup_shutdown_handlers(self) -> None:
         self._event_bus.subscribe(
@@ -370,6 +390,7 @@ class RealtimeAgent[T]:
             event_bus=self._event_bus,
             tools=self._tools,
             websocket=self._websocket,
+            cancel_tool=self._cancel_tool,
         )
         if self._supervisor_agent:
             self._tool_calling_watchdog.register_supervisor(

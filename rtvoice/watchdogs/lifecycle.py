@@ -5,6 +5,7 @@ from rtvoice.events.views import (
     AgentSessionConnectedEvent,
     AgentStoppedEvent,
     StartAgentCommand,
+    UpdateSpeechSpeedCommand,
 )
 from rtvoice.realtime.schemas import (
     AudioConfig,
@@ -18,6 +19,7 @@ from rtvoice.realtime.schemas import (
     SemanticVADConfig,
     ServerVADConfig,
     SessionUpdateEvent,
+    SpeedUpdateEvent,
     ToolChoiceMode,
     TurnDetectionConfig,
 )
@@ -38,6 +40,7 @@ class LifecycleWatchdog:
         event_bus.subscribe(
             InputAudioBufferAppendEvent, self._on_input_audio_buffer_append
         )
+        event_bus.subscribe(UpdateSpeechSpeedCommand, self._on_update_speech_speed)
 
     @timed()
     async def _on_start_agent_command(self, command: StartAgentCommand) -> None:
@@ -67,6 +70,13 @@ class LifecycleWatchdog:
             return
 
         await self._websocket.send(event)
+
+    async def _on_update_speech_speed(self, command: UpdateSpeechSpeedCommand) -> None:
+        if not self._websocket.is_connected:
+            logger.warning("Cannot update speed — WebSocket not connected")
+            return
+
+        await self._websocket.send(SpeedUpdateEvent.from_speed(command.speed))
 
     def _build_session_config(
         self, command: StartAgentCommand

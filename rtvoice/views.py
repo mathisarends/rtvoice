@@ -18,6 +18,7 @@ class RealtimeModel(StrEnum):
 
     GPT_REALTIME = "gpt-realtime"
     GPT_REALTIME_MINI = "gpt-realtime-mini"
+    GPT_REALTIME_1_5 = "gpt-realtime-1.5"
 
 
 class AssistantVoice(StrEnum):

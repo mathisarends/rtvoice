@@ -29,6 +29,11 @@ class StartAgentCommand:
     tools: RealtimeTools
 
 
+@dataclass
+class UpdateSpeechSpeedCommand:
+    speed: float
+
+
 class AgentSessionConnectedEvent(BaseModel):
     pass
 

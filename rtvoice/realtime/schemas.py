@@ -447,6 +447,34 @@ class ConversationResponseCreateEvent(BaseModel):
         )
 
 
+class _SpeedOnlyOutputConfig(BaseModel):
+    speed: float
+
+
+class _SpeedOnlyAudioConfig(BaseModel):
+    output: _SpeedOnlyOutputConfig
+
+
+class _SpeedOnlySessionConfig(BaseModel):
+    type: Literal["realtime"] = "realtime"
+    audio: _SpeedOnlyAudioConfig
+
+
+class SpeedUpdateEvent(BaseModel):
+    type: Literal[RealtimeClientEvent.SESSION_UPDATE] = (
+        RealtimeClientEvent.SESSION_UPDATE
+    )
+    session: _SpeedOnlySessionConfig
+
+    @classmethod
+    def from_speed(cls, speed: float) -> Self:
+        return cls(
+            session=_SpeedOnlySessionConfig(
+                audio=_SpeedOnlyAudioConfig(output=_SpeedOnlyOutputConfig(speed=speed))
+            )
+        )
+
+
 class SessionUpdateEvent(BaseModel):
     type: Literal[RealtimeClientEvent.SESSION_UPDATE] = (
         RealtimeClientEvent.SESSION_UPDATE

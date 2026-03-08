@@ -4,6 +4,7 @@ import time
 
 from rtvoice.events import EventBus
 from rtvoice.events.views import (
+    AgentSessionConnectedEvent,
     AudioPlaybackCompletedEvent,
     UserInactivityCountdownEvent,
     UserInactivityTimeoutEvent,
@@ -30,6 +31,10 @@ class UserInactivityTimeoutWatchdog:
         self._user_has_stopped_speaking = False
 
         self.event_bus.subscribe(
+            AgentSessionConnectedEvent,
+            self._handle_session_connected,
+        )
+        self.event_bus.subscribe(
             InputAudioBufferSpeechStoppedEvent,
             self._handle_user_speech_ended,
         )
@@ -45,6 +50,13 @@ class UserInactivityTimeoutWatchdog:
             AudioPlaybackCompletedEvent,
             self._handle_assistant_done,
         )
+
+    async def _handle_session_connected(
+        self, event: AgentSessionConnectedEvent
+    ) -> None:
+        self._user_has_stopped_speaking = True
+        logger.debug("Session connected - starting inactivity timeout monitoring")
+        self._try_start_monitoring()
 
     async def _handle_user_speech_ended(
         self, event: InputAudioBufferSpeechStoppedEvent

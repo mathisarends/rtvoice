@@ -13,6 +13,7 @@ async def main():
         instructions="Du bist Jarvis. Antworte kurz und bündig.",
         inactivity_timeout_enabled=True,
         inactivity_timeout_seconds=10,
+        listener=AgentListenerImpl(),
     )
     await agent.run()
 

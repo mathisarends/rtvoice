@@ -22,7 +22,7 @@ type SupervisorChannelEvent = StatusMessage | UserQuestion
 
 
 class SupervisorChannel:
-    def __init__(self, min_status_interval: float = 10.0) -> None:
+    def __init__(self, min_status_interval: float = 8.0) -> None:
         self._queue: asyncio.Queue[SupervisorChannelEvent] = asyncio.Queue()
         self._cancel_event = asyncio.Event()
         self._close_event = asyncio.Event()
@@ -65,6 +65,10 @@ class SupervisorChannel:
         self._cancel_event.set()
 
     def close(self) -> None:
+        # Flush buffered statuses before closing
+        if self._pending_statuses:
+            bundled = self._flush_pending()
+            self._queue.put_nowait(StatusMessage(message=bundled))
         self._close_event.set()
 
     async def events(self) -> AsyncIterator[SupervisorChannelEvent]:
@@ -84,7 +88,7 @@ class SupervisorChannel:
 
             for task in pending:
                 task.cancel()
-                async with contextlib.suppress(asyncio.CancelledError, Exception):
+                with contextlib.suppress(asyncio.CancelledError, Exception):
                     await task
 
             if close_task in done and not get_task.done():

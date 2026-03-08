@@ -11,3 +11,8 @@ class SpecialToolParameters(BaseModel):
     event_bus: EventBus | None = None
     context: Any | None = None
     conversation_history: ConversationHistory | None = None
+
+
+class VoidResult:
+    def __str__(self) -> str:
+        return "OK"

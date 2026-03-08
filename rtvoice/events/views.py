@@ -57,8 +57,16 @@ class AssistantTranscriptCompletedEvent(BaseModel):
     content_index: int
 
 
+class UserInactivityCountdownEvent(BaseModel):
+    remaining_seconds: int
+
+
 class UserInactivityTimeoutEvent(BaseModel):
     timeout_seconds: float
+
+
+class AgentBusyEvent(BaseModel):
+    busy: bool
 
 
 class AssistantInterruptedEvent(BaseModel):

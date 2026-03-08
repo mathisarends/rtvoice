@@ -1,23 +1,19 @@
 import asyncio
 
-from llmify import ChatOpenAI
+from rtvoice import AgentListener, RealtimeAgent
 
-from rtvoice import RealtimeAgent
-from rtvoice.supervisor import SupervisorAgent
+
+class AgentListenerImpl(AgentListener):
+    async def on_user_inactivity_countdown(self, remaining_seconds):
+        print(f"User inactivity countdown: {remaining_seconds} seconds remaining")
 
 
 async def main():
-    summary_agent = SupervisorAgent(
-        name="summary_agent",
-        description="Summarizes the conversation so far.",
-        instructions="Summarize the conversation concisely in German.",
-        llm=ChatOpenAI(model="gpt-4o-mini"),
-        result_instructions="Here is the summary of our conversation so far.",
-    )
-
     agent = RealtimeAgent(
         instructions="Du bist Jarvis. Antworte kurz und bündig.",
-        supervisor_agent=summary_agent,
+        inactivity_timeout_enabled=True,
+        inactivity_timeout_seconds=10,
+        listener=AgentListenerImpl(),
     )
     await agent.run()
 

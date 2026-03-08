@@ -21,6 +21,7 @@ from rtvoice.events.views import (
     AssistantStoppedRespondingEvent,
     AssistantTranscriptCompletedEvent,
     StartAgentCommand,
+    UserInactivityCountdownEvent,
     UserInactivityTimeoutEvent,
     UserStartedSpeakingEvent,
     UserStoppedSpeakingEvent,
@@ -371,6 +372,8 @@ class RealtimeAgent[T]:
         if not self._listener:
             return
 
+        self._warn_listener_countdown_mismatch_if_necessary()
+
         self._event_bus.subscribe(
             UserTranscriptCompletedEvent,
             lambda e: self._listener.on_user_transcript(e.transcript),
@@ -405,6 +408,32 @@ class RealtimeAgent[T]:
             AssistantStoppedRespondingEvent,
             lambda _: self._listener.on_assistant_stopped_responding(),
         )
+        self._event_bus.subscribe(
+            UserInactivityCountdownEvent,
+            lambda e: self._listener.on_user_inactivity_countdown(e.remaining_seconds),
+        )
+
+    def _warn_listener_countdown_mismatch_if_necessary(self) -> None:
+        listener_cls = type(self._listener)
+        listener_method = getattr(listener_cls, "on_user_inactivity_countdown", None)
+        overrides_countdown = (
+            listener_method is not None
+            and listener_method is not AgentListener.on_user_inactivity_countdown
+        )
+
+        if overrides_countdown and not self._should_enable_inactivity_timeout:
+            logger.warning(
+                "Listener '%s' overrides on_user_inactivity_countdown "
+                "but inactivity_timeout_enabled is False — callback will never fire.",
+                listener_cls.__name__,
+            )
+
+        if self._should_enable_inactivity_timeout and not overrides_countdown:
+            logger.warning(
+                "inactivity_timeout_enabled is True but listener '%s' does not override "
+                "on_user_inactivity_countdown — countdown events will be silently ignored.",
+                listener_cls.__name__,
+            )
 
     async def _on_inactivity_timeout(self, event: UserInactivityTimeoutEvent) -> None:
         logger.info(

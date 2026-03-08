@@ -275,7 +275,7 @@ class TestPrepare:
     @pytest.mark.asyncio
     async def test_returns_self(self) -> None:
         agent = make_agent()
-        result = await agent.prepare()
+        result = await agent.prewarm()
         assert result is agent
 
     @pytest.mark.asyncio
@@ -284,8 +284,8 @@ class TestPrepare:
         mcp_server.list_tools.return_value = []
         agent = make_agent(mcp_servers=[mcp_server])
 
-        await agent.prepare()
-        await agent.prepare()
+        await agent.prewarm()
+        await agent.prewarm()
 
         mcp_server.connect.assert_called_once()
 
@@ -295,7 +295,7 @@ class TestPrepare:
         mcp_server.list_tools.return_value = []
         agent = make_agent(mcp_servers=[mcp_server])
 
-        await agent.prepare()
+        await agent.prewarm()
 
         mcp_server.connect.assert_called_once()
 
@@ -309,9 +309,9 @@ class TestPrepare:
         supervisor.holding_instruction = None
         agent = make_agent(supervisor_agent=supervisor)
 
-        await agent.prepare()
+        await agent.prewarm()
 
-        supervisor.prepare.assert_called_once()
+        supervisor.prewarm.assert_called_once()
 
 
 class TestListenerWiring:
@@ -424,3 +424,52 @@ class TestInactivityTimeoutHandler:
         await asyncio.sleep(0)
 
         assert agent._stop_called is True
+
+
+class TestListenerCountdownWarnings:
+    def test_overrides_countdown_without_timeout_enabled_logs_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        class ListenerWithCountdown(AgentListener):
+            async def on_user_inactivity_countdown(self, _: int) -> None:
+                pass
+
+        with caplog.at_level(logging.WARNING, logger="rtvoice.service"):
+            make_agent(
+                listener=ListenerWithCountdown(), inactivity_timeout_enabled=False
+            )
+
+        assert any("callback will never fire" in r.message for r in caplog.records)
+
+    def test_timeout_enabled_without_countdown_override_logs_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        class ListenerWithoutCountdown(AgentListener):
+            pass
+
+        with caplog.at_level(logging.WARNING, logger="rtvoice.service"):
+            make_agent(
+                listener=ListenerWithoutCountdown(),
+                inactivity_timeout_enabled=True,
+                inactivity_timeout_seconds=10.0,
+            )
+
+        assert any("will be silently ignored" in r.message for r in caplog.records)
+
+    def test_no_warning_when_both_configured_correctly(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        class ListenerWithCountdown(AgentListener):
+            async def on_user_inactivity_countdown(
+                self, remaining_seconds: int
+            ) -> None:
+                pass
+
+        with caplog.at_level(logging.WARNING, logger="rtvoice.service"):
+            make_agent(
+                listener=ListenerWithCountdown(),
+                inactivity_timeout_enabled=True,
+                inactivity_timeout_seconds=10.0,
+            )
+
+        assert not any("countdown" in r.message for r in caplog.records)

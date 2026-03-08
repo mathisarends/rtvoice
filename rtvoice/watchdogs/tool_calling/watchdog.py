@@ -3,13 +3,16 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
 from rtvoice.events import EventBus
-from rtvoice.events.views import AssistantInterruptedEvent, UserTranscriptCompletedEvent
+from rtvoice.events.views import (
+    AgentBusyEvent,
+    AssistantInterruptedEvent,
+    UserTranscriptCompletedEvent,
+)
 from rtvoice.realtime.schemas import (
     ConversationItemCreateEvent,
     ConversationResponseCreateEvent,
@@ -19,9 +22,12 @@ from rtvoice.realtime.schemas import (
     ToolChoiceMode,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
-from rtvoice.supervisor.channel import StatusMessage, SupervisorChannel, UserQuestion
+from rtvoice.supervisor.channel import SupervisorChannel
 from rtvoice.tools import Tools
 from rtvoice.tools.registry.views import Tool
+from rtvoice.tools.views import VoidResult
+from rtvoice.watchdogs.tool_calling.channel_relay import ChannelRelay
+from rtvoice.watchdogs.tool_calling.views import PendingSupervisorRun, PendingToolCall
 
 if TYPE_CHECKING:
     from rtvoice.supervisor import SupervisorAgent
@@ -36,37 +42,24 @@ _DEFAULT_HOLDING_INSTRUCTION = (
 )
 
 
-@dataclass
-class _PendingToolCall:
-    call_id: str
-    tool_name: str
-    result_task: asyncio.Task
-    tool: Tool
-    holding_response_id: str | None = None
-    holding_done: asyncio.Event = field(default_factory=asyncio.Event)
-    channel: SupervisorChannel | None = None
-    channel_task: asyncio.Task | None = None
-    pending_clarification_future: asyncio.Future[str] | None = None
-
-
 class ToolCallingWatchdog:
     def __init__(self, event_bus: EventBus, tools: Tools, websocket: RealtimeWebSocket):
         self._event_bus = event_bus
         self._tools = tools
         self._websocket = websocket
-        self._pending: list[_PendingToolCall] = []
+        self._pending: list[PendingToolCall] = []
         self._supervisor_agents: dict[str, SupervisorAgent] = {}
+        self._channel_relay = ChannelRelay(websocket)
 
         self._event_bus.subscribe(FunctionCallItem, self._handle_tool_call)
         self._event_bus.subscribe(ResponseCreatedEvent, self._on_response_created)
         self._event_bus.subscribe(ResponseDoneEvent, self._on_response_done)
         self._event_bus.subscribe(
-            UserTranscriptCompletedEvent, self._on_user_transcript
+            UserTranscriptCompletedEvent, self._on_clarification_response
         )
         self._event_bus.subscribe(AssistantInterruptedEvent, self._on_interrupted)
 
     def register_supervisor(self, tool_name: str, agent: SupervisorAgent) -> None:
-        """Register a supervisor agent so the watchdog can attach a channel to its runs."""
         self._supervisor_agents[tool_name] = agent
 
     async def _handle_tool_call(self, event: FunctionCallItem) -> None:
@@ -75,22 +68,16 @@ class ToolCallingWatchdog:
             logger.error("Tool '%s' not found", event.name)
             return
 
-        if tool.is_long_running:
-            existing = next(
-                (p for p in self._pending if p.tool_name == event.name), None
+        is_already_pending = any(p.tool_name == event.name for p in self._pending)
+        if tool.is_long_running and is_already_pending:
+            logger.warning("Duplicate tool call for '%s', suppressing", event.name)
+            await self._websocket.send(
+                ConversationItemCreateEvent.function_call_output(
+                    call_id=event.call_id,
+                    output="Request already in progress.",
+                )
             )
-            if existing:
-                logger.warning(
-                    "Duplicate tool call for '%s' while already pending, suppressing",
-                    event.name,
-                )
-                await self._websocket.send(
-                    ConversationItemCreateEvent.function_call_output(
-                        call_id=event.call_id,
-                        output="Request already in progress.",
-                    )
-                )
-                return
+            return
 
         logger.info(
             "Tool call: '%s' | args: %s",
@@ -114,14 +101,16 @@ class ToolCallingWatchdog:
             self._tools.execute(event.name, event.arguments or {})
         )
 
-        pending = _PendingToolCall(
+        pending = PendingToolCall(
             call_id=event.call_id,
             tool_name=event.name,
             result_task=result_task,
             tool=tool,
             channel=channel,
+            supervisor_run=PendingSupervisorRun() if channel else None,
         )
         self._pending.append(pending)
+        await self._event_bus.dispatch(AgentBusyEvent(busy=True))
 
         await self._websocket.send(
             ConversationResponseCreateEvent.from_instructions(
@@ -129,14 +118,13 @@ class ToolCallingWatchdog:
                 tool_choice=ToolChoiceMode.NONE,
             )
         )
-
         asyncio.create_task(self._deliver_result(pending))
 
-    async def _deliver_result(self, pending: _PendingToolCall) -> None:
+    async def _deliver_result(self, pending: PendingToolCall) -> None:
         await pending.holding_done.wait()
 
         if pending.channel:
-            pending.channel_task = asyncio.create_task(self._process_channel(pending))
+            pending.channel_task = asyncio.create_task(self._channel_relay.run(pending))
 
         try:
             result = await pending.result_task
@@ -148,6 +136,14 @@ class ToolCallingWatchdog:
         finally:
             if pending in self._pending:
                 self._pending.remove(pending)
+
+        if pending.channel_task:
+            try:
+                await pending.channel_task
+            except Exception:
+                logger.debug(
+                    "Channel relay for '%s' ended with error", pending.tool_name
+                )
 
         logger.info(
             "Tool result: '%s' | %s", pending.tool_name, self._serialize(result)
@@ -167,38 +163,11 @@ class ToolCallingWatchdog:
             else ConversationResponseCreateEvent()
         )
 
-    async def _process_channel(self, pending: _PendingToolCall) -> None:
-        """Relay supervisor channel events to the user via the RealtimeAgent."""
-        async for event in pending.channel.events():
-            if isinstance(event, StatusMessage):
-                logger.debug(
-                    "Supervisor status for '%s': %s", pending.tool_name, event.message
-                )
-                await self._websocket.send(
-                    ConversationResponseCreateEvent.from_instructions(
-                        f"Briefly summarise what was done in one short natural sentence (max 12 words). "
-                        f"If multiple steps are listed (separated by →), combine them into one sentence. "
-                        f"Steps: {event.message}",
-                        tool_choice=ToolChoiceMode.NONE,
-                    )
-                )
-            elif isinstance(event, UserQuestion):
-                logger.debug(
-                    "Supervisor clarification for '%s': %s",
-                    pending.tool_name,
-                    event.question,
-                )
-                pending.pending_clarification_future = event.answer_future
-                await self._websocket.send(
-                    ConversationResponseCreateEvent.from_instructions(
-                        f'Ask the user naturally and conversationally: "{event.question}"',
-                        tool_choice=ToolChoiceMode.NONE,
-                    )
-                )
+        if not self._pending:
+            await self._event_bus.dispatch(AgentBusyEvent(busy=False))
 
     async def _handle_immediate(self, event: FunctionCallItem, tool: Tool) -> None:
         result = await self._tools.execute(event.name, event.arguments or {})
-
         logger.info("Tool result: '%s' | %s", event.name, self._serialize(result))
 
         await self._websocket.send(
@@ -222,29 +191,48 @@ class ToolCallingWatchdog:
                     event.response_id,
                     pending.tool_name,
                 )
-                break
+                return
+            if pending.supervisor_run and pending.supervisor_run.response_id is None:
+                pending.supervisor_run.response_id = event.response_id
+                logger.debug(
+                    "Status response '%s' tracked for '%s'",
+                    event.response_id,
+                    pending.tool_name,
+                )
+                return
 
     async def _on_response_done(self, event: ResponseDoneEvent) -> None:
         for pending in self._pending:
             if pending.holding_response_id == event.response_id:
                 pending.holding_done.set()
                 logger.debug("Holding done for '%s'", pending.tool_name)
-                break
+                return
+            if (
+                pending.supervisor_run
+                and pending.supervisor_run.response_id == event.response_id
+            ):
+                pending.supervisor_run.response_id = None
+                pending.supervisor_run.response_done.set()
+                return
 
-    async def _on_user_transcript(self, event: UserTranscriptCompletedEvent) -> None:
+    async def _on_clarification_response(
+        self, event: UserTranscriptCompletedEvent
+    ) -> None:
         for pending in self._pending:
             if (
-                pending.pending_clarification_future
-                and not pending.pending_clarification_future.done()
+                pending.supervisor_run
+                and pending.supervisor_run.pending_clarification_future
+                and not pending.supervisor_run.pending_clarification_future.done()
             ):
                 logger.debug(
                     "Clarification answered for '%s': %s",
                     pending.tool_name,
                     event.transcript,
                 )
-                pending.pending_clarification_future.set_result(event.transcript)
-                pending.pending_clarification_future = None
-                return
+                pending.supervisor_run.pending_clarification_future.set_result(
+                    event.transcript
+                )
+                pending.supervisor_run.pending_clarification_future = None
 
     async def _on_interrupted(self, _: AssistantInterruptedEvent) -> None:
         if not self._pending:
@@ -261,8 +249,8 @@ class ToolCallingWatchdog:
         self._pending.clear()
 
     def _serialize(self, result: Any) -> str:
-        if result is None:
-            return "Success"
+        if isinstance(result, VoidResult):
+            return str(result)
         if isinstance(result, str):
             return result
         if isinstance(result, BaseModel):

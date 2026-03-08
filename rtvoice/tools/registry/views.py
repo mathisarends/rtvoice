@@ -14,7 +14,6 @@ class Tool:
         function: Callable,
         schema: FunctionParameters,
         result_instruction: str | None = None,
-        is_long_running: bool = False,
         holding_instruction: str | None = None,
     ):
         self.name = name
@@ -22,7 +21,6 @@ class Tool:
         self.function = function
         self.schema = schema
         self.result_instruction = result_instruction
-        self.is_long_running = is_long_running
         self.holding_instruction = holding_instruction
 
     async def execute(self, arguments: dict[str, Any]) -> Any:

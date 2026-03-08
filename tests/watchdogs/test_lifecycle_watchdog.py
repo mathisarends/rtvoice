@@ -6,9 +6,9 @@ from rtvoice.events.bus import EventBus
 from rtvoice.events.views import (
     AgentSessionConnectedEvent,
     AgentStoppedEvent,
+    ConfigureSessionCommand,
     StartAgentCommand,
 )
-from rtvoice.realtime.schemas import InputAudioBufferAppendEvent, SessionUpdateEvent
 from rtvoice.views import (
     AssistantVoice,
     NoiseReduction,
@@ -83,17 +83,20 @@ class TestStartAgent:
         websocket.connect.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_sends_session_update_event(
+    async def test_dispatches_configure_session_command(
         self,
         event_bus: EventBus,
         watchdog: LifecycleWatchdog,
-        websocket: MagicMock,
     ) -> None:
+        received: list[ConfigureSessionCommand] = []
+
+        async def capture(cmd: ConfigureSessionCommand) -> None:
+            received.append(cmd)
+
+        event_bus.subscribe(ConfigureSessionCommand, capture)
         await event_bus.dispatch(make_start_command())
 
-        websocket.send.assert_called_once()
-        sent = websocket.send.call_args[0][0]
-        assert isinstance(sent, SessionUpdateEvent)
+        assert len(received) == 1
 
     @pytest.mark.asyncio
     async def test_dispatches_agent_session_connected_event(
@@ -136,32 +139,3 @@ class TestAgentStopped:
         await event_bus.dispatch(AgentStoppedEvent())
 
         websocket.close.assert_not_called()
-
-
-class TestAudioForwarding:
-    @pytest.mark.asyncio
-    async def test_audio_event_forwarded_when_connected(
-        self,
-        event_bus: EventBus,
-        watchdog: LifecycleWatchdog,
-        websocket: MagicMock,
-    ) -> None:
-        websocket.is_connected = True
-        audio_event = InputAudioBufferAppendEvent(audio="AAAA")
-
-        await event_bus.dispatch(audio_event)
-
-        websocket.send.assert_called_once_with(audio_event)
-
-    @pytest.mark.asyncio
-    async def test_audio_event_not_forwarded_when_disconnected(
-        self,
-        event_bus: EventBus,
-        watchdog: LifecycleWatchdog,
-        websocket: MagicMock,
-    ) -> None:
-        websocket.is_connected = False
-
-        await event_bus.dispatch(InputAudioBufferAppendEvent(audio="AAAA"))
-
-        websocket.send.assert_not_called()

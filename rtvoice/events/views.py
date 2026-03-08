@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, ConfigDict
 
 if TYPE_CHECKING:
+    from rtvoice.realtime.schemas import FunctionTool, ToolChoiceMode
     from rtvoice.tools import RealtimeTools
     from rtvoice.views import (
         AgentError,
@@ -30,8 +31,35 @@ class StartAgentCommand:
 
 
 @dataclass
+class ConfigureSessionCommand:
+    model: RealtimeModel
+    instructions: str
+    voice: AssistantVoice
+    speech_speed: float
+    transcription_model: TranscriptionModel | None
+    noise_reduction: NoiseReduction
+    turn_detection: TurnDetection
+    tools: RealtimeTools
+
+
+@dataclass
 class UpdateSpeechSpeedCommand:
     speed: float
+
+
+@dataclass
+class UpdateToolChoiceCommand:
+    tool_choice: ToolChoiceMode
+
+
+@dataclass
+class CancelSupervisorCommand:
+    pass
+
+
+@dataclass
+class UpdateSessionToolsCommand:
+    tools: list[FunctionTool]
 
 
 class AgentSessionConnectedEvent(BaseModel):
@@ -70,8 +98,12 @@ class UserInactivityTimeoutEvent(BaseModel):
     timeout_seconds: float
 
 
-class AgentBusyEvent(BaseModel):
-    busy: bool
+class SupervisorStartedEvent(BaseModel):
+    pass
+
+
+class SupervisorFinishedEvent(BaseModel):
+    pass
 
 
 class AssistantInterruptedEvent(BaseModel):

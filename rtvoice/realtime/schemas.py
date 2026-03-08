@@ -336,10 +336,15 @@ class ConversationContent(BaseModel):
     text: str
 
 
+class InputConversationContent(BaseModel):
+    type: Literal["input_text"] = "input_text"
+    text: str
+
+
 class MessageConversationItem(BaseModel):
     type: Literal["message"] = "message"
     role: MessageRole
-    content: list[ConversationContent]
+    content: list[ConversationContent | InputConversationContent]
 
 
 class FunctionCallOutputConversationItem(BaseModel):
@@ -421,6 +426,15 @@ class ConversationItemCreateEvent(BaseModel):
             ),
         )
 
+    @classmethod
+    def system_inject(cls, text: str) -> Self:
+        return cls(
+            item=MessageConversationItem(
+                role=MessageRole.SYSTEM,
+                content=[InputConversationContent(text=text)],
+            ),
+        )
+
 
 class ConversationItemTruncateEvent(BaseModel):
     event_id: str | None = None
@@ -473,6 +487,38 @@ class SpeedUpdateEvent(BaseModel):
                 audio=_SpeedOnlyAudioConfig(output=_SpeedOnlyOutputConfig(speed=speed))
             )
         )
+
+
+class _ToolChoiceOnlySessionConfig(BaseModel):
+    type: Literal["realtime"] = "realtime"
+    tool_choice: ToolChoiceMode
+
+
+class ToolChoiceUpdateEvent(BaseModel):
+    type: Literal[RealtimeClientEvent.SESSION_UPDATE] = (
+        RealtimeClientEvent.SESSION_UPDATE
+    )
+    session: _ToolChoiceOnlySessionConfig
+
+    @classmethod
+    def from_mode(cls, mode: ToolChoiceMode) -> Self:
+        return cls(session=_ToolChoiceOnlySessionConfig(tool_choice=mode))
+
+
+class _ToolsOnlySessionConfig(BaseModel):
+    type: Literal["realtime"] = "realtime"
+    tools: list[FunctionTool]
+
+
+class ToolsUpdateEvent(BaseModel):
+    type: Literal[RealtimeClientEvent.SESSION_UPDATE] = (
+        RealtimeClientEvent.SESSION_UPDATE
+    )
+    session: _ToolsOnlySessionConfig
+
+    @classmethod
+    def from_tools(cls, tools: list[FunctionTool]) -> Self:
+        return cls(session=_ToolsOnlySessionConfig(tools=tools))
 
 
 class SessionUpdateEvent(BaseModel):

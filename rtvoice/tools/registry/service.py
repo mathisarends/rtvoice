@@ -17,7 +17,6 @@ class ToolRegistry:
         description: str,
         name: str | None = None,
         result_instruction: str | None = None,
-        is_long_running: bool = False,
         holding_instruction: str | None = None,
     ):
         def decorator(func: Callable) -> Callable:
@@ -26,7 +25,6 @@ class ToolRegistry:
                 name=name or func.__name__,
                 description=description,
                 result_instruction=result_instruction,
-                is_long_running=is_long_running,
                 holding_instruction=holding_instruction,
             )
             self._register_tool(tool)
@@ -46,7 +44,6 @@ class ToolRegistry:
         name: str,
         description: str,
         result_instruction: str | None,
-        is_long_running: bool = False,
         holding_instruction: str | None = None,
     ) -> Tool:
         bound_func = getattr(self, func.__name__, func)
@@ -58,7 +55,6 @@ class ToolRegistry:
             function=bound_func,
             schema=schema,
             result_instruction=result_instruction,
-            is_long_running=is_long_running,
             holding_instruction=holding_instruction,
         )
 

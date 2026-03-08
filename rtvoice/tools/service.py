@@ -46,12 +46,17 @@ class Tools:
     def set_context(self, context: SpecialToolParameters) -> None:
         self._context = context
 
+    def inject_tool(self, tool: Tool) -> None:
+        self._registry.tools[tool.name] = tool
+
+    def eject_tool(self, name: str) -> None:
+        self._registry.tools.pop(name, None)
+
     def action(
         self,
         description: str,
         name: str | None = None,
         result_instruction: str | None = None,
-        is_long_running: bool = False,
         holding_instruction: str | None = None,
     ):
         """Register a function as a tool the model can call.
@@ -70,11 +75,8 @@ class Tools:
                 function name.
             result_instruction: Optional instruction appended to the tool result
                 telling the model how to interpret or present the output.
-            is_long_running: Set to `True` for tools that take more than a second
-                or two. Enables a holding message so the assistant can inform the
-                user that it is working.
-            holding_instruction: Message spoken by the assistant while a
-                long-running tool is executing. Requires `is_long_running=True`.
+            holding_instruction: Message spoken by the assistant while the
+                supervisor is running in the background.
 
         Returns:
             A decorator that registers the decorated function and returns it unchanged.
@@ -89,21 +91,12 @@ class Tools:
                 result_instruction="Summarise the weather in one sentence.",
             )
             async def get_weather(city: str) -> str: ...
-
-
-            @tools.action(
-                "Run a slow background job",
-                is_long_running=True,
-                holding_instruction="Give me a moment, I'm running the job now.",
-            )
-            async def slow_job(task: str) -> str: ...
             ```
         """
         return self._registry.action(
             description,
             name=name,
             result_instruction=result_instruction,
-            is_long_running=is_long_running,
             holding_instruction=holding_instruction,
         )
 
@@ -122,29 +115,14 @@ class Tools:
         """
         return self._registry.get(name)
 
+    def get_tool_schema(self) -> list[FunctionTool]:
+        return self._registry.get_tool_schema()
+
     async def execute(
         self,
         name: str,
         arguments: dict[str, Any],
     ) -> Any:
-        """Execute a registered tool by name with the given arguments.
-
-        Special parameters (`event_bus`, `conversation_history`, `context`) are
-        injected automatically from the shared context — do not include them in
-        `arguments`.
-
-        Args:
-            name: Name of the tool to execute.
-            arguments: Arguments provided by the model, as a plain dict.
-
-        Returns:
-            The return value of the tool function.
-
-        Raises:
-            KeyError: If no tool with the given name is registered.
-            ValueError: If a required parameter cannot be resolved from the
-                model arguments or the injected context.
-        """
         tool = self._registry.get(name)
         if not tool:
             raise KeyError(f"Tool '{name}' not found in registry")

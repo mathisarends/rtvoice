@@ -35,7 +35,10 @@ AgentErrorEvent.model_rebuild(_types_namespace={"AgentError": AgentError})
 def make_agent(**kwargs) -> RealtimeAgent:
     audio_input = MagicMock()
     audio_output = MagicMock()
-    with patch("rtvoice.service.RealtimeWebSocket"):
+    with (
+        patch("rtvoice.service.RealtimeWebSocket"),
+        patch("rtvoice.service.OpenAIProvider"),
+    ):
         return RealtimeAgent(
             audio_input=audio_input,
             audio_output=audio_output,

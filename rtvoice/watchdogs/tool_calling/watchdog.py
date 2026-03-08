@@ -8,7 +8,11 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel
 
 from rtvoice.events import EventBus
-from rtvoice.events.views import AssistantInterruptedEvent, UserTranscriptCompletedEvent
+from rtvoice.events.views import (
+    AgentBusyEvent,
+    AssistantInterruptedEvent,
+    UserTranscriptCompletedEvent,
+)
 from rtvoice.realtime.schemas import (
     ConversationItemCreateEvent,
     ConversationResponseCreateEvent,
@@ -106,6 +110,7 @@ class ToolCallingWatchdog:
             supervisor_run=PendingSupervisorRun() if channel else None,
         )
         self._pending.append(pending)
+        await self._event_bus.dispatch(AgentBusyEvent(busy=True))
 
         await self._websocket.send(
             ConversationResponseCreateEvent.from_instructions(
@@ -157,6 +162,9 @@ class ToolCallingWatchdog:
             if pending.tool.result_instruction
             else ConversationResponseCreateEvent()
         )
+
+        if not self._pending:
+            await self._event_bus.dispatch(AgentBusyEvent(busy=False))
 
     async def _handle_immediate(self, event: FunctionCallItem, tool: Tool) -> None:
         result = await self._tools.execute(event.name, event.arguments or {})

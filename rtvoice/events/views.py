@@ -65,6 +65,10 @@ class UserInactivityTimeoutEvent(BaseModel):
     timeout_seconds: float
 
 
+class AgentBusyEvent(BaseModel):
+    busy: bool
+
+
 class AssistantInterruptedEvent(BaseModel):
     pass
 

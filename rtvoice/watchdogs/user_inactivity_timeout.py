@@ -3,7 +3,11 @@ import logging
 import time
 
 from rtvoice.events import EventBus
-from rtvoice.events.views import AudioPlaybackCompletedEvent, UserInactivityTimeoutEvent
+from rtvoice.events.views import (
+    AudioPlaybackCompletedEvent,
+    UserInactivityCountdownEvent,
+    UserInactivityTimeoutEvent,
+)
 from rtvoice.realtime.schemas import (
     InputAudioBufferSpeechStartedEvent,
     InputAudioBufferSpeechStoppedEvent,
@@ -11,6 +15,8 @@ from rtvoice.realtime.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+_COUNTDOWN_SECONDS = frozenset({5, 4, 3, 2, 1})
 
 
 class UserInactivityTimeoutWatchdog:
@@ -88,24 +94,41 @@ class UserInactivityTimeoutWatchdog:
             self._check_task = asyncio.create_task(self._monitor_timeout())
 
     async def _monitor_timeout(self) -> None:
-        while self._is_monitoring:
-            if not self._has_timed_out():
-                await asyncio.sleep(0.5)
-                continue
+        dispatched_countdowns: set[int] = set()
 
-            logger.warning(
-                "Inactivity timeout occurred after %.1f seconds",
-                self.timeout_seconds,
-            )
-            await self.event_bus.dispatch(
-                UserInactivityTimeoutEvent(timeout_seconds=self.timeout_seconds)
-            )
-            self._is_monitoring = False
-            self._user_has_stopped_speaking = False
-            break
+        while self._is_monitoring:
+            if self._has_timed_out():
+                logger.warning(
+                    "Inactivity timeout occurred after %.1f seconds",
+                    self.timeout_seconds,
+                )
+                await self.event_bus.dispatch(
+                    UserInactivityTimeoutEvent(timeout_seconds=self.timeout_seconds)
+                )
+                self._is_monitoring = False
+                self._user_has_stopped_speaking = False
+                break
+
+            remaining = self._remaining_seconds()
+            if (
+                remaining in _COUNTDOWN_SECONDS
+                and remaining not in dispatched_countdowns
+            ):
+                dispatched_countdowns.add(remaining)
+                logger.debug("Inactivity countdown: %d seconds remaining", remaining)
+                await self.event_bus.dispatch(
+                    UserInactivityCountdownEvent(remaining_seconds=remaining)
+                )
+
+            await asyncio.sleep(0.25)
+
+    def _elapsed_seconds(self) -> float:
+        if self._last_speech_time is None:
+            return 0.0
+        return time.monotonic() - self._last_speech_time
+
+    def _remaining_seconds(self) -> int:
+        return max(0, int(self.timeout_seconds - self._elapsed_seconds()))
 
     def _has_timed_out(self) -> bool:
-        if self._last_speech_time is None:
-            return False
-        elapsed = time.monotonic() - self._last_speech_time
-        return elapsed > self.timeout_seconds
+        return self._elapsed_seconds() > self.timeout_seconds

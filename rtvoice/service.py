@@ -21,6 +21,7 @@ from rtvoice.events.views import (
     AssistantStoppedRespondingEvent,
     AssistantTranscriptCompletedEvent,
     StartAgentCommand,
+    UserInactivityCountdownEvent,
     UserInactivityTimeoutEvent,
     UserStartedSpeakingEvent,
     UserStoppedSpeakingEvent,
@@ -404,6 +405,10 @@ class RealtimeAgent[T]:
         self._event_bus.subscribe(
             AssistantStoppedRespondingEvent,
             lambda _: self._listener.on_assistant_stopped_responding(),
+        )
+        self._event_bus.subscribe(
+            UserInactivityCountdownEvent,
+            lambda e: self._listener.on_user_inactivity_countdown(e.remaining_seconds),
         )
 
     async def _on_inactivity_timeout(self, event: UserInactivityTimeoutEvent) -> None:

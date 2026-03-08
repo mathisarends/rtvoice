@@ -239,6 +239,15 @@ class AgentListener:
     async def on_agent_stopped(self) -> None:
         """Called after the agent has fully shut down and `run()` is about to return."""
 
+    async def on_user_inactivity_countdown(self, remaining_seconds: int) -> None:
+        """Called each second during the countdown before the inactivity timeout fires.
+
+        Fires at remaining_seconds = 5, 4, 3, 2, 1.
+
+        Args:
+            remaining_seconds: Seconds remaining until the session is stopped.
+        """
+
     async def on_agent_interrupted(self) -> None:
         """Called when the assistant's response is interrupted by the user speaking."""
 

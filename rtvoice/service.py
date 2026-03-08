@@ -21,6 +21,7 @@ from rtvoice.events.views import (
     AssistantStoppedRespondingEvent,
     AssistantTranscriptCompletedEvent,
     StartAgentCommand,
+    UpdateSpeechSpeedCommand,
     UserInactivityCountdownEvent,
     UserInactivityTimeoutEvent,
     UserStartedSpeakingEvent,
@@ -294,11 +295,11 @@ class RealtimeAgent[T]:
         return SpeakerOutput()
 
     def _clip_speech_speed(self, speed: float) -> float:
-        clipped = max(0.5, min(speed, 1.5))
+        clipped = max(0.25, min(speed, 1.5))
 
         if speed != clipped:
             logger.warning(
-                "Speech speed %.2f is out of range [0.5, 1.5], clipping to %.2f",
+                "Speech speed %.2f is out of range [0.25, 1.5], clipping to %.2f",
                 speed,
                 clipped,
             )
@@ -534,6 +535,10 @@ class RealtimeAgent[T]:
         for tool in tools:
             self._tools.register_mcp(tool, server)
         logger.info("MCP server connected: %d tools loaded", len(tools))
+
+    async def set_speech_speed(self, speed: float) -> None:
+        clipped = self._clip_speech_speed(speed)
+        await self._event_bus.dispatch(UpdateSpeechSpeedCommand(speed=clipped))
 
     @timed()
     async def stop(self) -> None:

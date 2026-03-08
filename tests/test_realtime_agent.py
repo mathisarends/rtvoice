@@ -104,9 +104,9 @@ class TestSpeechSpeedClipping:
         agent = make_agent(speech_speed=1.0)
         assert agent._speech_speed == 1.0
 
-    def test_value_below_minimum_is_clipped_to_half(self) -> None:
+    def test_speech_speed_below_minimum_is_clipped_to_minimum(self) -> None:
         agent = make_agent(speech_speed=0.1)
-        assert agent._speech_speed == 0.5
+        assert agent._speech_speed == 0.25
 
     def test_value_above_maximum_is_clipped_to_one_point_five(self) -> None:
         agent = make_agent(speech_speed=2.0)

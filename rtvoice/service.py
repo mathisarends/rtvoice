@@ -536,7 +536,18 @@ class RealtimeAgent[T]:
             self._tools.register_mcp(tool, server)
         logger.info("MCP server connected: %d tools loaded", len(tools))
 
-    async def set_speech_speed(self, speed: float) -> None:
+    async def set_speech_speed(
+        self,
+        speed: Annotated[
+            float,
+            Doc("Target playback speed. Automatically clamped to ``[0.25, 1.5]``."),
+        ],
+    ) -> None:
+        """Update the assistant's speech speed mid-session.
+
+        Clamps the value to ``[0.25, 1.5]`` before applying. The change takes
+        effect on the next response — audio that is already playing is unaffected.
+        """
         clipped = self._clip_speech_speed(speed)
         await self._event_bus.dispatch(UpdateSpeechSpeedCommand(speed=clipped))
 

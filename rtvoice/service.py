@@ -415,9 +415,10 @@ class RealtimeAgent[T]:
 
     def _warn_listener_countdown_mismatch_if_necessary(self) -> None:
         listener_cls = type(self._listener)
+        listener_method = getattr(listener_cls, "on_user_inactivity_countdown", None)
         overrides_countdown = (
-            listener_cls.on_user_inactivity_countdown
-            is not AgentListener.on_user_inactivity_countdown
+            listener_method is not None
+            and listener_method is not AgentListener.on_user_inactivity_countdown
         )
 
         if overrides_countdown and not self._should_enable_inactivity_timeout:

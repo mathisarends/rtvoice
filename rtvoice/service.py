@@ -30,7 +30,7 @@ from rtvoice.mcp import MCPServer
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
 from rtvoice.supervisor import SupervisorAgent
-from rtvoice.tools import RealtimeTools, SpecialToolParameters, Tools
+from rtvoice.tools import RealtimeTools, SpecialToolParameters
 from rtvoice.views import (
     AgentListener,
     AgentResult,
@@ -48,7 +48,6 @@ from rtvoice.watchdogs import (
     InterruptionWatchdog,
     LifecycleWatchdog,
     SpeechStateWatchdog,
-    SupervisorInteractionWatchdog,
     ToolCallingWatchdog,
     TranscriptionWatchdog,
     UserInactivityTimeoutWatchdog,
@@ -64,7 +63,7 @@ class RealtimeAgent[T]:
     WebSocket connection, tool calling, optional supervisor handoffs,
     MCP server integration, and inactivity timeouts.
 
-    Call [prepare()][rtvoice.service.RealtimeAgent.prepare] before
+    Call [prewarm()][rtvoice.service.RealtimeAgent.prewarm] before
     [run()][rtvoice.service.RealtimeAgent.run] to prewarm connections
     and avoid startup delays.
 
@@ -123,7 +122,7 @@ class RealtimeAgent[T]:
             ),
         ] = None,
         tools: Annotated[
-            Tools | None,
+            RealtimeTools | None,
             Doc(
                 "Pre-registered tool set exposed to the model. "
                 "Tools receive the shared `context` and `event_bus` automatically."
@@ -139,7 +138,7 @@ class RealtimeAgent[T]:
         mcp_servers: Annotated[
             list[MCPServer] | None,
             Doc(
-                "MCP servers connected during `prepare()`. "
+                "MCP servers connected during `prewarm()`. "
                 "Their tools are registered and forwarded to the model."
             ),
         ] = None,
@@ -245,6 +244,7 @@ class RealtimeAgent[T]:
         self._tools = RealtimeTools()
         if tools:
             self._tools._registry.tools = tools._registry.tools.copy()
+
         self._tools.set_context(
             SpecialToolParameters(
                 event_bus=self._event_bus,
@@ -347,6 +347,11 @@ class RealtimeAgent[T]:
             tools=self._tools,
             websocket=self._websocket,
         )
+        if self._supervisor_agent:
+            self._tool_calling_watchdog.register_supervisor(
+                self._supervisor_agent.name.replace(" ", "_"),
+                self._supervisor_agent,
+            )
         self._error_watchdog = ErrorWatchdog(event_bus=self._event_bus)
         self._speech_state_watchdog = SpeechStateWatchdog(event_bus=self._event_bus)
 
@@ -354,12 +359,6 @@ class RealtimeAgent[T]:
             self._user_inactivity_timeout_watchdog = UserInactivityTimeoutWatchdog(
                 event_bus=self._event_bus,
                 timeout_seconds=self._inactivity_timeout_seconds,
-            )
-
-        if self._supervisor_agent:
-            self._supervisor_interaction_watchdog = SupervisorInteractionWatchdog(
-                event_bus=self._event_bus,
-                websocket=self._websocket,
             )
 
         if self._recording_path:
@@ -427,7 +426,7 @@ class RealtimeAgent[T]:
         inactivity timeout, or through an error watchdog.
         """
         logger.info("Starting agent...")
-        await self.prepare()
+        await self.prewarm()
 
         await self._event_bus.dispatch(
             StartAgentCommand(
@@ -454,7 +453,7 @@ class RealtimeAgent[T]:
         )
 
     @timed()
-    async def prepare(
+    async def prewarm(
         self,
     ) -> Annotated[Self, Doc("Returns `self` for optional chaining with `run()`.")]:
         """Prewarm MCP and supervisor connections before `run()`.
@@ -465,7 +464,7 @@ class RealtimeAgent[T]:
         """
         tasks = [self._connect_mcp_servers()]
         if self._supervisor_agent:
-            tasks.append(self._supervisor_agent.prepare())
+            tasks.append(self._supervisor_agent.prewarm())
 
         await asyncio.gather(*tasks, return_exceptions=True)
         return self

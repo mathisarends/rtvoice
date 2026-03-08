@@ -1,8 +1,6 @@
-from __future__ import annotations
-
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Annotated, Any, Self
+from typing import Annotated, Any, Self
 
 from llmify import (
     BaseChatModel,
@@ -14,18 +12,15 @@ from llmify import (
 )
 from typing_extensions import Doc
 
-from rtvoice.shared.decorators import timed
-
-if TYPE_CHECKING:
-    from rtvoice.events import EventBus
-
+from rtvoice.events.bus import EventBus
 from rtvoice.mcp import MCPServer
+from rtvoice.shared.decorators import timed
+from rtvoice.supervisor.channel import SupervisorChannel
 from rtvoice.supervisor.views import (
-    SupervisorAgentClarificationNeeded,
     SupervisorAgentDone,
     SupervisorAgentResult,
 )
-from rtvoice.tools import AgentTools
+from rtvoice.tools import SupervisorTools
 from rtvoice.tools.views import SpecialToolParameters
 
 logger = logging.getLogger(__name__)
@@ -38,11 +33,11 @@ class SupervisorAgent:
     support for clarification questions, MCP server integration, and handoff
     from a parent voice agent.
 
-    The agent exposes two special tools to the LLM automatically:
+    The agent exposes three special tools to the LLM automatically:
 
     - **done** — signals task completion and returns the final result.
-    - **clarify** — asks the user a question via the parent `EventBus` when
-      essential information is missing.
+    - **clarify** — asks the user a question and blocks until they answer.
+    - **send_status** — sends a brief progress update to the user during long operations.
 
     Example:
         ```python
@@ -84,13 +79,13 @@ class SupervisorAgent:
             ),
         ] = None,
         tools: Annotated[
-            AgentTools | None,
+            SupervisorTools | None,
             Doc("Pre-registered tools available to the agent during its run loop."),
         ] = None,
         mcp_servers: Annotated[
             list[MCPServer] | None,
             Doc(
-                "MCP servers connected during `prepare()`. Their tools are registered automatically."
+                "MCP servers connected during `prewarm()`. Their tools are registered automatically."
             ),
         ] = None,
         max_iterations: Annotated[
@@ -126,7 +121,7 @@ class SupervisorAgent:
         self.description = description
         self._instructions = instructions
         self._llm = llm
-        self._tools = AgentTools()
+        self._tools = SupervisorTools()
         if tools:
             self._tools._registry.tools = tools._registry.tools.copy()
         self._mcp_servers = mcp_servers or []
@@ -136,16 +131,22 @@ class SupervisorAgent:
         self.holding_instruction = holding_instruction
 
         self._event_bus: EventBus | None = None
+        self._channel: SupervisorChannel | None = None
         self._mcp_ready = asyncio.Event()
 
         self._register_done_tool()
         self._register_clarify_tool()
+        self._register_status_tool()
 
     def _inject(self, *, event_bus: EventBus, context: Any = None) -> None:
         self._event_bus = event_bus
         self._tools.set_context(
             SpecialToolParameters(event_bus=event_bus, context=context)
         )
+
+    def _attach_channel(self, channel: SupervisorChannel) -> None:
+        """Called by ToolCallingWatchdog at the start of each run."""
+        self._channel = channel
 
     def _register_done_tool(self) -> None:
         @self._tools.action(
@@ -165,16 +166,29 @@ class SupervisorAgent:
         async def clarify(
             question: Annotated[str, "The question to ask the user."],
         ) -> str:
-            answer_future: asyncio.Future[str] = (
-                asyncio.get_running_loop().create_future()
-            )
-            raise SupervisorAgentClarificationNeeded(
-                question=question,
-                answer_future=answer_future,
-            )
+            if self._channel is None:
+                raise RuntimeError(
+                    f"SupervisorAgent '{self.name}' has no channel. "
+                    "Ensure it is registered via RealtimeAgent."
+                )
+            return await self._channel.ask_user(question)
+
+    def _register_status_tool(self) -> None:
+        @self._tools.action(
+            "Send a progress update to the user when you have something meaningful to report "
+            "(e.g. 'I found an email from André Koch' or 'Sending the email now'). "
+            "Call this whenever you make a notable discovery or start an important action — "
+            "not for every routine step."
+        )
+        async def send_status(
+            message: Annotated[str, "A short status update spoken to the user."],
+        ) -> str:
+            if self._channel:
+                await self._channel.send_status(message)
+            return "Status sent."
 
     @timed()
-    async def prepare(
+    async def prewarm(
         self,
     ) -> Annotated[Self, Doc("Returns `self` for optional chaining.")]:
         """Prewarm MCP connections before `run()`.
@@ -184,6 +198,29 @@ class SupervisorAgent:
         if not self._mcp_ready.is_set():
             await self._connect_mcp_servers()
         return self
+
+    async def _connect_mcp_servers(self) -> None:
+        if not self._mcp_servers:
+            self._mcp_ready.set()
+            return
+
+        results = await asyncio.gather(
+            *[self._connect_server(s) for s in self._mcp_servers],
+            return_exceptions=True,
+        )
+
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error("MCP server connection failed: %s", result)
+
+        self._mcp_ready.set()
+
+    async def _connect_server(self, server: MCPServer) -> None:
+        await server.connect()
+        tools = await server.list_tools()
+        for tool in tools:
+            self._tools.register_mcp(tool, server)
+        logger.info("MCP server connected: %d tools loaded", len(tools))
 
     @timed()
     async def run(
@@ -205,40 +242,52 @@ class SupervisorAgent:
     ]:
         """Run the tool-calling loop until the task is complete or `max_iterations` is reached.
 
-        Calls `prepare()` automatically if not already done. Terminates when the
+        Calls `prewarm()` automatically if not already done. Terminates when the
         LLM calls the `done` tool, when it responds without tool calls, or when
         `max_iterations` is exhausted.
         """
-        await self.prepare()
+        await self.prewarm()
 
         messages = self._build_messages(task=task, context=context)
 
         tool_schema = self._tools.get_json_tool_schema()
         executed_tool_calls: list[ToolCall] = []
 
-        for _ in range(self._max_iterations):
-            response = await self._llm.invoke(messages, tools=tool_schema)
+        try:
+            for _ in range(self._max_iterations):
+                if self._channel and self._channel.is_cancelled:
+                    return SupervisorAgentResult(
+                        message="Task was cancelled by the user.",
+                        success=False,
+                        tool_calls=executed_tool_calls,
+                    )
 
-            if not response.has_tool_calls:
-                return SupervisorAgentResult(
-                    message=response.content,
-                    tool_calls=executed_tool_calls,
-                )
+                response = await self._llm.invoke(messages, tools=tool_schema)
 
-            messages.append(response.to_message())
+                if not response.has_tool_calls:
+                    return SupervisorAgentResult(
+                        message=response.content,
+                        tool_calls=executed_tool_calls,
+                    )
 
-            for tool_call in response.tool_calls:
-                result = await self._execute_tool_call(
-                    tool_call, executed_tool_calls, messages
-                )
-                if isinstance(result, SupervisorAgentResult):
-                    return result
+                messages.append(response.to_message())
 
-        return SupervisorAgentResult(
-            message="Max iterations reached without a final answer.",
-            success=False,
-            tool_calls=executed_tool_calls,
-        )
+                for tool_call in response.tool_calls:
+                    result = await self._execute_tool_call(
+                        tool_call, executed_tool_calls, messages
+                    )
+                    if isinstance(result, SupervisorAgentResult):
+                        return result
+
+            return SupervisorAgentResult(
+                message="Max iterations reached without a final answer.",
+                success=False,
+                tool_calls=executed_tool_calls,
+            )
+        finally:
+            if self._channel:
+                self._channel.close()
+                self._channel = None
 
     def _build_messages(self, task: str, context: str | None) -> list[Message]:
         messages = [SystemMessage(self._instructions)]
@@ -265,67 +314,11 @@ class SupervisorAgent:
                 message=done.result,
                 tool_calls=executed_tool_calls,
             )
-        except SupervisorAgentClarificationNeeded as clarification:
-            return await self._handle_clarification(
-                tool_call, clarification, executed_tool_calls, messages
-            )
 
         executed_tool_calls.append(
-            ToolCall(name=tool_call.name, arguments=tool_call.tool, result=str(result))
+            ToolCall(id=tool_call.id, name=tool_call.name, tool=tool_call.tool)
         )
         messages.append(
             ToolResultMessage(tool_call_id=tool_call.id, content=str(result))
         )
         return None
-
-    async def _handle_clarification(
-        self,
-        tool_call: ToolCall,
-        clarification: SupervisorAgentClarificationNeeded,
-        executed_tool_calls: list[ToolCall],
-        messages: list,
-    ) -> None:
-        logger.info(
-            "SupervisorAgent '%s' needs clarification: %s",
-            self.name,
-            clarification.question,
-        )
-
-        if self._event_bus is None:
-            raise RuntimeError(
-                f"SupervisorAgent '{self.name}' needs clarification but has no EventBus. "
-                "Ensure the agent is registered via RealtimeAgent."
-            ) from clarification
-
-        await self._event_bus.dispatch(clarification)
-        answer = await clarification.answer_future
-
-        logger.info("SupervisorAgent '%s' got answer: %s", self.name, answer)
-
-        executed_tool_calls.append(
-            ToolCall(name=tool_call.name, arguments=tool_call.tool, result=answer)
-        )
-        messages.append(ToolResultMessage(tool_call_id=tool_call.id, content=answer))
-
-    async def _connect_mcp_servers(self) -> None:
-        if not self._mcp_servers:
-            self._mcp_ready.set()
-            return
-
-        results = await asyncio.gather(
-            *[self._connect_server(s) for s in self._mcp_servers],
-            return_exceptions=True,
-        )
-
-        for result in results:
-            if isinstance(result, Exception):
-                logger.error("MCP server connection failed: %s", result)
-
-        self._mcp_ready.set()
-
-    async def _connect_server(self, server: MCPServer) -> None:
-        await server.connect()
-        tools = await server.list_tools()
-        for tool in tools:
-            self._tools.register_mcp(tool, server)
-        logger.info("MCP server connected: %d tools loaded", len(tools))

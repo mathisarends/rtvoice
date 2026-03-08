@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 if TYPE_CHECKING:
     from rtvoice.tools import RealtimeTools
@@ -70,6 +70,8 @@ class AudioPlaybackCompletedEvent(BaseModel):
 
 
 class AgentErrorEvent(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     error: AgentError
     event_id: str | None = None
 

@@ -1,12 +1,15 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
 from rtvoice.events import EventBus
+from rtvoice.events.views import AssistantInterruptedEvent, UserTranscriptCompletedEvent
 from rtvoice.realtime.schemas import (
     ConversationItemCreateEvent,
     ConversationResponseCreateEvent,
@@ -16,8 +19,12 @@ from rtvoice.realtime.schemas import (
     ToolChoiceMode,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
+from rtvoice.supervisor.channel import StatusMessage, SupervisorChannel, UserQuestion
 from rtvoice.tools import Tools
 from rtvoice.tools.registry.views import Tool
+
+if TYPE_CHECKING:
+    from rtvoice.supervisor import SupervisorAgent
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +44,9 @@ class _PendingToolCall:
     tool: Tool
     holding_response_id: str | None = None
     holding_done: asyncio.Event = field(default_factory=asyncio.Event)
+    channel: SupervisorChannel | None = None
+    channel_task: asyncio.Task | None = None
+    pending_clarification_future: asyncio.Future[str] | None = None
 
 
 class ToolCallingWatchdog:
@@ -45,10 +55,19 @@ class ToolCallingWatchdog:
         self._tools = tools
         self._websocket = websocket
         self._pending: list[_PendingToolCall] = []
+        self._supervisor_agents: dict[str, SupervisorAgent] = {}
 
         self._event_bus.subscribe(FunctionCallItem, self._handle_tool_call)
         self._event_bus.subscribe(ResponseCreatedEvent, self._on_response_created)
         self._event_bus.subscribe(ResponseDoneEvent, self._on_response_done)
+        self._event_bus.subscribe(
+            UserTranscriptCompletedEvent, self._on_user_transcript
+        )
+        self._event_bus.subscribe(AssistantInterruptedEvent, self._on_interrupted)
+
+    def register_supervisor(self, tool_name: str, agent: SupervisorAgent) -> None:
+        """Register a supervisor agent so the watchdog can attach a channel to its runs."""
+        self._supervisor_agents[tool_name] = agent
 
     async def _handle_tool_call(self, event: FunctionCallItem) -> None:
         tool = self._tools.get(event.name)
@@ -85,6 +104,12 @@ class ToolCallingWatchdog:
             await self._handle_immediate(event, tool)
 
     async def _handle_long_running(self, event: FunctionCallItem, tool: Tool) -> None:
+        channel: SupervisorChannel | None = None
+        supervisor = self._supervisor_agents.get(event.name)
+        if supervisor:
+            channel = SupervisorChannel()
+            supervisor._attach_channel(channel)
+
         result_task = asyncio.create_task(
             self._tools.execute(event.name, event.arguments or {})
         )
@@ -94,6 +119,7 @@ class ToolCallingWatchdog:
             tool_name=event.name,
             result_task=result_task,
             tool=tool,
+            channel=channel,
         )
         self._pending.append(pending)
 
@@ -108,7 +134,20 @@ class ToolCallingWatchdog:
 
     async def _deliver_result(self, pending: _PendingToolCall) -> None:
         await pending.holding_done.wait()
-        result = await pending.result_task
+
+        if pending.channel:
+            pending.channel_task = asyncio.create_task(self._process_channel(pending))
+
+        try:
+            result = await pending.result_task
+        except asyncio.CancelledError:
+            logger.info("Tool '%s' was cancelled", pending.tool_name)
+            if pending.channel_task and not pending.channel_task.done():
+                pending.channel_task.cancel()
+            return
+        finally:
+            if pending in self._pending:
+                self._pending.remove(pending)
 
         logger.info(
             "Tool result: '%s' | %s", pending.tool_name, self._serialize(result)
@@ -127,6 +166,35 @@ class ToolCallingWatchdog:
             if pending.tool.result_instruction
             else ConversationResponseCreateEvent()
         )
+
+    async def _process_channel(self, pending: _PendingToolCall) -> None:
+        """Relay supervisor channel events to the user via the RealtimeAgent."""
+        async for event in pending.channel.events():
+            if isinstance(event, StatusMessage):
+                logger.debug(
+                    "Supervisor status for '%s': %s", pending.tool_name, event.message
+                )
+                await self._websocket.send(
+                    ConversationResponseCreateEvent.from_instructions(
+                        f"Briefly summarise what was done in one short natural sentence (max 12 words). "
+                        f"If multiple steps are listed (separated by →), combine them into one sentence. "
+                        f"Steps: {event.message}",
+                        tool_choice=ToolChoiceMode.NONE,
+                    )
+                )
+            elif isinstance(event, UserQuestion):
+                logger.debug(
+                    "Supervisor clarification for '%s': %s",
+                    pending.tool_name,
+                    event.question,
+                )
+                pending.pending_clarification_future = event.answer_future
+                await self._websocket.send(
+                    ConversationResponseCreateEvent.from_instructions(
+                        f'Ask the user naturally and conversationally: "{event.question}"',
+                        tool_choice=ToolChoiceMode.NONE,
+                    )
+                )
 
     async def _handle_immediate(self, event: FunctionCallItem, tool: Tool) -> None:
         result = await self._tools.execute(event.name, event.arguments or {})
@@ -160,9 +228,37 @@ class ToolCallingWatchdog:
         for pending in self._pending:
             if pending.holding_response_id == event.response_id:
                 pending.holding_done.set()
-                self._pending.remove(pending)
                 logger.debug("Holding done for '%s'", pending.tool_name)
                 break
+
+    async def _on_user_transcript(self, event: UserTranscriptCompletedEvent) -> None:
+        for pending in self._pending:
+            if (
+                pending.pending_clarification_future
+                and not pending.pending_clarification_future.done()
+            ):
+                logger.debug(
+                    "Clarification answered for '%s': %s",
+                    pending.tool_name,
+                    event.transcript,
+                )
+                pending.pending_clarification_future.set_result(event.transcript)
+                pending.pending_clarification_future = None
+                return
+
+    async def _on_interrupted(self, _: AssistantInterruptedEvent) -> None:
+        if not self._pending:
+            return
+        logger.info(
+            "Interruption detected — cancelling %d pending tool(s)", len(self._pending)
+        )
+        for pending in self._pending:
+            if pending.channel:
+                pending.channel.cancel()
+            if pending.channel_task and not pending.channel_task.done():
+                pending.channel_task.cancel()
+            pending.result_task.cancel()
+        self._pending.clear()
 
     def _serialize(self, result: Any) -> str:
         if result is None:

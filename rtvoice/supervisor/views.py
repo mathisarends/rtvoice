@@ -1,7 +1,7 @@
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from pydantic import BaseModel
+from llmify import ToolCall
 
 
 class SupervisorAgentDone(Exception):
@@ -15,16 +15,11 @@ class SupervisorAgentClarificationNeeded(Exception):
     answer_future: asyncio.Future
 
 
-class ToolCall(BaseModel):
-    name: str
-    arguments: dict
-    result: str
-
-
-class SupervisorAgentResult(BaseModel):
+@dataclass
+class SupervisorAgentResult:
+    message: str
     success: bool = True
-    message: str | None = None
-    tool_calls: list[ToolCall] = []
+    tool_calls: list[ToolCall] = field(default_factory=list)
 
     def __str__(self) -> str:
         return self.message or ("Success" if self.success else "Failed")

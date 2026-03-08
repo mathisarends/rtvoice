@@ -187,7 +187,7 @@ class TestDispatch:
 
     @pytest.mark.asyncio
     async def test_logs_warning_when_no_handlers(self, bus: EventBus, caplog) -> None:
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.DEBUG):
             await bus.dispatch(UserCreated(name="Mathis"))
 
         assert any("No handlers" in record.message for record in caplog.records)

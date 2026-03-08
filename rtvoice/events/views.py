@@ -30,6 +30,18 @@ class StartAgentCommand:
 
 
 @dataclass
+class ConfigureSessionCommand:
+    model: RealtimeModel
+    instructions: str
+    voice: AssistantVoice
+    speech_speed: float
+    transcription_model: TranscriptionModel | None
+    noise_reduction: NoiseReduction
+    turn_detection: TurnDetection
+    tools: RealtimeTools
+
+
+@dataclass
 class UpdateSpeechSpeedCommand:
     speed: float
 

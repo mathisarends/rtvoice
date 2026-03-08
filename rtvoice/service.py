@@ -45,11 +45,13 @@ from rtvoice.views import (
     TurnDetection,
 )
 from rtvoice.watchdogs import (
+    AudioForwardWatchdog,
     AudioPlayerWatchdog,
     AudioRecordingWatchdog,
     ErrorWatchdog,
     InterruptionWatchdog,
     LifecycleWatchdog,
+    SessionWatchdog,
     SpeechStateWatchdog,
     ToolCallingWatchdog,
     TranscriptionWatchdog,
@@ -346,6 +348,12 @@ class RealtimeAgent[T]:
             audio_session=audio_session,
         )
         self._lifecycle_watchdog = LifecycleWatchdog(
+            event_bus=self._event_bus, websocket=self._websocket
+        )
+        self._session_watchdog = SessionWatchdog(
+            event_bus=self._event_bus, websocket=self._websocket
+        )
+        self._audio_forward_watchdog = AudioForwardWatchdog(
             event_bus=self._event_bus, websocket=self._websocket
         )
         self._interruption_watchdog = InterruptionWatchdog(

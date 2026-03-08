@@ -3,6 +3,7 @@ from collections.abc import Callable
 from typing import Any
 
 from rtvoice.realtime.schemas import FunctionParameters, FunctionTool
+from rtvoice.tools.views import VoidResult
 
 
 class Tool:
@@ -26,9 +27,11 @@ class Tool:
 
     async def execute(self, arguments: dict[str, Any]) -> Any:
         if inspect.iscoroutinefunction(self.function):
-            return await self.function(**arguments)
+            result = await self.function(**arguments)
         else:
-            return self.function(**arguments)
+            result = self.function(**arguments)
+
+        return result if result is not None else VoidResult()
 
     def to_pydantic(self) -> FunctionTool:
         return FunctionTool(

@@ -293,16 +293,21 @@ class SupervisorAgent:
         executed_tool_calls: list[ToolCall],
         messages: list,
     ) -> SupervisorAgentResult | None:
+        logger.debug("Executing tool call: '%s'", tool_call.name)
         await self._send_tool_status(tool_call)
 
         try:
             result = await self._tools.execute(tool_call.name, tool_call.tool)
         except SupervisorAgentDone as done:
+            logger.debug("Tool 'done' called with result: %s", done.result)
             return SupervisorAgentResult(
                 success=True,
                 message=done.result,
                 tool_calls=executed_tool_calls,
             )
+
+        if tool_call.name == "clarify":
+            logger.debug("Tool 'clarify' returned user answer: %s", result)
 
         executed_tool_calls.append(
             ToolCall(id=tool_call.id, name=tool_call.name, tool=tool_call.tool)
@@ -323,4 +328,6 @@ class SupervisorAgent:
         else:
             args_str = str(tool_call.tool)
 
-        await self._channel.send_status(f"{tool_call.name}({args_str})")
+        status = f"{tool_call.name}({args_str})"
+        logger.debug("Sending status update via channel: %s", status)
+        await self._channel.send_status(status)

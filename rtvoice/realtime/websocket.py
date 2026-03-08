@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import os
 from contextlib import suppress
 
 from dotenv import load_dotenv
@@ -10,6 +9,7 @@ from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import ConnectionClosed
 
 from rtvoice.events import EventBus
+from rtvoice.realtime.providers import RealtimeProvider
 from rtvoice.realtime.schemas import ServerEventAdapter
 from rtvoice.views import RealtimeModel
 
@@ -19,27 +19,19 @@ logger = logging.getLogger(__name__)
 
 
 class RealtimeWebSocket:
-    _BASE_URL = "wss://api.openai.com/v1/realtime"
-
     def __init__(
         self,
         model: RealtimeModel,
         event_bus: EventBus,
-        api_key: str | None = None,
+        provider: RealtimeProvider,
     ):
         self._model = model
         self._event_bus = event_bus
-        self._api_key = api_key or self._get_api_key_from_env()
+        self._provider = provider
 
         self._ws: ClientConnection | None = None
         self._receive_task: asyncio.Task | None = None
         self._is_connected: bool = False
-
-    def _get_api_key_from_env(self) -> str:
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise RuntimeError("OPENAI_API_KEY environment variable is not set.")
-        return api_key
 
     @property
     def is_connected(self) -> bool:
@@ -50,8 +42,8 @@ class RealtimeWebSocket:
             logger.debug("Closing existing connection")
             await self.close()
 
-        url = f"{self._BASE_URL}?model={self._model.value}"
-        headers = {"Authorization": f"Bearer {self._api_key}"}
+        url = self._provider.build_url(self._model.value)
+        headers = self._provider.build_headers()
 
         logger.info("Connecting to %s...", url)
 

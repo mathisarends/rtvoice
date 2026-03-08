@@ -8,6 +8,7 @@ from websockets import frames
 from websockets.exceptions import ConnectionClosed
 
 from rtvoice.events import EventBus
+from rtvoice.realtime.providers import OpenAIProvider
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.views import RealtimeModel
 
@@ -40,38 +41,38 @@ def socket(bus: EventBus) -> RealtimeWebSocket:
     return RealtimeWebSocket(
         model=RealtimeModel.GPT_REALTIME,
         event_bus=bus,
-        api_key="test-key",
+        provider=OpenAIProvider(api_key="test-key"),
     )
 
 
 class TestInit:
     def test_uses_provided_api_key(self, bus: EventBus) -> None:
+        provider = OpenAIProvider(api_key="my-key")
         ws = RealtimeWebSocket(
             model=RealtimeModel.GPT_REALTIME,
             event_bus=bus,
-            api_key="my-key",
+            provider=provider,
         )
 
-        assert ws._api_key == "my-key"
+        assert ws._provider is provider
 
     def test_reads_api_key_from_env(self, bus: EventBus) -> None:
         with patch.dict("os.environ", {"OPENAI_API_KEY": "env-key"}):
-            ws = RealtimeWebSocket(
+            provider = OpenAIProvider()
+            _ = RealtimeWebSocket(
                 model=RealtimeModel.GPT_REALTIME,
                 event_bus=bus,
+                provider=provider,
             )
 
-        assert ws._api_key == "env-key"
+        assert provider._api_key == "env-key"
 
     def test_raises_when_api_key_missing(self, bus: EventBus) -> None:
         with (
             patch.dict("os.environ", {}, clear=True),
             pytest.raises(RuntimeError, match="OPENAI_API_KEY"),
         ):
-            RealtimeWebSocket(
-                model=RealtimeModel.GPT_REALTIME,
-                event_bus=bus,
-            )
+            OpenAIProvider()
 
     def test_is_not_connected_initially(self, socket: RealtimeWebSocket) -> None:
         assert socket.is_connected is False
@@ -82,9 +83,7 @@ class TestConnect:
     async def test_sets_is_connected_true(self, socket: RealtimeWebSocket) -> None:
         ws = make_ws()
 
-        with patch(
-            "rtvoice.realtime.websocket.service.connect", AsyncMock(return_value=ws)
-        ):
+        with patch("rtvoice.realtime.websocket.connect", AsyncMock(return_value=ws)):
             await socket.connect()
 
         assert socket.is_connected is True
@@ -93,9 +92,7 @@ class TestConnect:
     async def test_starts_receive_task(self, socket: RealtimeWebSocket) -> None:
         ws = make_ws()
 
-        with patch(
-            "rtvoice.realtime.websocket.service.connect", AsyncMock(return_value=ws)
-        ):
+        with patch("rtvoice.realtime.websocket.connect", AsyncMock(return_value=ws)):
             await socket.connect()
 
         assert socket._receive_task is not None
@@ -109,7 +106,7 @@ class TestConnect:
         second_ws = make_ws()
 
         with patch(
-            "rtvoice.realtime.websocket.service.connect",
+            "rtvoice.realtime.websocket.connect",
             AsyncMock(side_effect=[first_ws, second_ws]),
         ):
             await socket.connect()
@@ -123,7 +120,7 @@ class TestConnect:
     ) -> None:
         with (
             patch(
-                "rtvoice.realtime.websocket.service.connect",
+                "rtvoice.realtime.websocket.connect",
                 AsyncMock(side_effect=OSError("refused")),
             ),
             pytest.raises(OSError),
@@ -143,7 +140,7 @@ class TestConnect:
             captured["headers"] = additional_headers
             return ws
 
-        with patch("rtvoice.realtime.websocket.service.connect", fake_connect):
+        with patch("rtvoice.realtime.websocket.connect", fake_connect):
             await socket.connect()
 
         assert captured["headers"]["Authorization"] == "Bearer test-key"
@@ -155,9 +152,7 @@ class TestSend:
     async def test_sends_serialized_message(self, socket: RealtimeWebSocket) -> None:
         ws = make_ws()
 
-        with patch(
-            "rtvoice.realtime.websocket.service.connect", AsyncMock(return_value=ws)
-        ):
+        with patch("rtvoice.realtime.websocket.connect", AsyncMock(return_value=ws)):
             await socket.connect()
             await socket.send(SampleMessage(type="ping"))
 
@@ -172,9 +167,7 @@ class TestSend:
     ) -> None:
         ws = make_ws()
 
-        with patch(
-            "rtvoice.realtime.websocket.service.connect", AsyncMock(return_value=ws)
-        ):
+        with patch("rtvoice.realtime.websocket.connect", AsyncMock(return_value=ws)):
             await socket.connect()
             await socket.send(SampleMessage(type="ping", value=None))
 
@@ -193,9 +186,7 @@ class TestClose:
     async def test_sets_is_connected_false(self, socket: RealtimeWebSocket) -> None:
         ws = make_ws()
 
-        with patch(
-            "rtvoice.realtime.websocket.service.connect", AsyncMock(return_value=ws)
-        ):
+        with patch("rtvoice.realtime.websocket.connect", AsyncMock(return_value=ws)):
             await socket.connect()
             await socket.close()
 
@@ -205,9 +196,7 @@ class TestClose:
     async def test_closes_websocket(self, socket: RealtimeWebSocket) -> None:
         ws = make_ws()
 
-        with patch(
-            "rtvoice.realtime.websocket.service.connect", AsyncMock(return_value=ws)
-        ):
+        with patch("rtvoice.realtime.websocket.connect", AsyncMock(return_value=ws)):
             await socket.connect()
             await socket.close()
 
@@ -217,9 +206,7 @@ class TestClose:
     async def test_cancels_receive_task(self, socket: RealtimeWebSocket) -> None:
         ws = make_ws()
 
-        with patch(
-            "rtvoice.realtime.websocket.service.connect", AsyncMock(return_value=ws)
-        ):
+        with patch("rtvoice.realtime.websocket.connect", AsyncMock(return_value=ws)):
             await socket.connect()
             task = socket._receive_task
             await socket.close()
@@ -236,9 +223,7 @@ class TestClose:
     async def test_sets_ws_to_none(self, socket: RealtimeWebSocket) -> None:
         ws = make_ws()
 
-        with patch(
-            "rtvoice.realtime.websocket.service.connect", AsyncMock(return_value=ws)
-        ):
+        with patch("rtvoice.realtime.websocket.connect", AsyncMock(return_value=ws)):
             await socket.connect()
             await socket.close()
 
@@ -258,9 +243,7 @@ class TestReceiveLoop:
         valid_event = json.dumps({"type": "session.created", "session": {}})
         ws = make_ws([valid_event])
 
-        with patch(
-            "rtvoice.realtime.websocket.service.connect", AsyncMock(return_value=ws)
-        ):
+        with patch("rtvoice.realtime.websocket.connect", AsyncMock(return_value=ws)):
             await socket.connect()
             await asyncio.sleep(0.05)
 
@@ -271,9 +254,7 @@ class TestReceiveLoop:
         unknown_event = json.dumps({"type": "totally.unknown.event"})
         ws = make_ws([unknown_event])
 
-        with patch(
-            "rtvoice.realtime.websocket.service.connect", AsyncMock(return_value=ws)
-        ):
+        with patch("rtvoice.realtime.websocket.connect", AsyncMock(return_value=ws)):
             await socket.connect()
             await asyncio.sleep(0.05)
 
@@ -295,9 +276,7 @@ class TestReceiveLoop:
 
         ws.__aiter__ = lambda self: aiter_raises()
 
-        with patch(
-            "rtvoice.realtime.websocket.service.connect", AsyncMock(return_value=ws)
-        ):
+        with patch("rtvoice.realtime.websocket.connect", AsyncMock(return_value=ws)):
             await socket.connect()
             await asyncio.sleep(0.05)
 

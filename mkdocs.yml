@@ -42,6 +42,7 @@ nav:
     - Listener: guides/listener.md
   - API Reference:
     - RealtimeAgent: api/agent.md
+    - Providers: api/providers.md
     - Configuration: api/configuration.md
     - Lifecycle Events: api/lifecycle_events.md
     - Supervisor: api/supervisor.md

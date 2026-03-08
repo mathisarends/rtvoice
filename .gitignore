@@ -28,3 +28,6 @@ build/
 *.egg-info/
 
 .ruff_cache/
+
+
+site/

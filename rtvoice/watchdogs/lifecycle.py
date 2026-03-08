@@ -34,7 +34,9 @@ class LifecycleWatchdog:
     def __init__(self, event_bus: EventBus, websocket: RealtimeWebSocket):
         self._event_bus = event_bus
         self._websocket = websocket
+        self._subscribe(event_bus)
 
+    def _subscribe(self, event_bus: EventBus) -> None:
         event_bus.subscribe(StartAgentCommand, self._on_start_agent_command)
         event_bus.subscribe(AgentStoppedEvent, self._on_agent_stopped)
         event_bus.subscribe(
@@ -58,7 +60,6 @@ class LifecycleWatchdog:
     async def _on_agent_stopped(self, _: AgentStoppedEvent) -> None:
         if not self._websocket.is_connected:
             return
-
         await self._websocket.close()
         logger.info("Agent session stopped")
 
@@ -68,14 +69,12 @@ class LifecycleWatchdog:
         if not self._websocket.is_connected:
             logger.warning("Cannot send audio — WebSocket not connected")
             return
-
         await self._websocket.send(event)
 
     async def _on_update_speech_speed(self, command: UpdateSpeechSpeedCommand) -> None:
         if not self._websocket.is_connected:
             logger.warning("Cannot update speed — WebSocket not connected")
             return
-
         await self._websocket.send(SpeedUpdateEvent.from_speed(command.speed))
 
     def _build_session_config(
@@ -102,7 +101,7 @@ class LifecycleWatchdog:
                 type=NoiseReductionType(command.noise_reduction),
             ),
             transcription=InputAudioTranscriptionConfig(
-                model=command.transcription_model,
+                model=command.transcription_model
             )
             if command.transcription_model is not None
             else None,

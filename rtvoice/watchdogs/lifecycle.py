@@ -21,7 +21,7 @@ from rtvoice.realtime.schemas import (
     ToolChoiceMode,
     TurnDetectionConfig,
 )
-from rtvoice.realtime.websocket.service import RealtimeWebSocket
+from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
 from rtvoice.views import SemanticVAD, ServerVAD, TurnDetection
 

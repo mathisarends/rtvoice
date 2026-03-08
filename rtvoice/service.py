@@ -28,6 +28,7 @@ from rtvoice.events.views import (
     UserTranscriptCompletedEvent,
 )
 from rtvoice.mcp import MCPServer
+from rtvoice.realtime.providers import OpenAIProvider, RealtimeProvider
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
 from rtvoice.supervisor import SupervisorAgent
@@ -186,10 +187,18 @@ class RealtimeAgent[T]:
                 "via `AudioRecordingWatchdog`."
             ),
         ] = None,
+        provider: Annotated[
+            RealtimeProvider | None,
+            Doc(
+                "Realtime API provider. Defaults to `OpenAIProvider`. "
+                "Pass an `AzureOpenAIProvider` instance to use Azure OpenAI."
+            ),
+        ] = None,
         api_key: Annotated[
             str | None,
             Doc(
-                "OpenAI API key. Falls back to the `OPENAI_API_KEY` environment variable."
+                "OpenAI API key. Shortcut for `OpenAIProvider(api_key=...)`. "
+                "Deprecated — prefer passing `provider=OpenAIProvider(api_key=...)` explicitly."
             ),
         ] = None,
     ):
@@ -198,6 +207,9 @@ class RealtimeAgent[T]:
                 "mcp_servers are set on RealtimeAgent alongside a supervisor. "
                 "Consider attaching MCP servers to the SupervisorAgent instead."
             )
+
+        if api_key and provider:
+            raise ValueError("Pass either `provider` or `api_key`, not both.")
 
         self._instructions = instructions
         self._model = model
@@ -257,7 +269,9 @@ class RealtimeAgent[T]:
             self._register_supervisor_agent(self._supervisor_agent)
 
         self._websocket = RealtimeWebSocket(
-            model=self._model, event_bus=self._event_bus, api_key=api_key
+            model=self._model,
+            event_bus=self._event_bus,
+            provider=provider or OpenAIProvider(api_key=api_key),
         )
 
         audio_session = AudioSession(

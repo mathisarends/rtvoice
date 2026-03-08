@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from typing import Annotated, Any, Self
 
@@ -10,6 +11,7 @@ from llmify import (
     ToolResultMessage,
     UserMessage,
 )
+from pydantic import BaseModel
 from typing_extensions import Doc
 
 from rtvoice.events.bus import EventBus
@@ -136,7 +138,6 @@ class SupervisorAgent:
 
         self._register_done_tool()
         self._register_clarify_tool()
-        self._register_status_tool()
 
     def _inject(self, *, event_bus: EventBus, context: Any = None) -> None:
         self._event_bus = event_bus
@@ -172,20 +173,6 @@ class SupervisorAgent:
                     "Ensure it is registered via RealtimeAgent."
                 )
             return await self._channel.ask_user(question)
-
-    def _register_status_tool(self) -> None:
-        @self._tools.action(
-            "Send a progress update to the user when you have something meaningful to report "
-            "(e.g. 'I found an email from André Koch' or 'Sending the email now'). "
-            "Call this whenever you make a notable discovery or start an important action — "
-            "not for every routine step."
-        )
-        async def send_status(
-            message: Annotated[str, "A short status update spoken to the user."],
-        ) -> str:
-            if self._channel:
-                await self._channel.send_status(message)
-            return "Status sent."
 
     @timed()
     async def prewarm(
@@ -306,6 +293,8 @@ class SupervisorAgent:
         executed_tool_calls: list[ToolCall],
         messages: list,
     ) -> SupervisorAgentResult | None:
+        await self._send_tool_status(tool_call)
+
         try:
             result = await self._tools.execute(tool_call.name, tool_call.tool)
         except SupervisorAgentDone as done:
@@ -322,3 +311,16 @@ class SupervisorAgent:
             ToolResultMessage(tool_call_id=tool_call.id, content=str(result))
         )
         return None
+
+    async def _send_tool_status(self, tool_call: ToolCall) -> None:
+        if not self._channel or tool_call.name in ("done", "clarify"):
+            return
+
+        if isinstance(tool_call.tool, BaseModel):
+            args_str = tool_call.tool.model_dump_json(exclude_none=True)
+        elif isinstance(tool_call.tool, dict):
+            args_str = json.dumps(tool_call.tool, ensure_ascii=False)
+        else:
+            args_str = str(tool_call.tool)
+
+        await self._channel.send_status(f"{tool_call.name}({args_str})")

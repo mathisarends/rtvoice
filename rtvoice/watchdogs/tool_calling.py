@@ -169,11 +169,17 @@ class ToolCallingWatchdog:
 
     async def _process_channel(self, pending: _PendingToolCall) -> None:
         """Relay supervisor channel events to the user via the RealtimeAgent."""
+        status_response_done = asyncio.Event()
+        status_response_done.set()
+        pending._status_response_done = status_response_done
+
         async for event in pending.channel.events():
             if isinstance(event, StatusMessage):
                 logger.debug(
                     "Supervisor status for '%s': %s", pending.tool_name, event.message
                 )
+                await status_response_done.wait()
+                status_response_done.clear()
                 await self._websocket.send(
                     ConversationResponseCreateEvent.from_instructions(
                         f"Briefly summarise what was done in one short natural sentence (max 12 words). "
@@ -188,6 +194,8 @@ class ToolCallingWatchdog:
                     pending.tool_name,
                     event.question,
                 )
+                await status_response_done.wait()
+                status_response_done.clear()
                 pending.pending_clarification_future = event.answer_future
                 await self._websocket.send(
                     ConversationResponseCreateEvent.from_instructions(
@@ -244,7 +252,6 @@ class ToolCallingWatchdog:
                 )
                 pending.pending_clarification_future.set_result(event.transcript)
                 pending.pending_clarification_future = None
-                return
 
     async def _on_interrupted(self, _: AssistantInterruptedEvent) -> None:
         if not self._pending:

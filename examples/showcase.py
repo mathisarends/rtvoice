@@ -35,12 +35,15 @@ Running
 """
 
 import asyncio
+import logging
 import random
 from typing import Annotated
 
 from llmify import ChatOpenAI
 
 from rtvoice import RealtimeAgent, SupervisorAgent, Tools
+
+logging.getLogger("rtvoice.events.bus").setLevel(logging.WARNING)
 
 
 def build_deployment_tools() -> Tools:

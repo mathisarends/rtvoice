@@ -188,15 +188,18 @@ class SupervisorWatchdog:
             if self._pending is pending:
                 self._pending = None
 
-        await self._await_channel_task(pending)
+        try:
+            await self._await_channel_task(pending)
 
-        serialized = self._ws.serialize(result)
-        logger.info("Tool result: '%s' [result=%s]", pending.tool_name, serialized)
-        await self._ws.send_function_call_output(pending.call_id, serialized)
-        await self._ws.send_response_event(pending.tool)
+            serialized = self._ws.serialize(result)
+            logger.info("Tool result: '%s' [result=%s]", pending.tool_name, serialized)
+            await self._ws.send_function_call_output(pending.call_id, serialized)
+            await self._ws.send_response_event(pending.tool)
 
-        await self._dispatch_busy_if_idle()
-        await self._eject_cancel_tool()
+            await self._dispatch_busy_if_idle()
+            await self._eject_cancel_tool()
+        except Exception:
+            logger.exception("Failed to deliver result for '%s'", pending.tool_name)
 
     async def _await_channel_task(self, pending: PendingToolCall) -> None:
         if not pending.channel_task:

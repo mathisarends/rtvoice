@@ -70,8 +70,8 @@ class SupervisorChannel:
 
     async def events(self) -> AsyncIterator[SupervisorChannelEvent]:
         while True:
-            get_task: asyncio.Task = asyncio.ensure_future(self._queue.get())
-            close_task: asyncio.Task = asyncio.ensure_future(self._close_event.wait())
+            get_task = asyncio.ensure_future(self._queue.get())
+            close_task = asyncio.ensure_future(self._close_event.wait())
 
             try:
                 done, pending = await asyncio.wait(
@@ -88,12 +88,10 @@ class SupervisorChannel:
                 with contextlib.suppress(asyncio.CancelledError, Exception):
                     await task
 
-            if close_task in done and not get_task.done():
-                while not self._queue.empty():
-                    yield self._queue.get_nowait()
+            if close_task in done:
                 return
 
-            if get_task.done():
+            if get_task in done:
                 try:
                     yield get_task.result()
                 except Exception:

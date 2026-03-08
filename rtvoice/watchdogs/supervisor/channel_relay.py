@@ -20,6 +20,12 @@ class ChannelRelay:
             return
 
         async for event in pending.channel.events():
+            logger.debug(
+                "Channel event received for '%s': %s",
+                pending.tool_name,
+                type(event).__name__,
+            )
+
             await pending.supervisor_run.response_done.wait()
             pending.supervisor_run.response_done.clear()
 
@@ -38,6 +44,8 @@ class ChannelRelay:
                     event.answer_future
                 )
                 await self._send_clarification(event.question)
+
+        logger.debug("Channel events exhausted for '%s'", pending.tool_name)
 
     async def _send_status(self, message: str) -> None:
         await self._websocket.send(

@@ -37,6 +37,7 @@ Running
 import asyncio
 import logging
 import random
+from datetime import datetime
 from typing import Annotated
 
 from llmify import ChatOpenAI
@@ -183,6 +184,12 @@ def build_deployment_analyst() -> SupervisorAgent:
 
 
 async def main() -> None:
+    tools = Tools()
+
+    @tools.action("Gets the current time in a human-friendly format.")
+    def get_current_time() -> str:
+        return datetime.now().strftime("%I:%M %p")
+
     agent = RealtimeAgent(
         instructions=(
             "You are Echo, a concise voice assistant for a Kubernetes platform team.\n\n"
@@ -194,6 +201,7 @@ async def main() -> None:
         supervisor_agent=build_deployment_analyst(),
         inactivity_timeout_seconds=90,
         inactivity_timeout_enabled=True,
+        tools=tools,
     )
 
     print("🎙  Echo is ready.\n")

@@ -4,6 +4,7 @@ import logging
 
 from rtvoice.events import EventBus
 from rtvoice.events.views import (
+    AssistantStoppedRespondingEvent,
     CancelSupervisorCommand,
     SupervisorFinishedEvent,
     SupervisorStartedEvent,
@@ -61,6 +62,10 @@ class SupervisorWatchdog:
             UserTranscriptCompletedEvent, self._on_clarification_response
         )
         self._event_bus.subscribe(CancelSupervisorCommand, self._on_cancel_supervisor)
+
+        self._event_bus.subscribe(
+            AssistantStoppedRespondingEvent, self._on_assistant_stopped
+        )
 
     def register_supervisor(self, tool_name: str, agent: SupervisorAgent) -> None:
         self._supervisor_tool_name = tool_name
@@ -121,17 +126,10 @@ class SupervisorWatchdog:
         if self._pending is None:
             return
         pending = self._pending
-        if pending.holding_response_id is None:
-            pending.holding_response_id = event.response_id
-            logger.debug(
-                "Holding response '%s' tracked for '%s'",
-                event.response_id,
-                pending.tool_name,
-            )
-        elif pending.supervisor_run.response_id is None:
+        if pending.supervisor_run.response_id is None:
             pending.supervisor_run.response_id = event.response_id
             logger.debug(
-                "Status response '%s' tracked for '%s'",
+                "Response '%s' tracked for '%s'",
                 event.response_id,
                 pending.tool_name,
             )
@@ -140,10 +138,7 @@ class SupervisorWatchdog:
         if self._pending is None:
             return
         pending = self._pending
-        if pending.holding_response_id == event.response_id:
-            pending.holding_done.set()
-            logger.debug("Holding done for '%s'", pending.tool_name)
-        elif pending.supervisor_run.response_id == event.response_id:
+        if pending.supervisor_run.response_id == event.response_id:
             pending.supervisor_run.response_id = None
             pending.supervisor_run.response_done.set()
 
@@ -174,7 +169,6 @@ class SupervisorWatchdog:
         await self._eject_cancel_tool()
 
     async def _deliver_result(self, pending: PendingToolCall) -> None:
-        await pending.holding_done.wait()
         pending.channel_task = asyncio.create_task(self._channel_relay.run(pending))
 
         try:
@@ -247,3 +241,7 @@ class SupervisorWatchdog:
         await self._event_bus.dispatch(
             UpdateSessionToolsCommand(tools=self._tools.get_tool_schema())
         )
+
+    async def _on_assistant_stopped(self, _: AssistantStoppedRespondingEvent) -> None:
+        if self._pending is not None:
+            self._pending.channel.notify_assistant_stopped()

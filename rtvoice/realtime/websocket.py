@@ -3,7 +3,6 @@ import json
 import logging
 from contextlib import suppress
 
-from dotenv import load_dotenv
 from pydantic import BaseModel, ValidationError
 from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import ConnectionClosed
@@ -12,8 +11,6 @@ from rtvoice.events import EventBus
 from rtvoice.realtime.providers import RealtimeProvider
 from rtvoice.realtime.schemas import ServerEventAdapter
 from rtvoice.views import RealtimeModel
-
-load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
 

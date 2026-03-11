@@ -66,6 +66,10 @@ class AgentSessionConnectedEvent(BaseModel):
     pass
 
 
+class AgentStartingEvent(BaseModel):
+    pass
+
+
 class AgentStoppedEvent(BaseModel):
     pass
 

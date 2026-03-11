@@ -234,6 +234,12 @@ class AgentListener:
         ```
     """
 
+    async def on_agent_starting(self) -> None:
+        """Called immediately when run() is invoked, before any I/O or WebSocket setup.
+
+        Use this to show loading states in the UI before the session is ready.
+        """
+
     async def on_agent_session_connected(self) -> None:
         """Called once the WebSocket session has been established and is ready."""
 
@@ -288,6 +294,12 @@ class AgentListener:
 
     async def on_assistant_stopped_responding(self) -> None:
         """Called when the assistant has finished streaming its audio response."""
+
+    async def on_supervisor_started(self) -> None:
+        """Called when the supervisor agent starts running."""
+
+    async def on_supervisor_finished(self) -> None:
+        """Called when the supervisor agent finishes running."""
 
 
 class AgentResult(BaseModel):

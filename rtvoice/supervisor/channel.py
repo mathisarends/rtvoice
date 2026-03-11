@@ -1,8 +1,5 @@
-from __future__ import annotations
-
 import asyncio
 import contextlib
-import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
@@ -22,34 +19,43 @@ type SupervisorChannelEvent = StatusMessage | UserQuestion
 
 
 class SupervisorChannel:
-    def __init__(self, min_status_interval: float = 8.0) -> None:
+    def __init__(self, post_speech_delay: float = 5.5) -> None:
         self._queue: asyncio.Queue[SupervisorChannelEvent] = asyncio.Queue()
         self._cancel_event = asyncio.Event()
         self._close_event = asyncio.Event()
-        self._min_status_interval = min_status_interval
-        self._last_status_at: float = 0.0
+        self._post_speech_delay = post_speech_delay
         self._pending_statuses: list[str] = []
+        self._flush_task: asyncio.Task[None] | None = None
 
     async def send_status(self, message: str) -> None:
+        """Buffer a status message. It will be flushed after the assistant
+        stops speaking and post_speech_delay seconds have elapsed."""
         if self._close_event.is_set():
             return
-
-        now = time.monotonic()
         self._pending_statuses.append(message)
 
-        if now - self._last_status_at < self._min_status_interval:
+    def notify_assistant_stopped(self) -> None:
+        """Signal that the assistant finished speaking.
+        Starts (or restarts) the post-speech delay timer."""
+        if self._close_event.is_set():
             return
+        if self._flush_task and not self._flush_task.done():
+            self._flush_task.cancel()
+        self._flush_task = asyncio.create_task(self._flush_after_delay())
 
-        self._last_status_at = now
-        bundled = self._flush_pending()
-        await self._queue.put(StatusMessage(message=bundled))
+    async def _flush_after_delay(self) -> None:
+        try:
+            await asyncio.sleep(self._post_speech_delay)
+        except asyncio.CancelledError:
+            return
+        if self._pending_statuses and not self._close_event.is_set():
+            bundled = self._flush_pending()
+            await self._queue.put(StatusMessage(message=bundled))
 
     def _flush_pending(self) -> str:
         messages = self._pending_statuses.copy()
         self._pending_statuses.clear()
-        if len(messages) == 1:
-            return messages[0]
-        return " → ".join(messages)
+        return messages[0] if len(messages) == 1 else " → ".join(messages)
 
     async def ask_user(self, question: str) -> str:
         loop = asyncio.get_running_loop()
@@ -66,6 +72,8 @@ class SupervisorChannel:
 
     def close(self) -> None:
         self._pending_statuses.clear()
+        if self._flush_task and not self._flush_task.done():
+            self._flush_task.cancel()
         self._close_event.set()
 
     async def events(self) -> AsyncIterator[SupervisorChannelEvent]:

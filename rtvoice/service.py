@@ -15,6 +15,7 @@ from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentErrorEvent,
     AgentSessionConnectedEvent,
+    AgentStartingEvent,
     AgentStoppedEvent,
     AssistantInterruptedEvent,
     AssistantStartedRespondingEvent,
@@ -22,6 +23,8 @@ from rtvoice.events.views import (
     AssistantTranscriptCompletedEvent,
     CancelSupervisorCommand,
     StartAgentCommand,
+    SupervisorFinishedEvent,
+    SupervisorStartedEvent,
     UpdateSpeechSpeedCommand,
     UserInactivityCountdownEvent,
     UserInactivityTimeoutEvent,
@@ -439,6 +442,10 @@ class RealtimeAgent[T]:
             lambda e: self._listener.on_assistant_transcript(e.transcript),
         )
         self._event_bus.subscribe(
+            AgentStartingEvent,
+            lambda _: self._listener.on_agent_starting(),
+        )
+        self._event_bus.subscribe(
             AgentSessionConnectedEvent,
             lambda _: self._listener.on_agent_session_connected(),
         )
@@ -468,6 +475,14 @@ class RealtimeAgent[T]:
             UserInactivityCountdownEvent,
             lambda e: self._listener.on_user_inactivity_countdown(e.remaining_seconds),
         )
+        self._event_bus.subscribe(
+            SupervisorStartedEvent,
+            lambda _: self._listener.on_supervisor_started(),
+        )
+        self._event_bus.subscribe(
+            SupervisorFinishedEvent,
+            lambda _: self._listener.on_supervisor_finished(),
+        )
 
     def _warn_listener_countdown_mismatch_if_necessary(self) -> None:
         listener_cls = type(self._listener)
@@ -491,6 +506,22 @@ class RealtimeAgent[T]:
                 listener_cls.__name__,
             )
 
+        self._warn_listener_supervisor_mismatch_if_necessary()
+
+    def _warn_listener_supervisor_mismatch_if_necessary(self) -> None:
+        listener_cls = type(self._listener)
+        overrides_supervisor = any(
+            getattr(listener_cls, method, None) is not getattr(AgentListener, method)
+            for method in ("on_supervisor_started", "on_supervisor_finished")
+        )
+
+        if overrides_supervisor and not self._supervisor_agent:
+            logger.warning(
+                "Listener '%s' overrides on_supervisor_started or on_supervisor_finished "
+                "but no supervisor_agent is configured — callbacks will never fire.",
+                listener_cls.__name__,
+            )
+
     async def _on_inactivity_timeout(self, event: UserInactivityTimeoutEvent) -> None:
         logger.info(
             "User inactivity timeout after %.1f seconds - triggering shutdown",
@@ -511,6 +542,8 @@ class RealtimeAgent[T]:
         inactivity timeout, or through an error watchdog.
         """
         logger.info("Starting agent...")
+
+        await self._event_bus.dispatch(AgentStartingEvent())
         await self.prewarm()
 
         await self._event_bus.dispatch(

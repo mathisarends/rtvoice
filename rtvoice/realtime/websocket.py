@@ -1,16 +1,19 @@
 import asyncio
 import json
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import suppress
 
+from dotenv import load_dotenv
 from pydantic import BaseModel, ValidationError
 from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import ConnectionClosed
 
-from rtvoice.events import EventBus
 from rtvoice.realtime.providers import RealtimeProvider
 from rtvoice.realtime.schemas import ServerEventAdapter
 from rtvoice.views import RealtimeModel
+
+load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
 
@@ -19,16 +22,15 @@ class RealtimeWebSocket:
     def __init__(
         self,
         model: RealtimeModel,
-        event_bus: EventBus,
         provider: RealtimeProvider,
     ):
         self._model = model
-        self._event_bus = event_bus
         self._provider = provider
 
         self._ws: ClientConnection | None = None
         self._receive_task: asyncio.Task | None = None
         self._is_connected: bool = False
+        self._event_queue: asyncio.Queue = asyncio.Queue()
 
     @property
     def is_connected(self) -> bool:
@@ -78,13 +80,20 @@ class RealtimeWebSocket:
         self._ws = None
         logger.info("Connection closed")
 
+    async def events(self) -> AsyncGenerator:
+        while True:
+            event = await self._event_queue.get()
+            if event is None:
+                return
+            yield event
+
     async def _receive_loop(self) -> None:
         try:
             async for message in self._ws:
                 try:
                     data = json.loads(message)
                     event = ServerEventAdapter.validate_python(data)
-                    await self._event_bus.dispatch(event)
+                    self._event_queue.put_nowait(event)
                 except ValidationError:
                     logger.debug(
                         "Skipping unknown event type: %s",
@@ -93,3 +102,5 @@ class RealtimeWebSocket:
         except ConnectionClosed as e:
             self._is_connected = False
             logger.info("Connection closed: %s", e)
+        finally:
+            self._event_queue.put_nowait(None)

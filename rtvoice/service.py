@@ -281,7 +281,6 @@ class RealtimeAgent[T]:
 
         self._websocket = RealtimeWebSocket(
             model=self._model,
-            event_bus=self._event_bus,
             provider=provider or OpenAIProvider(api_key=api_key),
         )
 

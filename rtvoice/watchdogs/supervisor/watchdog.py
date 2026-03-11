@@ -9,7 +9,6 @@ from rtvoice.events.views import (
     SupervisorFinishedEvent,
     SupervisorStartedEvent,
     UpdateSessionToolsCommand,
-    UserTranscriptCompletedEvent,
 )
 from rtvoice.realtime.schemas import (
     ConversationResponseCreateEvent,
@@ -21,10 +20,11 @@ from rtvoice.realtime.schemas import (
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.supervisor import SupervisorAgent
 from rtvoice.supervisor.channel import SupervisorChannel
+from rtvoice.supervisor.views import SupervisorAgentResult
 from rtvoice.tools import Tools
 from rtvoice.tools.registry.views import Tool
 from rtvoice.watchdogs.supervisor.channel_relay import ChannelRelay
-from rtvoice.watchdogs.supervisor.views import PendingSupervisorRun, PendingToolCall
+from rtvoice.watchdogs.supervisor.views import PendingToolCall
 from rtvoice.watchdogs.tool_calling.helpers import ToolCallWebSocketHelper
 
 logger = logging.getLogger(__name__)
@@ -51,6 +51,7 @@ class SupervisorWatchdog:
         self._websocket = websocket
         self._cancel_tool = cancel_tool
         self._pending: PendingToolCall | None = None
+        self._pending_resume: tuple[list, str] | None = None
         self._supervisor_agent: SupervisorAgent | None = None
         self._supervisor_tool_name: str | None = None
         self._channel_relay = ChannelRelay(websocket)
@@ -58,11 +59,7 @@ class SupervisorWatchdog:
         self._event_bus.subscribe(FunctionCallItem, self._handle_tool_call)
         self._event_bus.subscribe(ResponseCreatedEvent, self._on_response_created)
         self._event_bus.subscribe(ResponseDoneEvent, self._on_response_done)
-        self._event_bus.subscribe(
-            UserTranscriptCompletedEvent, self._on_clarification_response
-        )
         self._event_bus.subscribe(CancelSupervisorCommand, self._on_cancel_supervisor)
-
         self._event_bus.subscribe(
             AssistantStoppedRespondingEvent, self._on_assistant_stopped
         )
@@ -98,6 +95,13 @@ class SupervisorWatchdog:
             json.dumps(event.arguments or {}, ensure_ascii=False),
         )
 
+        # Inject resume state into the agent before the task is created so
+        # _handoff can read it synchronously when the coroutine starts.
+        if self._pending_resume is not None:
+            history, clarify_call_id = self._pending_resume
+            self._pending_resume = None
+            self._supervisor_agent._set_resume(history, clarify_call_id)
+
         channel = await self._create_supervisor_channel()
         result_task = asyncio.create_task(
             self._tools.execute(event.name, event.arguments or {})
@@ -109,7 +113,6 @@ class SupervisorWatchdog:
             result_task=result_task,
             tool=tool,
             channel=channel,
-            supervisor_run=PendingSupervisorRun(),
         )
         self._pending = pending
 
@@ -126,8 +129,8 @@ class SupervisorWatchdog:
         if self._pending is None:
             return
         pending = self._pending
-        if pending.supervisor_run.response_id is None:
-            pending.supervisor_run.response_id = event.response_id
+        if pending.holding_response_id is None:
+            pending.holding_response_id = event.response_id
             logger.debug(
                 "Response '%s' tracked for '%s'",
                 event.response_id,
@@ -138,24 +141,9 @@ class SupervisorWatchdog:
         if self._pending is None:
             return
         pending = self._pending
-        if pending.supervisor_run.response_id == event.response_id:
-            pending.supervisor_run.response_id = None
-            pending.supervisor_run.response_done.set()
-
-    async def _on_clarification_response(
-        self, event: UserTranscriptCompletedEvent
-    ) -> None:
-        if self._pending is None:
-            return
-        future = self._pending.supervisor_run.pending_clarification_future
-        if future and not future.done():
-            logger.debug(
-                "Clarification answered for '%s' [transcript=%s]",
-                self._pending.tool_name,
-                event.transcript,
-            )
-            future.set_result(event.transcript)
-            self._pending.supervisor_run.pending_clarification_future = None
+        if pending.holding_response_id == event.response_id:
+            pending.holding_response_id = None
+            pending.holding_done.set()
 
     async def _on_cancel_supervisor(self, _: CancelSupervisorCommand) -> None:
         if self._pending is None:
@@ -163,6 +151,7 @@ class SupervisorWatchdog:
         logger.info(
             "Cancelling supervisor task '%s' by request", self._pending.tool_name
         )
+        self._pending_resume = None
         self._cancel_pending(self._pending)
         self._pending = None
         await self._dispatch_busy_if_idle()
@@ -185,6 +174,13 @@ class SupervisorWatchdog:
         try:
             await self._await_channel_task(pending)
 
+            if (
+                isinstance(result, SupervisorAgentResult)
+                and result.clarification_needed
+            ):
+                await self._handle_clarification(pending, result)
+                return
+
             serialized = self._ws.serialize(result)
             logger.info("Tool result: '%s' [result=%s]", pending.tool_name, serialized)
             await self._ws.send_function_call_output(pending.call_id, serialized)
@@ -194,6 +190,32 @@ class SupervisorWatchdog:
             await self._eject_cancel_tool()
         except Exception:
             logger.exception("Failed to deliver result for '%s'", pending.tool_name)
+
+    async def _handle_clarification(
+        self, pending: PendingToolCall, result: SupervisorAgentResult
+    ) -> None:
+        logger.info(
+            "Supervisor '%s' needs clarification: %s",
+            pending.tool_name,
+            result.clarification_needed,
+        )
+        self._pending_resume = (result.resume_history, result.clarify_call_id)
+
+        await self._ws.send_function_call_output(
+            pending.call_id,
+            "Clarification needed before completing this task.",
+        )
+        await self._websocket.send(
+            ConversationResponseCreateEvent.from_instructions(
+                f'Ask the user: "{result.clarification_needed}". '
+                f"Once they answer, call {self._supervisor_tool_name} again "
+                f"with their answer in the `clarification_answer` field. "
+                f"Do not make up the answer yourself.",
+                tool_choice=ToolChoiceMode.AUTO,
+            )
+        )
+        await self._dispatch_busy_if_idle()
+        await self._eject_cancel_tool()
 
     async def _await_channel_task(self, pending: PendingToolCall) -> None:
         if not pending.channel_task:
@@ -225,9 +247,6 @@ class SupervisorWatchdog:
         return channel
 
     def _cancel_pending(self, pending: PendingToolCall) -> None:
-        future = pending.supervisor_run.pending_clarification_future
-        if future and not future.done():
-            future.cancel()
         if pending.channel_task and not pending.channel_task.done():
             pending.channel_task.cancel()
         pending.channel.cancel()

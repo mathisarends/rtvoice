@@ -5,7 +5,6 @@ from rtvoice.realtime.schemas import (
     ToolChoiceMode,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
-from rtvoice.supervisor.channel import StatusMessage, UserQuestion
 from rtvoice.watchdogs.supervisor.views import PendingToolCall
 
 logger = logging.getLogger(__name__)
@@ -26,24 +25,13 @@ class ChannelRelay:
                 type(event).__name__,
             )
 
-            await pending.supervisor_run.response_done.wait()
-            pending.supervisor_run.response_done.clear()
+            await pending.holding_done.wait()
+            pending.holding_done.clear()
 
-            if isinstance(event, StatusMessage):
-                logger.debug(
-                    "Supervisor status for '%s': %s", pending.tool_name, event.message
-                )
-                await self._send_status(event.message)
-            elif isinstance(event, UserQuestion):
-                logger.debug(
-                    "Supervisor clarification for '%s': %s",
-                    pending.tool_name,
-                    event.question,
-                )
-                pending.supervisor_run.pending_clarification_future = (
-                    event.answer_future
-                )
-                await self._send_clarification(event.question)
+            logger.debug(
+                "Supervisor status for '%s': %s", pending.tool_name, event.message
+            )
+            await self._send_status(event.message)
 
         logger.debug("Channel events exhausted for '%s'", pending.tool_name)
 
@@ -53,14 +41,6 @@ class ChannelRelay:
                 f"Briefly summarise what was done in one short natural sentence (max 12 words). "
                 f"If multiple steps are listed (separated by →), combine them into one sentence. "
                 f"Steps: {message}",
-                tool_choice=ToolChoiceMode.NONE,
-            )
-        )
-
-    async def _send_clarification(self, question: str) -> None:
-        await self._websocket.send(
-            ConversationResponseCreateEvent.from_instructions(
-                f'Ask the user naturally and conversationally: "{question}"',
                 tool_choice=ToolChoiceMode.NONE,
             )
         )

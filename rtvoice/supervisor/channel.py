@@ -9,18 +9,9 @@ class StatusMessage:
     message: str
 
 
-@dataclass
-class UserQuestion:
-    question: str
-    answer_future: asyncio.Future[str]
-
-
-type SupervisorChannelEvent = StatusMessage | UserQuestion
-
-
 class SupervisorChannel:
     def __init__(self, post_speech_delay: float = 5.5) -> None:
-        self._queue: asyncio.Queue[SupervisorChannelEvent] = asyncio.Queue()
+        self._queue: asyncio.Queue[StatusMessage] = asyncio.Queue()
         self._cancel_event = asyncio.Event()
         self._close_event = asyncio.Event()
         self._post_speech_delay = post_speech_delay
@@ -57,12 +48,6 @@ class SupervisorChannel:
         self._pending_statuses.clear()
         return messages[0] if len(messages) == 1 else " → ".join(messages)
 
-    async def ask_user(self, question: str) -> str:
-        loop = asyncio.get_running_loop()
-        future: asyncio.Future[str] = loop.create_future()
-        await self._queue.put(UserQuestion(question=question, answer_future=future))
-        return await future
-
     @property
     def is_cancelled(self) -> bool:
         return self._cancel_event.is_set()
@@ -76,7 +61,7 @@ class SupervisorChannel:
             self._flush_task.cancel()
         self._close_event.set()
 
-    async def events(self) -> AsyncIterator[SupervisorChannelEvent]:
+    async def events(self) -> AsyncIterator[StatusMessage]:
         while True:
             get_task = asyncio.ensure_future(self._queue.get())
             close_task = asyncio.ensure_future(self._close_event.wait())

@@ -19,7 +19,8 @@ from rtvoice.mcp import MCPServer
 from rtvoice.shared.decorators import timed
 from rtvoice.supervisor.channel import SupervisorChannel
 from rtvoice.supervisor.views import (
-    SupervisorAgentDone,
+    ClarifySignal,
+    DoneSignal,
     SupervisorAgentResult,
 )
 from rtvoice.tools import SupervisorTools
@@ -31,26 +32,26 @@ logger = logging.getLogger(__name__)
 class SupervisorAgent:
     """Agentic sub-agent that can be delegated tasks from a `RealtimeAgent`.
 
-    Runs an LLM-driven tool-calling loop to complete a given task, with built-in
-    support for clarification questions, MCP server integration, and handoff
-    from a parent voice agent.
+        Runs an LLM-driven tool-calling loop to complete a given task, with built-in
+        support for clarification questions, MCP server integration, and handoff
+        from a parent voice agent.
 
-    The agent exposes three special tools to the LLM automatically:
+        The agent exposes three special tools to the LLM automatically:
 
-    - **done** — signals task completion and returns the final result.
-    - **clarify** — asks the user a question and blocks until they answer.
-    - **send_status** — sends a brief progress update to the user during long operations.
+        - **done** — signals task completion and returns the final result.
+        - **clarify** — asks the user a question and blocks until they answer.
+        - **send_status** — sends a brief progress update to the user during long operations.
 
-    Example:
-        ```python
-        agent = SupervisorAgent(
-            name="calendar_agent",
-            description="Manages the user's calendar.",
-            instructions="You are a calendar assistant ...",
-            llm=OpenAIChat(model="gpt-4o"),
-        )
-        result = await agent.run("Schedule a meeting with Alice tomorrow at 3pm.")
-        ```
+        Example:
+    ```python
+            agent = SupervisorAgent(
+                name="calendar_agent",
+                description="Manages the user's calendar.",
+                instructions="You are a calendar assistant ...",
+                llm=OpenAIChat(model="gpt-4o"),
+            )
+            result = await agent.run("Schedule a meeting with Alice tomorrow at 3pm.")
+    ```
     """
 
     def __init__(
@@ -135,6 +136,7 @@ class SupervisorAgent:
         self._event_bus: EventBus | None = None
         self._channel: SupervisorChannel | None = None
         self._mcp_ready = asyncio.Event()
+        self._pending_resume: tuple[list, str] | None = None
 
         self._register_done_tool()
         self._register_clarify_tool()
@@ -156,23 +158,20 @@ class SupervisorAgent:
         )
         def done(
             result: Annotated[str, "The final answer or result to return to the user."],
-        ) -> str:
-            raise SupervisorAgentDone(result)
+        ) -> DoneSignal:
+            return DoneSignal(result)
 
     def _register_clarify_tool(self) -> None:
         @self._tools.action(
             "Ask the user a clarifying question when essential information is missing. "
-            "Use sparingly – only when you cannot proceed without the answer."
+            "Use sparingly – only when you cannot proceed without the answer. "
+            "Calling this tool immediately returns control to the user; "
+            "you will be called again once they answer."
         )
-        async def clarify(
+        def clarify(
             question: Annotated[str, "The question to ask the user."],
-        ) -> str:
-            if self._channel is None:
-                raise RuntimeError(
-                    f"SupervisorAgent '{self.name}' has no channel. "
-                    "Ensure it is registered via RealtimeAgent."
-                )
-            return await self._channel.ask_user(question)
+        ) -> ClarifySignal:
+            return ClarifySignal(question)
 
     @timed()
     async def prewarm(
@@ -209,6 +208,14 @@ class SupervisorAgent:
             self._tools.register_mcp(tool, server)
         logger.info("MCP server connected: %d tools loaded", len(tools))
 
+    def _set_resume(self, history: list, clarify_call_id: str) -> None:
+        self._pending_resume = (history, clarify_call_id)
+
+    def _consume_resume(self) -> tuple[list, str] | None:
+        resume = self._pending_resume
+        self._pending_resume = None
+        return resume
+
     @timed()
     async def run(
         self,
@@ -221,21 +228,50 @@ class SupervisorAgent:
                 "full context without re-asking the user."
             ),
         ] = None,
+        clarification_answer: Annotated[
+            str | None,
+            Doc(
+                "Answer to a previous clarification question. "
+                "Must be provided together with `resume_history` and `clarify_call_id`."
+            ),
+        ] = None,
+        clarify_call_id: Annotated[
+            str | None,
+            Doc(
+                "Tool call ID of the previous `clarify` invocation. "
+                "Used to construct a valid tool-result message so the LLM sees a "
+                "correct message history on resume."
+            ),
+        ] = None,
+        resume_history: Annotated[
+            list | None,
+            Doc(
+                "Message history from a previous run that was interrupted by a "
+                "clarification request. When provided, the loop resumes from this "
+                "state rather than starting fresh."
+            ),
+        ] = None,
     ) -> Annotated[
         SupervisorAgentResult,
         Doc(
-            "Final result including the message, success flag, and executed tool calls."
+            "Final result including the message, success flag, and executed tool calls. "
+            "If `clarification_needed` is set the caller must re-invoke `run()` with "
+            "the user's answer and the returned `resume_history` and `clarify_call_id`."
         ),
     ]:
-        """Run the tool-calling loop until the task is complete or `max_iterations` is reached.
-
-        Calls `prewarm()` automatically if not already done. Terminates when the
-        LLM calls the `done` tool, when it responds without tool calls, or when
-        `max_iterations` is exhausted.
-        """
+        """Run the tool-calling loop until the task is complete or `max_iterations` is reached."""
         await self.prewarm()
 
-        messages = self._build_messages(task=task, context=context)
+        if resume_history is not None and clarification_answer is not None:
+            messages = resume_history
+            messages.append(
+                ToolResultMessage(
+                    tool_call_id=clarify_call_id or "",
+                    content=clarification_answer,
+                )
+            )
+        else:
+            messages = self._build_messages(task=task, context=context)
 
         tool_schema = self._tools.get_json_tool_schema()
         executed_tool_calls: list[ToolCall] = []
@@ -260,11 +296,11 @@ class SupervisorAgent:
                 messages.append(response.to_message())
 
                 for tool_call in response.tool_calls:
-                    result = await self._execute_tool_call(
+                    early_return = await self._execute_tool_call(
                         tool_call, executed_tool_calls, messages
                     )
-                    if isinstance(result, SupervisorAgentResult):
-                        return result
+                    if early_return is not None:
+                        return early_return
 
             return SupervisorAgentResult(
                 message="Max iterations reached without a final answer.",
@@ -296,18 +332,26 @@ class SupervisorAgent:
         logger.debug("Executing tool call: '%s'", tool_call.name)
         await self._send_tool_status(tool_call)
 
-        try:
-            result = await self._tools.execute(tool_call.name, tool_call.tool)
-        except SupervisorAgentDone as done:
-            logger.debug("Tool 'done' called with result: %s", done.result)
-            return SupervisorAgentResult(
-                success=True,
-                message=done.result,
-                tool_calls=executed_tool_calls,
-            )
+        result = await self._tools.execute(tool_call.name, tool_call.tool)
 
-        if tool_call.name == "clarify":
-            logger.debug("Tool 'clarify' returned user answer: %s", result)
+        match result:
+            case DoneSignal(result=msg):
+                logger.debug("Tool 'done' called with result: %s", msg)
+                return SupervisorAgentResult(
+                    success=True,
+                    message=msg,
+                    tool_calls=executed_tool_calls,
+                )
+            case ClarifySignal(question=question):
+                logger.debug("Tool 'clarify' called with question: %s", question)
+                return SupervisorAgentResult(
+                    message="",
+                    success=False,
+                    tool_calls=executed_tool_calls,
+                    clarification_needed=question,
+                    resume_history=list(messages),
+                    clarify_call_id=tool_call.id,
+                )
 
         executed_tool_calls.append(
             ToolCall(id=tool_call.id, name=tool_call.name, tool=tool_call.tool)

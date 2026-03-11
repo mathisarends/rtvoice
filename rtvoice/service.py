@@ -38,6 +38,7 @@ from rtvoice.realtime.schemas import FunctionParameters
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
 from rtvoice.supervisor import SupervisorAgent
+from rtvoice.supervisor.views import SupervisorAgentResult
 from rtvoice.tools import RealtimeTools, SpecialToolParameters
 from rtvoice.tools.registry.views import Tool
 from rtvoice.views import (
@@ -339,10 +340,25 @@ class RealtimeAgent[T]:
                 ),
             ],
             conversation_history: ConversationHistory,
-        ) -> str:
+            clarification_answer: Annotated[
+                str | None,
+                Doc(
+                    "If this is a follow-up call after a clarification request, "
+                    "provide the user's answer here. Leave empty for the initial call."
+                ),
+            ] = None,
+        ) -> SupervisorAgentResult:
+            resume = agent._consume_resume()
+            if resume is not None:
+                history, clarify_call_id = resume
+                return await agent.run(
+                    task,
+                    clarification_answer=clarification_answer,
+                    clarify_call_id=clarify_call_id,
+                    resume_history=history,
+                )
             context = conversation_history.format() if conversation_history else None
-            result = await agent.run(task, context=context)
-            return result.message or ""
+            return await agent.run(task, context=context)
 
         async def _cancel_agent(event_bus: EventBus) -> str:
             await event_bus.dispatch(CancelSupervisorCommand())

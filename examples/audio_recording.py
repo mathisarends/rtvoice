@@ -2,8 +2,12 @@ import asyncio
 import logging
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from rtvoice import RealtimeAgent
 from rtvoice.views import AssistantVoice
+
+load_dotenv(override=True)
 
 logging.basicConfig(level=logging.INFO)
 

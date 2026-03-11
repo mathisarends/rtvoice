@@ -1,5 +1,9 @@
+from dotenv import load_dotenv
+
 from rtvoice import AgentListener, RealtimeAgent
 from rtvoice.views import TranscriptionModel
+
+load_dotenv(override=True)
 
 
 class ConsolePrinter(AgentListener):

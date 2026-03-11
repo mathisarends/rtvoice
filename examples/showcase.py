@@ -40,9 +40,12 @@ import random
 from datetime import datetime
 from typing import Annotated
 
+from dotenv import load_dotenv
 from llmify import ChatOpenAI
 
 from rtvoice import RealtimeAgent, SupervisorAgent, Tools
+
+load_dotenv(override=True)
 
 logging.getLogger("rtvoice.events.bus").setLevel(logging.WARNING)
 

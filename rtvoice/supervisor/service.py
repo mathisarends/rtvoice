@@ -208,7 +208,7 @@ class SupervisorAgent:
             self._tools.register_mcp(tool, server)
         logger.info("MCP server connected: %d tools loaded", len(tools))
 
-    def _set_resume(self, history: list, clarify_call_id: str) -> None:
+    def set_resume(self, history: list, clarify_call_id: str) -> None:
         self._pending_resume = (history, clarify_call_id)
 
     def _consume_resume(self) -> tuple[list, str] | None:
@@ -374,4 +374,4 @@ class SupervisorAgent:
 
         status = f"{tool_call.name}({args_str})"
         logger.debug("Sending status update via channel: %s", status)
-        await self._channel.send_status(status)
+        self._channel.buffer_status(status)

@@ -1,5 +1,5 @@
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from rtvoice.supervisor.channel import SupervisorChannel
 from rtvoice.tools.registry.views import Tool
@@ -19,5 +19,3 @@ class PendingToolCall:
     tool: Tool
     channel: SupervisorChannel
     channel_task: asyncio.Task | None = None
-    holding_response_id: str | None = None
-    holding_done: asyncio.Event = field(default_factory=_preset_event)

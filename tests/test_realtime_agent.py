@@ -304,12 +304,13 @@ class TestPrepare:
 
     @pytest.mark.asyncio
     async def test_prepares_supervisor_agent(self) -> None:
-        supervisor = AsyncMock()
+        supervisor = MagicMock()
         supervisor.name = "helper"
         supervisor.description = "Helps"
         supervisor.handoff_instructions = None
         supervisor.result_instructions = None
         supervisor.holding_instruction = None
+        supervisor.prewarm = AsyncMock()
         agent = make_agent(supervisor_agent=supervisor)
 
         await agent.prewarm()

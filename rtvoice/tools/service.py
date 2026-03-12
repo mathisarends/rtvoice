@@ -172,6 +172,9 @@ class Tools:
         new._registry.tools = self._registry.tools.copy()
         return new
 
+    def is_registered(self, tool: Tool) -> bool:
+        return tool in self._registry.tools.values()
+
 
 class RealtimeTools(Tools):
     """Tool registry for the OpenAI Realtime API.

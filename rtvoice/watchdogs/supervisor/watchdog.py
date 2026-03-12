@@ -41,13 +41,12 @@ class SupervisorWatchdog:
         event_bus: EventBus,
         tools: Tools,
         websocket: RealtimeWebSocket,
-        cancel_tool: Tool | None = None,
     ) -> None:
         self._event_bus = event_bus
         self._tools = tools
         self._ws = ToolCallWebSocketHelper(websocket)
         self._websocket = websocket
-        self._cancel_tool = cancel_tool
+        self._cancel_tool = self._register_cancel_tool()
         self._active: PendingToolCall | None = None
         self._queued_clarification_resume: tuple[list, str] | None = None
         self._supervisor_agent: SupervisorAgent | None = None
@@ -67,6 +66,22 @@ class SupervisorWatchdog:
         logger.debug(
             "Supervisor agent '%s' registered on tool '%s'", agent.name, tool_name
         )
+
+    def _register_cancel_tool(self) -> Tool:
+        @self._tools.action(
+            "Cancel the currently running background agent. "
+            "Call this when the user explicitly wants to stop, cancel, or abandon the ongoing task.",
+            name="cancel_agent",
+            result_instruction="Tell the user naturally that the task has been cancelled.",
+        )
+        async def _cancel_agent(event_bus: EventBus) -> str:
+            await event_bus.dispatch(CancelSupervisorCommand())
+            return "The agent task has been cancelled."
+
+        tool = self._tools.get("cancel_agent")
+        if not tool:
+            raise RuntimeError("Failed to register cancel tool")
+        return tool
 
     async def _handle_tool_call(self, event: FunctionCallItem) -> None:
         if event.name != self._supervisor_tool_name:
@@ -251,10 +266,7 @@ class SupervisorWatchdog:
             await self._event_bus.dispatch(SupervisorFinishedEvent())
 
     async def _inject_cancel_tool(self) -> None:
-        if (
-            self._cancel_tool
-            and self._cancel_tool.name not in self._tools._registry.tools
-        ):
+        if not self._tools.is_registered(self._cancel_tool):
             self._tools.inject_tool(self._cancel_tool)
             await self._sync_session_tools()
             logger.debug("Cancel tool '%s' injected", self._cancel_tool.name)

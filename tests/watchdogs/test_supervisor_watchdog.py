@@ -9,17 +9,13 @@ from rtvoice.events.views import (
     SupervisorFinishedEvent,
     SupervisorStartedEvent,
     UpdateSessionToolsCommand,
-    UserTranscriptCompletedEvent,
 )
 from rtvoice.realtime.schemas import (
     ConversationItemCreateEvent,
     ConversationResponseCreateEvent,
     FunctionCallItem,
-    RealtimeResponseObject,
-    RealtimeServerEvent,
-    ResponseCreatedEvent,
-    ResponseDoneEvent,
 )
+from rtvoice.tools import RealtimeTools
 from rtvoice.tools.registry.views import Tool
 from rtvoice.watchdogs.supervisor.watchdog import SupervisorWatchdog
 
@@ -37,19 +33,13 @@ def websocket() -> AsyncMock:
 
 
 @pytest.fixture
-def tools() -> MagicMock:
-    t = MagicMock()
-    t.get = MagicMock(return_value=None)
-    t.execute = AsyncMock(return_value="tool_result")
-    t._registry = MagicMock()
-    t._registry.tools = {}
-    t.get_tool_schema = MagicMock(return_value=[])
-    return t
+def tools() -> RealtimeTools:
+    return RealtimeTools()
 
 
 @pytest.fixture
 def watchdog(
-    event_bus: EventBus, tools: MagicMock, websocket: AsyncMock
+    event_bus: EventBus, tools: RealtimeTools, websocket: AsyncMock
 ) -> SupervisorWatchdog:
     return SupervisorWatchdog(event_bus, tools, websocket)
 
@@ -70,47 +60,55 @@ def make_function_call_item(
     )
 
 
-def make_tool(name: str = "slow_job") -> MagicMock:
-    tool = MagicMock(spec=Tool)
-    tool.name = name
-    tool.result_instruction = None
-    tool.holding_instruction = None
+def register_tool(
+    tools: RealtimeTools,
+    name: str = "slow_job",
+    result_instruction: str | None = None,
+    holding_instruction: str | None = None,
+) -> Tool:
+    @tools.action(
+        "Test tool",
+        name=name,
+        result_instruction=result_instruction,
+        holding_instruction=holding_instruction,
+    )
+    async def _tool(query: str | None = None) -> str:
+        return "tool_result"
+
+    tool = tools.get(name)
+    assert tool is not None
     return tool
 
 
-def make_cancel_tool(name: str = "cancel_job") -> MagicMock:
-    tool = MagicMock(spec=Tool)
-    tool.name = name
-    return tool
+def register_tool_with_calls(
+    tools: RealtimeTools,
+    name: str = "slow_job",
+    result_instruction: str | None = None,
+    holding_instruction: str | None = None,
+) -> tuple[Tool, list[dict]]:
+    calls: list[dict] = []
+
+    @tools.action(
+        "Test tool",
+        name=name,
+        result_instruction=result_instruction,
+        holding_instruction=holding_instruction,
+    )
+    async def _tool(query: str | None = None) -> str:
+        kwargs = {"query": query} if query is not None else {}
+        calls.append(kwargs)
+        return "tool_result"
+
+    tool = tools.get(name)
+    assert tool is not None
+    return tool, calls
 
 
 def make_supervisor_agent() -> MagicMock:
     agent = MagicMock()
+    agent.name = "supervisor"
     agent._attach_channel.side_effect = lambda channel: channel.close()
     return agent
-
-
-def make_response_created(response_id: str = "resp_hold") -> ResponseCreatedEvent:
-    return ResponseCreatedEvent(
-        type=RealtimeServerEvent.RESPONSE_CREATED,
-        event_id="evt_002",
-        response=RealtimeResponseObject(id=response_id),
-    )
-
-
-def make_response_done(response_id: str = "resp_hold") -> ResponseDoneEvent:
-    return ResponseDoneEvent(
-        type=RealtimeServerEvent.RESPONSE_DONE,
-        event_id="evt_003",
-        response=RealtimeResponseObject(id=response_id),
-    )
-
-
-async def complete_holding_phase(
-    event_bus: EventBus, response_id: str = "resp_hold"
-) -> None:
-    await event_bus.dispatch(make_response_created(response_id))
-    await event_bus.dispatch(make_response_done(response_id))
 
 
 class TestNonSupervisorToolIgnored:
@@ -120,9 +118,9 @@ class TestNonSupervisorToolIgnored:
         event_bus: EventBus,
         watchdog: SupervisorWatchdog,
         websocket: AsyncMock,
-        tools: MagicMock,
+        tools: RealtimeTools,
     ) -> None:
-        tools.get.return_value = make_tool(name="other")
+        register_tool(tools, name="other")
         watchdog.register_supervisor("slow_job", make_supervisor_agent())
 
         await event_bus.dispatch(make_function_call_item(name="other"))
@@ -134,14 +132,14 @@ class TestNonSupervisorToolIgnored:
         self,
         event_bus: EventBus,
         watchdog: SupervisorWatchdog,
-        tools: MagicMock,
+        tools: RealtimeTools,
     ) -> None:
-        tools.get.return_value = make_tool(name="other")
+        _, calls = register_tool_with_calls(tools, name="other")
         watchdog.register_supervisor("slow_job", make_supervisor_agent())
 
         await event_bus.dispatch(make_function_call_item(name="other"))
 
-        tools.execute.assert_not_called()
+        assert calls == []
 
 
 class TestToolCallHandling:
@@ -155,10 +153,8 @@ class TestToolCallHandling:
         event_bus: EventBus,
         watchdog: SupervisorWatchdog,
         websocket: AsyncMock,
-        tools: MagicMock,
+        tools: RealtimeTools,
     ) -> None:
-        tools.get.return_value = None
-
         await event_bus.dispatch(make_function_call_item())
 
         websocket.send.assert_not_called()
@@ -168,13 +164,11 @@ class TestToolCallHandling:
         self,
         event_bus: EventBus,
         watchdog: SupervisorWatchdog,
-        tools: MagicMock,
+        tools: RealtimeTools,
     ) -> None:
-        tools.get.return_value = None
-
         await event_bus.dispatch(make_function_call_item())
-
-        tools.execute.assert_not_called()
+        tool = tools.get("slow_job")
+        assert tool is None
 
     @pytest.mark.asyncio
     async def test_sends_holding_response_immediately(
@@ -182,9 +176,9 @@ class TestToolCallHandling:
         event_bus: EventBus,
         watchdog: SupervisorWatchdog,
         websocket: AsyncMock,
-        tools: MagicMock,
+        tools: RealtimeTools,
     ) -> None:
-        tools.get.return_value = make_tool()
+        register_tool(tools)
 
         await event_bus.dispatch(make_function_call_item())
 
@@ -197,9 +191,9 @@ class TestToolCallHandling:
         self,
         event_bus: EventBus,
         watchdog: SupervisorWatchdog,
-        tools: MagicMock,
+        tools: RealtimeTools,
     ) -> None:
-        tools.get.return_value = make_tool()
+        register_tool(tools)
         received: list[SupervisorStartedEvent] = []
 
         async def capture(e: SupervisorStartedEvent) -> None:
@@ -216,15 +210,15 @@ class TestToolCallHandling:
         self,
         event_bus: EventBus,
         watchdog: SupervisorWatchdog,
-        tools: MagicMock,
+        tools: RealtimeTools,
     ) -> None:
-        tools.get.return_value = make_tool()
+        _, calls = register_tool_with_calls(tools)
 
         await event_bus.dispatch(
             make_function_call_item(arguments={"query": "Berlin weather"})
         )
 
-        tools.execute.assert_called_once_with("slow_job", {"query": "Berlin weather"})
+        assert calls == [{"query": "Berlin weather"}]
 
     @pytest.mark.asyncio
     async def test_duplicate_call_sends_already_in_progress(
@@ -232,16 +226,18 @@ class TestToolCallHandling:
         event_bus: EventBus,
         watchdog: SupervisorWatchdog,
         websocket: AsyncMock,
-        tools: MagicMock,
+        tools: RealtimeTools,
     ) -> None:
-        tools.get.return_value = make_tool()
+        register_tool(tools)
         _block = asyncio.Event()
 
-        async def blocking_execute(name: str, arguments: dict) -> str:
+        async def blocking_execute(query: str | None = None) -> str:
             await _block.wait()
             return "done"
 
-        tools.execute = blocking_execute
+        tool = tools.get("slow_job")
+        assert tool is not None
+        tool.function = blocking_execute
 
         await event_bus.dispatch(make_function_call_item(call_id="call_1"))
         await event_bus.dispatch(make_function_call_item(call_id="call_2"))
@@ -266,13 +262,18 @@ class TestResultDelivery:
         event_bus: EventBus,
         watchdog: SupervisorWatchdog,
         websocket: AsyncMock,
-        tools: MagicMock,
+        tools: RealtimeTools,
     ) -> None:
-        tools.get.return_value = make_tool()
-        tools.execute = AsyncMock(return_value="job_done")
+        register_tool(tools)
+        tool = tools.get("slow_job")
+        assert tool is not None
+
+        async def done_tool(query: str | None = None) -> str:
+            return "job_done"
+
+        tool.function = done_tool
 
         await event_bus.dispatch(make_function_call_item(call_id="call_lr"))
-        await complete_holding_phase(event_bus)
         await asyncio.sleep(0.05)
 
         sent_types = [type(c.args[0]) for c in websocket.send.call_args_list]
@@ -284,13 +285,18 @@ class TestResultDelivery:
         event_bus: EventBus,
         watchdog: SupervisorWatchdog,
         websocket: AsyncMock,
-        tools: MagicMock,
+        tools: RealtimeTools,
     ) -> None:
-        tools.get.return_value = make_tool()
-        tools.execute = AsyncMock(return_value="job_done")
+        register_tool(tools)
+        tool = tools.get("slow_job")
+        assert tool is not None
+
+        async def done_tool(query: str | None = None) -> str:
+            return "job_done"
+
+        tool.function = done_tool
 
         await event_bus.dispatch(make_function_call_item(call_id="call_lr"))
-        await complete_holding_phase(event_bus)
         await asyncio.sleep(0.05)
 
         sent_types = [type(c.args[0]) for c in websocket.send.call_args_list]
@@ -301,26 +307,37 @@ class TestResultDelivery:
         self,
         event_bus: EventBus,
         watchdog: SupervisorWatchdog,
-        tools: MagicMock,
+        tools: RealtimeTools,
     ) -> None:
-        tools.get.return_value = make_tool()
-        tools.execute = AsyncMock(return_value="done")
+        register_tool(tools)
+        tool = tools.get("slow_job")
+        assert tool is not None
+
+        async def done_tool(query: str | None = None) -> str:
+            return "done"
+
+        tool.function = done_tool
 
         await event_bus.dispatch(make_function_call_item())
-        await complete_holding_phase(event_bus)
         await asyncio.sleep(0.05)
 
-        assert watchdog._pending is None
+        assert watchdog._active is None
 
     @pytest.mark.asyncio
     async def test_dispatches_finished_event_after_result(
         self,
         event_bus: EventBus,
         watchdog: SupervisorWatchdog,
-        tools: MagicMock,
+        tools: RealtimeTools,
     ) -> None:
-        tools.get.return_value = make_tool()
-        tools.execute = AsyncMock(return_value="done")
+        register_tool(tools)
+        tool = tools.get("slow_job")
+        assert tool is not None
+
+        async def done_tool(query: str | None = None) -> str:
+            return "done"
+
+        tool.function = done_tool
         received: list[SupervisorFinishedEvent] = []
 
         async def capture(e: SupervisorFinishedEvent) -> None:
@@ -329,21 +346,28 @@ class TestResultDelivery:
         event_bus.subscribe(SupervisorFinishedEvent, capture)
 
         await event_bus.dispatch(make_function_call_item())
-        await complete_holding_phase(event_bus)
         await asyncio.sleep(0.05)
 
         assert len(received) == 1
 
     @pytest.mark.asyncio
-    async def test_result_not_delivered_before_holding_done(
+    async def test_result_not_delivered_before_tool_completes(
         self,
         event_bus: EventBus,
         watchdog: SupervisorWatchdog,
         websocket: AsyncMock,
-        tools: MagicMock,
+        tools: RealtimeTools,
     ) -> None:
-        tools.get.return_value = make_tool()
-        tools.execute = AsyncMock(return_value="done")
+        register_tool(tools)
+        block = asyncio.Event()
+
+        async def blocking_execute(query: str | None = None) -> str:
+            await block.wait()
+            return "done"
+
+        tool = tools.get("slow_job")
+        assert tool is not None
+        tool.function = blocking_execute
 
         await event_bus.dispatch(make_function_call_item())
         await asyncio.sleep(0.05)
@@ -351,133 +375,11 @@ class TestResultDelivery:
         sent_types = [type(c.args[0]) for c in websocket.send.call_args_list]
         assert ConversationItemCreateEvent not in sent_types
 
+        block.set()
+        await asyncio.sleep(0.05)
 
-class TestResponseTracking:
-    @pytest.fixture(autouse=True)
-    def setup_supervisor(self, watchdog: SupervisorWatchdog) -> None:
-        watchdog.register_supervisor("slow_job", make_supervisor_agent())
-
-    @pytest.mark.asyncio
-    async def test_first_response_created_sets_holding_id(
-        self,
-        event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
-        tools: MagicMock,
-    ) -> None:
-        tools.get.return_value = make_tool()
-        _block = asyncio.Event()
-
-        async def blocking_execute(name: str, arguments: dict) -> str:
-            await _block.wait()
-            return "done"
-
-        tools.execute = blocking_execute
-
-        await event_bus.dispatch(make_function_call_item())
-        await event_bus.dispatch(make_response_created("resp_hold"))
-
-        assert watchdog._pending.holding_response_id == "resp_hold"
-
-    @pytest.mark.asyncio
-    async def test_response_done_for_wrong_id_does_not_set_holding_done(
-        self,
-        event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
-        tools: MagicMock,
-    ) -> None:
-        tools.get.return_value = make_tool()
-        _block = asyncio.Event()
-
-        async def blocking_execute(name: str, arguments: dict) -> str:
-            await _block.wait()
-            return "done"
-
-        tools.execute = blocking_execute
-
-        await event_bus.dispatch(make_function_call_item())
-        await event_bus.dispatch(make_response_created("resp_hold"))
-        await event_bus.dispatch(make_response_done("resp_other"))
-
-        assert not watchdog._pending.holding_done.is_set()
-
-    @pytest.mark.asyncio
-    async def test_response_done_with_correct_id_sets_holding_done(
-        self,
-        event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
-        tools: MagicMock,
-    ) -> None:
-        tools.get.return_value = make_tool()
-        _block = asyncio.Event()
-
-        async def blocking_execute(name: str, arguments: dict) -> str:
-            await _block.wait()
-            return "done"
-
-        tools.execute = blocking_execute
-
-        await event_bus.dispatch(make_function_call_item())
-        await event_bus.dispatch(make_response_created("resp_hold"))
-        await event_bus.dispatch(make_response_done("resp_hold"))
-
-        assert watchdog._pending.holding_done.is_set()
-
-
-class TestClarificationResponse:
-    @pytest.fixture(autouse=True)
-    def setup_supervisor(self, watchdog: SupervisorWatchdog) -> None:
-        watchdog.register_supervisor("slow_job", make_supervisor_agent())
-
-    @pytest.mark.asyncio
-    async def test_clarification_answer_resolves_future(
-        self,
-        event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
-        tools: MagicMock,
-    ) -> None:
-        tools.get.return_value = make_tool()
-        _block = asyncio.Event()
-
-        async def blocking_execute(name: str, arguments: dict) -> str:
-            await _block.wait()
-            return "done"
-
-        tools.execute = blocking_execute
-
-        await event_bus.dispatch(make_function_call_item())
-
-        loop = asyncio.get_running_loop()
-        future: asyncio.Future[str] = loop.create_future()
-        watchdog._pending.supervisor_run.pending_clarification_future = future
-
-        await event_bus.dispatch(
-            UserTranscriptCompletedEvent(transcript="Paris", item_id="item_x")
-        )
-
-        assert future.done()
-        assert future.result() == "Paris"
-
-    @pytest.mark.asyncio
-    async def test_clarification_without_pending_future_is_safe(
-        self,
-        event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
-        tools: MagicMock,
-    ) -> None:
-        tools.get.return_value = make_tool()
-        _block = asyncio.Event()
-
-        async def blocking_execute(name: str, arguments: dict) -> str:
-            await _block.wait()
-            return "done"
-
-        tools.execute = blocking_execute
-
-        await event_bus.dispatch(make_function_call_item())
-
-        await event_bus.dispatch(
-            UserTranscriptCompletedEvent(transcript="anything", item_id="item_x")
-        )
+        sent_types = [type(c.args[0]) for c in websocket.send.call_args_list]
+        assert ConversationItemCreateEvent in sent_types
 
 
 class TestCancelSupervisor:
@@ -490,37 +392,41 @@ class TestCancelSupervisor:
         self,
         event_bus: EventBus,
         watchdog: SupervisorWatchdog,
-        tools: MagicMock,
+        tools: RealtimeTools,
     ) -> None:
-        tools.get.return_value = make_tool()
+        register_tool(tools)
         _block = asyncio.Event()
 
-        async def blocking_execute(name: str, arguments: dict) -> str:
+        async def blocking_execute(query: str | None = None) -> str:
             await _block.wait()
             return "done"
 
-        tools.execute = blocking_execute
+        tool = tools.get("slow_job")
+        assert tool is not None
+        tool.function = blocking_execute
 
         await event_bus.dispatch(make_function_call_item())
         await event_bus.dispatch(CancelSupervisorCommand())
 
-        assert watchdog._pending is None
+        assert watchdog._active is None
 
     @pytest.mark.asyncio
     async def test_cancel_dispatches_finished_event(
         self,
         event_bus: EventBus,
         watchdog: SupervisorWatchdog,
-        tools: MagicMock,
+        tools: RealtimeTools,
     ) -> None:
-        tools.get.return_value = make_tool()
+        register_tool(tools)
         _block = asyncio.Event()
 
-        async def blocking_execute(name: str, arguments: dict) -> str:
+        async def blocking_execute(query: str | None = None) -> str:
             await _block.wait()
             return "done"
 
-        tools.execute = blocking_execute
+        tool = tools.get("slow_job")
+        assert tool is not None
+        tool.function = blocking_execute
 
         received: list[SupervisorFinishedEvent] = []
 
@@ -550,19 +456,21 @@ class TestCancelSupervisor:
         self,
         event_bus: EventBus,
         watchdog: SupervisorWatchdog,
-        tools: MagicMock,
+        tools: RealtimeTools,
     ) -> None:
-        tools.get.return_value = make_tool()
+        register_tool(tools)
         _block = asyncio.Event()
 
-        async def blocking_execute(name: str, arguments: dict) -> str:
+        async def blocking_execute(query: str | None = None) -> str:
             await _block.wait()
             return "done"
 
-        tools.execute = blocking_execute
+        tool = tools.get("slow_job")
+        assert tool is not None
+        tool.function = blocking_execute
 
         await event_bus.dispatch(make_function_call_item())
-        result_task = watchdog._pending.result_task
+        result_task = watchdog._active.result_task
 
         await event_bus.dispatch(CancelSupervisorCommand())
         await asyncio.sleep(0.01)
@@ -571,61 +479,26 @@ class TestCancelSupervisor:
 
 
 class TestCancelTool:
-    @pytest.fixture
-    def cancel_tool(self) -> MagicMock:
-        return make_cancel_tool()
-
-    @pytest.fixture
-    def watchdog_with_cancel(
-        self,
-        event_bus: EventBus,
-        tools: MagicMock,
-        websocket: AsyncMock,
-        cancel_tool: MagicMock,
-    ) -> SupervisorWatchdog:
-        wd = SupervisorWatchdog(event_bus, tools, websocket, cancel_tool=cancel_tool)
-        wd.register_supervisor("slow_job", make_supervisor_agent())
-        return wd
-
-    @pytest.mark.asyncio
-    async def test_cancel_tool_injected_when_supervisor_starts(
-        self,
-        event_bus: EventBus,
-        watchdog_with_cancel: SupervisorWatchdog,
-        tools: MagicMock,
-        cancel_tool: MagicMock,
-    ) -> None:
-        tools.get.return_value = make_tool()
-
-        await event_bus.dispatch(make_function_call_item())
-
-        tools.inject_tool.assert_called_once_with(cancel_tool)
+    @pytest.fixture(autouse=True)
+    def setup_supervisor(self, watchdog: SupervisorWatchdog) -> None:
+        watchdog.register_supervisor("slow_job", make_supervisor_agent())
 
     @pytest.mark.asyncio
     async def test_cancel_tool_ejected_after_result_delivered(
         self,
         event_bus: EventBus,
-        watchdog_with_cancel: SupervisorWatchdog,
-        tools: MagicMock,
-        cancel_tool: MagicMock,
+        watchdog: SupervisorWatchdog,
+        tools: RealtimeTools,
     ) -> None:
-        tools.get.return_value = make_tool()
-        tools.execute = AsyncMock(return_value="done")
+        register_tool(tools)
+        tool = tools.get("slow_job")
+        assert tool is not None
 
-        await event_bus.dispatch(make_function_call_item())
-        await complete_holding_phase(event_bus)
-        await asyncio.sleep(0.05)
+        async def done_tool(query: str | None = None) -> str:
+            return "done"
 
-        tools.eject_tool.assert_called_with(cancel_tool.name)
+        tool.function = done_tool
 
-    @pytest.mark.asyncio
-    async def test_tools_update_dispatched_on_injection(
-        self,
-        event_bus: EventBus,
-        watchdog_with_cancel: SupervisorWatchdog,
-        tools: MagicMock,
-    ) -> None:
-        tools.get.return_value = make_tool()
         received: list[UpdateSessionToolsCommand] = []
 
         async def capture(e: UpdateSessionToolsCommand) -> None:
@@ -634,5 +507,7 @@ class TestCancelTool:
         event_bus.subscribe(UpdateSessionToolsCommand, capture)
 
         await event_bus.dispatch(make_function_call_item())
+        await asyncio.sleep(0.05)
 
+        assert tools.get("cancel_agent") is None
         assert len(received) >= 1

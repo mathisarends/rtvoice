@@ -7,7 +7,6 @@ from pydantic import BaseModel
 from websockets import frames
 from websockets.exceptions import ConnectionClosed
 
-from rtvoice.events import EventBus
 from rtvoice.realtime.providers import OpenAIProvider
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.views import RealtimeModel
@@ -32,42 +31,34 @@ def make_ws(messages: list[str] | None = None) -> MagicMock:
 
 
 @pytest.fixture
-def bus() -> EventBus:
-    return EventBus()
-
-
-@pytest.fixture
-def socket(bus: EventBus) -> RealtimeWebSocket:
+def socket() -> RealtimeWebSocket:
     return RealtimeWebSocket(
         model=RealtimeModel.GPT_REALTIME,
-        event_bus=bus,
         provider=OpenAIProvider(api_key="test-key"),
     )
 
 
 class TestInit:
-    def test_uses_provided_api_key(self, bus: EventBus) -> None:
+    def test_uses_provided_api_key(self) -> None:
         provider = OpenAIProvider(api_key="my-key")
         ws = RealtimeWebSocket(
             model=RealtimeModel.GPT_REALTIME,
-            event_bus=bus,
             provider=provider,
         )
 
         assert ws._provider is provider
 
-    def test_reads_api_key_from_env(self, bus: EventBus) -> None:
+    def test_reads_api_key_from_env(self) -> None:
         with patch.dict("os.environ", {"OPENAI_API_KEY": "env-key"}):
             provider = OpenAIProvider()
             _ = RealtimeWebSocket(
                 model=RealtimeModel.GPT_REALTIME,
-                event_bus=bus,
                 provider=provider,
             )
 
         assert provider._api_key == "env-key"
 
-    def test_raises_when_api_key_missing(self, bus: EventBus) -> None:
+    def test_raises_when_api_key_missing(self) -> None:
         with (
             patch.dict("os.environ", {}, clear=True),
             pytest.raises(RuntimeError, match="OPENAI_API_KEY"),
@@ -233,21 +224,18 @@ class TestClose:
 class TestReceiveLoop:
     @pytest.mark.asyncio
     async def test_dispatches_valid_events_to_bus(
-        self, socket: RealtimeWebSocket, bus: EventBus
+        self, socket: RealtimeWebSocket
     ) -> None:
-        received = []
-
-        async def capture(event) -> None:
-            received.append(event)
-
-        valid_event = json.dumps({"type": "session.created", "session": {}})
+        valid_event = json.dumps(
+            {"type": "session.created", "event_id": "evt_1", "session": {}}
+        )
         ws = make_ws([valid_event])
 
         with patch("rtvoice.realtime.websocket.connect", AsyncMock(return_value=ws)):
             await socket.connect()
-            await asyncio.sleep(0.05)
+            event = await asyncio.wait_for(socket.events().__anext__(), timeout=0.2)
 
-        assert len(received) >= 0
+        assert event.type == "session.created"
 
     @pytest.mark.asyncio
     async def test_skips_unknown_event_types(self, socket: RealtimeWebSocket) -> None:
@@ -256,9 +244,9 @@ class TestReceiveLoop:
 
         with patch("rtvoice.realtime.websocket.connect", AsyncMock(return_value=ws)):
             await socket.connect()
-            await asyncio.sleep(0.05)
-
-        assert socket._receive_task is not None
+            events = socket.events()
+            with pytest.raises(StopAsyncIteration):
+                await asyncio.wait_for(events.__anext__(), timeout=0.2)
 
     @pytest.mark.asyncio
     async def test_sets_is_connected_false_on_connection_closed(

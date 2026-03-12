@@ -37,3 +37,11 @@ class Tool:
             description=self.description,
             parameters=self.schema,
         )
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Tool):
+            return NotImplemented
+        return self.name == other.name
+
+    def __hash__(self) -> int:
+        return hash(self.name)

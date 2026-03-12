@@ -21,7 +21,6 @@ from rtvoice.events.views import (
     AssistantStartedRespondingEvent,
     AssistantStoppedRespondingEvent,
     AssistantTranscriptCompletedEvent,
-    CancelSupervisorCommand,
     StartAgentCommand,
     SupervisorFinishedEvent,
     SupervisorStartedEvent,
@@ -34,13 +33,11 @@ from rtvoice.events.views import (
 )
 from rtvoice.mcp import MCPServer
 from rtvoice.realtime.providers import OpenAIProvider, RealtimeProvider
-from rtvoice.realtime.schemas import FunctionParameters
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
 from rtvoice.supervisor import SupervisorAgent
 from rtvoice.supervisor.views import SupervisorAgentResult
 from rtvoice.tools import RealtimeTools, SpecialToolParameters
-from rtvoice.tools.registry.views import Tool
 from rtvoice.views import (
     AgentListener,
     AgentResult,
@@ -276,7 +273,6 @@ class RealtimeAgent[T]:
                 conversation_history=self._conversation_history,
             )
         )
-        self._cancel_tool: Tool | None = None
         if self._supervisor_agent:
             self._register_supervisor_agent(self._supervisor_agent)
 
@@ -323,8 +319,12 @@ class RealtimeAgent[T]:
         if agent.handoff_instructions:
             description = f"{agent.description}\n\nHandoff instructions: {agent.handoff_instructions}"
 
-        agent_name = agent.name.replace(" ", "_")
+        agent_name = agent.name
+        self._register_supervisor_handoff(agent, agent_name, description)
 
+    def _register_supervisor_handoff(
+        self, agent: SupervisorAgent, agent_name: str, description: str
+    ) -> None:
         @self._tools.action(
             description,
             name=agent_name,
@@ -348,7 +348,7 @@ class RealtimeAgent[T]:
                 ),
             ] = None,
         ) -> SupervisorAgentResult:
-            resume = agent._consume_resume()
+            resume = agent.consume_resume()
             if resume is not None:
                 history, clarify_call_id = resume
                 return await agent.run(
@@ -359,21 +359,6 @@ class RealtimeAgent[T]:
                 )
             context = conversation_history.format() if conversation_history else None
             return await agent.run(task, context=context)
-
-        async def _cancel_agent(event_bus: EventBus) -> str:
-            await event_bus.dispatch(CancelSupervisorCommand())
-            return "The agent task has been cancelled."
-
-        self._cancel_tool = Tool(
-            name="cancel_agent",
-            description=(
-                "Cancel the currently running background agent. "
-                "Call this when the user explicitly wants to stop, cancel, or abandon the ongoing task."
-            ),
-            function=_cancel_agent,
-            schema=FunctionParameters(),
-            result_instruction="Tell the user naturally that the task has been cancelled.",
-        )
 
     def _setup_shutdown_handlers(self) -> None:
         self._event_bus.subscribe(
@@ -405,9 +390,7 @@ class RealtimeAgent[T]:
             )
 
         supervisor_tool_name = (
-            self._supervisor_agent.name.replace(" ", "_")
-            if self._supervisor_agent
-            else None
+            self._supervisor_agent.name if self._supervisor_agent else None
         )
         self._tool_calling_watchdog = ToolCallingWatchdog(
             event_bus=self._event_bus,
@@ -422,7 +405,6 @@ class RealtimeAgent[T]:
                 event_bus=self._event_bus,
                 tools=self._tools,
                 websocket=self._websocket,
-                cancel_tool=self._cancel_tool,
             )
             self._supervisor_watchdog.register_supervisor(
                 supervisor_tool_name, self._supervisor_agent
@@ -447,6 +429,7 @@ class RealtimeAgent[T]:
             return
 
         self._warn_listener_countdown_mismatch_if_necessary()
+        self._warn_listener_supervisor_mismatch_if_necessary()
 
         self._event_bus.subscribe(
             UserTranscriptCompletedEvent,
@@ -500,42 +483,51 @@ class RealtimeAgent[T]:
         )
 
     def _warn_listener_countdown_mismatch_if_necessary(self) -> None:
-        listener_cls = type(self._listener)
-        listener_method = getattr(listener_cls, "on_user_inactivity_countdown", None)
-        overrides_countdown = (
-            listener_method is not None
-            and listener_method is not AgentListener.on_user_inactivity_countdown
-        )
+        overrides_countdown = self._listener_overrides_countdown()
+        listener_name = type(self._listener).__name__
 
         if overrides_countdown and not self._should_enable_inactivity_timeout:
             logger.warning(
                 "Listener '%s' overrides on_user_inactivity_countdown "
                 "but inactivity_timeout_enabled is False — callback will never fire.",
-                listener_cls.__name__,
+                listener_name,
             )
 
         if self._should_enable_inactivity_timeout and not overrides_countdown:
             logger.warning(
                 "inactivity_timeout_enabled is True but listener '%s' does not override "
                 "on_user_inactivity_countdown — countdown events will be silently ignored.",
-                listener_cls.__name__,
+                listener_name,
             )
 
-        self._warn_listener_supervisor_mismatch_if_necessary()
+    def _listener_overrides_countdown(self) -> bool:
+        cls = type(self._listener)
+        listener_method = getattr(cls, "on_user_inactivity_countdown", None)
+        if listener_method is None:
+            return False
+        return listener_method is not AgentListener.on_user_inactivity_countdown
 
     def _warn_listener_supervisor_mismatch_if_necessary(self) -> None:
-        listener_cls = type(self._listener)
-        overrides_supervisor = any(
-            getattr(listener_cls, method, None) is not getattr(AgentListener, method)
-            for method in ("on_supervisor_started", "on_supervisor_finished")
-        )
-
-        if overrides_supervisor and not self._supervisor_agent:
+        if (
+            self._listener_overrides_supervisor_callbacks()
+            and not self._supervisor_agent
+        ):
             logger.warning(
                 "Listener '%s' overrides on_supervisor_started or on_supervisor_finished "
                 "but no supervisor_agent is configured — callbacks will never fire.",
-                listener_cls.__name__,
+                type(self._listener).__name__,
             )
+
+    def _listener_overrides_supervisor_callbacks(self) -> bool:
+        cls = type(self._listener)
+        started = getattr(cls, "on_supervisor_started", None)
+        finished = getattr(cls, "on_supervisor_finished", None)
+        return (
+            started is not None and started is not AgentListener.on_supervisor_started
+        ) or (
+            finished is not None
+            and finished is not AgentListener.on_supervisor_finished
+        )
 
     async def _on_inactivity_timeout(self, event: UserInactivityTimeoutEvent) -> None:
         logger.info(

@@ -120,7 +120,7 @@ class SupervisorAgent:
             ),
         ] = None,
     ) -> None:
-        self.name = name
+        self.name = name.replace(" ", "_")
         self.description = description
         self._instructions = instructions
         self._llm = llm
@@ -211,7 +211,7 @@ class SupervisorAgent:
     def set_resume(self, history: list, clarify_call_id: str) -> None:
         self._pending_resume = (history, clarify_call_id)
 
-    def _consume_resume(self) -> tuple[list, str] | None:
+    def consume_resume(self) -> tuple[list, str] | None:
         resume = self._pending_resume
         self._pending_resume = None
         return resume
@@ -362,7 +362,7 @@ class SupervisorAgent:
         return None
 
     async def _send_tool_status(self, tool_call: ToolCall) -> None:
-        if not self._channel or tool_call.name in ("done", "clarify"):
+        if not self._channel or self._is_default_registered_tool(tool_call.name):
             return
 
         if isinstance(tool_call.tool, BaseModel):
@@ -375,3 +375,6 @@ class SupervisorAgent:
         status = f"{tool_call.name}({args_str})"
         logger.debug("Sending status update via channel: %s", status)
         self._channel.buffer_status(status)
+
+    def _is_default_registered_tool(self, tool_name: str) -> bool:
+        return tool_name in ("done", "clarify")

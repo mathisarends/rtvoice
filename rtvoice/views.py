@@ -172,7 +172,7 @@ class ServerVAD(BaseModel):
     """Milliseconds of silence required to commit an end-of-turn."""
 
 
-TurnDetection = SemanticVAD | ServerVAD
+type TurnDetection = SemanticVAD | ServerVAD
 """Union type for voice-activity detection strategies.
 
 Either a [`SemanticVAD`][rtvoice.views.SemanticVAD] or a

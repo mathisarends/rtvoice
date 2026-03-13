@@ -17,34 +17,33 @@ from typing_extensions import Doc
 from rtvoice.events.bus import EventBus
 from rtvoice.mcp import MCPServer
 from rtvoice.shared.decorators import timed
-from rtvoice.supervisor.channel import SupervisorChannel
-from rtvoice.supervisor.views import (
+from rtvoice.subagent.channel import SubAgentChannel
+from rtvoice.subagent.views import (
     ClarifySignal,
     DoneSignal,
-    SupervisorAgentResult,
+    SubAgentResult,
 )
-from rtvoice.tools import SupervisorTools
+from rtvoice.tools import SubAgentTools
 from rtvoice.tools.views import SpecialToolParameters
 
 logger = logging.getLogger(__name__)
 
 
-class SupervisorAgent:
+class SubAgent:
     """Agentic sub-agent that can be delegated tasks from a `RealtimeAgent`.
 
         Runs an LLM-driven tool-calling loop to complete a given task, with built-in
         support for clarification questions, MCP server integration, and handoff
         from a parent voice agent.
 
-        The agent exposes three special tools to the LLM automatically:
+        The agent exposes two special tools to the LLM automatically:
 
         - **done** — signals task completion and returns the final result.
         - **clarify** — asks the user a question and blocks until they answer.
-        - **send_status** — sends a brief progress update to the user during long operations.
 
         Example:
     ```python
-            agent = SupervisorAgent(
+            agent = SubAgent(
                 name="calendar_agent",
                 description="Manages the user's calendar.",
                 instructions="You are a calendar assistant ...",
@@ -82,7 +81,7 @@ class SupervisorAgent:
             ),
         ] = None,
         tools: Annotated[
-            SupervisorTools | None,
+            SubAgentTools | None,
             Doc("Pre-registered tools available to the agent during its run loop."),
         ] = None,
         mcp_servers: Annotated[
@@ -124,7 +123,7 @@ class SupervisorAgent:
         self.description = description
         self._instructions = instructions
         self._llm = llm
-        self._tools = SupervisorTools()
+        self._tools = SubAgentTools()
         if tools:
             self._tools._registry.tools = tools._registry.tools.copy()
         self._mcp_servers = mcp_servers or []
@@ -134,9 +133,8 @@ class SupervisorAgent:
         self.holding_instruction = holding_instruction
 
         self._event_bus: EventBus | None = None
-        self._channel: SupervisorChannel | None = None
+        self._channel: SubAgentChannel | None = None
         self._mcp_ready = asyncio.Event()
-        self._pending_resume: tuple[list, str] | None = None
 
         self._register_done_tool()
         self._register_clarify_tool()
@@ -147,7 +145,7 @@ class SupervisorAgent:
             SpecialToolParameters(event_bus=event_bus, context=context)
         )
 
-    def _attach_channel(self, channel: SupervisorChannel) -> None:
+    def _attach_channel(self, channel: SubAgentChannel) -> None:
         """Called by ToolCallingWatchdog at the start of each run."""
         self._channel = channel
 
@@ -208,14 +206,6 @@ class SupervisorAgent:
             self._tools.register_mcp(tool, server)
         logger.info("MCP server connected: %d tools loaded", len(tools))
 
-    def set_resume(self, history: list, clarify_call_id: str) -> None:
-        self._pending_resume = (history, clarify_call_id)
-
-    def consume_resume(self) -> tuple[list, str] | None:
-        resume = self._pending_resume
-        self._pending_resume = None
-        return resume
-
     @timed()
     async def run(
         self,
@@ -252,7 +242,7 @@ class SupervisorAgent:
             ),
         ] = None,
     ) -> Annotated[
-        SupervisorAgentResult,
+        SubAgentResult,
         Doc(
             "Final result including the message, success flag, and executed tool calls. "
             "If `clarification_needed` is set the caller must re-invoke `run()` with "
@@ -279,7 +269,7 @@ class SupervisorAgent:
         try:
             for _ in range(self._max_iterations):
                 if self._channel and self._channel.is_cancelled:
-                    return SupervisorAgentResult(
+                    return SubAgentResult(
                         message="Task was cancelled by the user.",
                         success=False,
                         tool_calls=executed_tool_calls,
@@ -288,7 +278,7 @@ class SupervisorAgent:
                 response = await self._llm.invoke(messages, tools=tool_schema)
 
                 if not response.has_tool_calls:
-                    return SupervisorAgentResult(
+                    return SubAgentResult(
                         message=response.content,
                         tool_calls=executed_tool_calls,
                     )
@@ -302,7 +292,7 @@ class SupervisorAgent:
                     if early_return is not None:
                         return early_return
 
-            return SupervisorAgentResult(
+            return SubAgentResult(
                 message="Max iterations reached without a final answer.",
                 success=False,
                 tool_calls=executed_tool_calls,
@@ -328,7 +318,7 @@ class SupervisorAgent:
         tool_call: ToolCall,
         executed_tool_calls: list[ToolCall],
         messages: list,
-    ) -> SupervisorAgentResult | None:
+    ) -> SubAgentResult | None:
         logger.debug("Executing tool call: '%s'", tool_call.name)
         await self._send_tool_status(tool_call)
 
@@ -337,14 +327,14 @@ class SupervisorAgent:
         match result:
             case DoneSignal(result=msg):
                 logger.debug("Tool 'done' called with result: %s", msg)
-                return SupervisorAgentResult(
+                return SubAgentResult(
                     success=True,
                     message=msg,
                     tool_calls=executed_tool_calls,
                 )
             case ClarifySignal(question=question):
                 logger.debug("Tool 'clarify' called with question: %s", question)
-                return SupervisorAgentResult(
+                return SubAgentResult(
                     message="",
                     success=False,
                     tool_calls=executed_tool_calls,

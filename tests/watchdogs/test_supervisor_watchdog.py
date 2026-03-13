@@ -5,9 +5,9 @@ import pytest
 
 from rtvoice.events.bus import EventBus
 from rtvoice.events.views import (
-    CancelSupervisorCommand,
-    SupervisorFinishedEvent,
-    SupervisorStartedEvent,
+    CancelSubAgentCommand,
+    SubAgentFinishedEvent,
+    SubAgentStartedEvent,
     UpdateSessionToolsCommand,
 )
 from rtvoice.realtime.schemas import (
@@ -17,7 +17,7 @@ from rtvoice.realtime.schemas import (
 )
 from rtvoice.tools import RealtimeTools
 from rtvoice.tools.registry.views import Tool
-from rtvoice.watchdogs.supervisor.watchdog import SupervisorWatchdog
+from rtvoice.watchdogs.subagent.subagent_interatction import SubagentInteractionWatchdog
 
 
 @pytest.fixture
@@ -40,8 +40,8 @@ def tools() -> RealtimeTools:
 @pytest.fixture
 def watchdog(
     event_bus: EventBus, tools: RealtimeTools, websocket: AsyncMock
-) -> SupervisorWatchdog:
-    return SupervisorWatchdog(event_bus, tools, websocket)
+) -> SubagentInteractionWatchdog:
+    return SubagentInteractionWatchdog(event_bus, tools, websocket)
 
 
 def make_function_call_item(
@@ -104,7 +104,7 @@ def register_tool_with_calls(
     return tool, calls
 
 
-def make_supervisor_agent() -> MagicMock:
+def make_subagent() -> MagicMock:
     agent = MagicMock()
     agent.name = "supervisor"
     agent._attach_channel.side_effect = lambda channel: channel.close()
@@ -116,12 +116,12 @@ class TestNonSupervisorToolIgnored:
     async def test_unregistered_tool_name_does_not_send(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
+        watchdog: SubagentInteractionWatchdog,
         websocket: AsyncMock,
         tools: RealtimeTools,
     ) -> None:
         register_tool(tools, name="other")
-        watchdog.register_supervisor("slow_job", make_supervisor_agent())
+        watchdog.register_subagent("slow_job", make_subagent())
 
         await event_bus.dispatch(make_function_call_item(name="other"))
 
@@ -131,11 +131,11 @@ class TestNonSupervisorToolIgnored:
     async def test_unregistered_tool_name_does_not_execute(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
+        watchdog: SubagentInteractionWatchdog,
         tools: RealtimeTools,
     ) -> None:
         _, calls = register_tool_with_calls(tools, name="other")
-        watchdog.register_supervisor("slow_job", make_supervisor_agent())
+        watchdog.register_subagent("slow_job", make_subagent())
 
         await event_bus.dispatch(make_function_call_item(name="other"))
 
@@ -144,14 +144,14 @@ class TestNonSupervisorToolIgnored:
 
 class TestToolCallHandling:
     @pytest.fixture(autouse=True)
-    def setup_supervisor(self, watchdog: SupervisorWatchdog) -> None:
-        watchdog.register_supervisor("slow_job", make_supervisor_agent())
+    def setup_supervisor(self, watchdog: SubagentInteractionWatchdog) -> None:
+        watchdog.register_subagent("slow_job", make_subagent())
 
     @pytest.mark.asyncio
     async def test_tool_not_found_does_not_send(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
+        watchdog: SubagentInteractionWatchdog,
         websocket: AsyncMock,
         tools: RealtimeTools,
     ) -> None:
@@ -163,7 +163,7 @@ class TestToolCallHandling:
     async def test_tool_not_found_does_not_execute(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
+        watchdog: SubagentInteractionWatchdog,
         tools: RealtimeTools,
     ) -> None:
         await event_bus.dispatch(make_function_call_item())
@@ -174,7 +174,7 @@ class TestToolCallHandling:
     async def test_sends_holding_response_immediately(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
+        watchdog: SubagentInteractionWatchdog,
         websocket: AsyncMock,
         tools: RealtimeTools,
     ) -> None:
@@ -190,16 +190,16 @@ class TestToolCallHandling:
     async def test_dispatches_started_event(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
+        watchdog: SubagentInteractionWatchdog,
         tools: RealtimeTools,
     ) -> None:
         register_tool(tools)
-        received: list[SupervisorStartedEvent] = []
+        received: list[SubAgentStartedEvent] = []
 
-        async def capture(e: SupervisorStartedEvent) -> None:
+        async def capture(e: SubAgentStartedEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(SupervisorStartedEvent, capture)
+        event_bus.subscribe(SubAgentStartedEvent, capture)
 
         await event_bus.dispatch(make_function_call_item())
 
@@ -209,7 +209,7 @@ class TestToolCallHandling:
     async def test_executes_tool_with_arguments(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
+        watchdog: SubagentInteractionWatchdog,
         tools: RealtimeTools,
     ) -> None:
         _, calls = register_tool_with_calls(tools)
@@ -224,7 +224,7 @@ class TestToolCallHandling:
     async def test_duplicate_call_sends_already_in_progress(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
+        watchdog: SubagentInteractionWatchdog,
         websocket: AsyncMock,
         tools: RealtimeTools,
     ) -> None:
@@ -253,14 +253,14 @@ class TestToolCallHandling:
 
 class TestResultDelivery:
     @pytest.fixture(autouse=True)
-    def setup_supervisor(self, watchdog: SupervisorWatchdog) -> None:
-        watchdog.register_supervisor("slow_job", make_supervisor_agent())
+    def setup_supervisor(self, watchdog: SubagentInteractionWatchdog) -> None:
+        watchdog.register_subagent("slow_job", make_subagent())
 
     @pytest.mark.asyncio
     async def test_delivers_function_call_output_after_holding(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
+        watchdog: SubagentInteractionWatchdog,
         websocket: AsyncMock,
         tools: RealtimeTools,
     ) -> None:
@@ -283,7 +283,7 @@ class TestResultDelivery:
     async def test_sends_response_create_after_result(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
+        watchdog: SubagentInteractionWatchdog,
         websocket: AsyncMock,
         tools: RealtimeTools,
     ) -> None:
@@ -306,7 +306,7 @@ class TestResultDelivery:
     async def test_pending_cleared_after_result_delivered(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
+        watchdog: SubagentInteractionWatchdog,
         tools: RealtimeTools,
     ) -> None:
         register_tool(tools)
@@ -327,7 +327,7 @@ class TestResultDelivery:
     async def test_dispatches_finished_event_after_result(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
+        watchdog: SubagentInteractionWatchdog,
         tools: RealtimeTools,
     ) -> None:
         register_tool(tools)
@@ -338,12 +338,12 @@ class TestResultDelivery:
             return "done"
 
         tool.function = done_tool
-        received: list[SupervisorFinishedEvent] = []
+        received: list[SubAgentFinishedEvent] = []
 
-        async def capture(e: SupervisorFinishedEvent) -> None:
+        async def capture(e: SubAgentFinishedEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(SupervisorFinishedEvent, capture)
+        event_bus.subscribe(SubAgentFinishedEvent, capture)
 
         await event_bus.dispatch(make_function_call_item())
         await asyncio.sleep(0.05)
@@ -354,7 +354,7 @@ class TestResultDelivery:
     async def test_result_not_delivered_before_tool_completes(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
+        watchdog: SubagentInteractionWatchdog,
         websocket: AsyncMock,
         tools: RealtimeTools,
     ) -> None:
@@ -384,14 +384,14 @@ class TestResultDelivery:
 
 class TestCancelSupervisor:
     @pytest.fixture(autouse=True)
-    def setup_supervisor(self, watchdog: SupervisorWatchdog) -> None:
-        watchdog.register_supervisor("slow_job", make_supervisor_agent())
+    def setup_supervisor(self, watchdog: SubagentInteractionWatchdog) -> None:
+        watchdog.register_subagent("slow_job", make_subagent())
 
     @pytest.mark.asyncio
     async def test_cancel_clears_pending(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
+        watchdog: SubagentInteractionWatchdog,
         tools: RealtimeTools,
     ) -> None:
         register_tool(tools)
@@ -406,7 +406,7 @@ class TestCancelSupervisor:
         tool.function = blocking_execute
 
         await event_bus.dispatch(make_function_call_item())
-        await event_bus.dispatch(CancelSupervisorCommand())
+        await event_bus.dispatch(CancelSubAgentCommand())
 
         assert watchdog._active is None
 
@@ -414,7 +414,7 @@ class TestCancelSupervisor:
     async def test_cancel_dispatches_finished_event(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
+        watchdog: SubagentInteractionWatchdog,
         tools: RealtimeTools,
     ) -> None:
         register_tool(tools)
@@ -428,15 +428,15 @@ class TestCancelSupervisor:
         assert tool is not None
         tool.function = blocking_execute
 
-        received: list[SupervisorFinishedEvent] = []
+        received: list[SubAgentFinishedEvent] = []
 
-        async def capture(e: SupervisorFinishedEvent) -> None:
+        async def capture(e: SubAgentFinishedEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(SupervisorFinishedEvent, capture)
+        event_bus.subscribe(SubAgentFinishedEvent, capture)
 
         await event_bus.dispatch(make_function_call_item())
-        await event_bus.dispatch(CancelSupervisorCommand())
+        await event_bus.dispatch(CancelSubAgentCommand())
 
         assert len(received) == 1
 
@@ -444,10 +444,10 @@ class TestCancelSupervisor:
     async def test_cancel_without_pending_is_safe(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
+        watchdog: SubagentInteractionWatchdog,
         websocket: AsyncMock,
     ) -> None:
-        await event_bus.dispatch(CancelSupervisorCommand())
+        await event_bus.dispatch(CancelSubAgentCommand())
 
         websocket.send.assert_not_called()
 
@@ -455,7 +455,7 @@ class TestCancelSupervisor:
     async def test_cancel_cancels_result_task(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
+        watchdog: SubagentInteractionWatchdog,
         tools: RealtimeTools,
     ) -> None:
         register_tool(tools)
@@ -472,7 +472,7 @@ class TestCancelSupervisor:
         await event_bus.dispatch(make_function_call_item())
         result_task = watchdog._active.result_task
 
-        await event_bus.dispatch(CancelSupervisorCommand())
+        await event_bus.dispatch(CancelSubAgentCommand())
         await asyncio.sleep(0.01)
 
         assert result_task.cancelled()
@@ -480,14 +480,14 @@ class TestCancelSupervisor:
 
 class TestCancelTool:
     @pytest.fixture(autouse=True)
-    def setup_supervisor(self, watchdog: SupervisorWatchdog) -> None:
-        watchdog.register_supervisor("slow_job", make_supervisor_agent())
+    def setup_supervisor(self, watchdog: SubagentInteractionWatchdog) -> None:
+        watchdog.register_subagent("slow_job", make_subagent())
 
     @pytest.mark.asyncio
     async def test_cancel_tool_ejected_after_result_delivered(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorWatchdog,
+        watchdog: SubagentInteractionWatchdog,
         tools: RealtimeTools,
     ) -> None:
         register_tool(tools)

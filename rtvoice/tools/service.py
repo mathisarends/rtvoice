@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "RealtimeTools",
-    "SupervisorTools",
+    "SubAgentTools",
     "Tools",
 ]
 
@@ -195,7 +195,7 @@ class RealtimeTools(Tools):
         return self._registry.get_tool_schema()
 
 
-class SupervisorTools(Tools):
+class SubAgentTools(Tools):
     """Tool registry for non-realtime (text) agents such as `SupervisorAgent`.
 
     Extends [`Tools`][rtvoice.tools.Tools] with schema serialisation in the

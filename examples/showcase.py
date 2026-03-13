@@ -1,31 +1,38 @@
 """
-rtvoice Showcase — When to use a SupervisorAgent
-=================================================
+rtvoice Showcase — When to use Subagents
+========================================
 
 Rule of thumb
 -------------
 Use the RealtimeAgent directly for anything that resolves in one tool call
 and finishes in under a second (time lookup, unit conversion, reminders).
 
-Use a SupervisorAgent when the task:
+Use a subagent when the task:
 
 - requires **multiple sequential tool calls** to produce a final answer,
 - takes **more than a second or two** (external APIs, LLM calls, DB queries),
 - benefits from **progress narration** so the user isn't left in silence, or
 - may need to **ask the user a question** mid-execution.
 
-This example has one supervisor: a "deployment analyst" that runs several
-steps (fetch cluster status → check image registry → diff Helm values →
-summarise) and reports back after each one.
+This example configures two subagents:
+
+- "Deployment Analyst" for rollout readiness checks
+- "Incident Analyst" for error spikes and incident triage
+
+Only one subagent can run at a time. If one is active, additional subagent
+handoffs are rejected until the active one finishes.
 
 Try saying
 ----------
 - "Is the vizro backend ready to deploy?"
-  → Multi-step analysis with live status updates and a clarifying question
+    -> Multi-step deployment analysis with live status updates
     about which cluster to check (dev vs demo).
 
+- "Are there incidents for vizro-backend on demo?"
+    -> Incident triage with a concise risk summary.
+
 - "What time is it?"
-  → Answered immediately by the RealtimeAgent, no supervisor involved.
+    -> Answered immediately by the RealtimeAgent, no subagent involved.
 
 Running
 -------
@@ -186,6 +193,82 @@ def build_deployment_analyst() -> SupervisorAgent:
     )
 
 
+def build_incident_analyst() -> SupervisorAgent:
+    tools = Tools()
+
+    @tools.action(
+        "Fetch open incidents for a service on a target cluster.",
+    )
+    async def get_open_incidents(
+        service: Annotated[str, "Service name."],
+        cluster: Annotated[str, "Target cluster: 'dev' or 'demo'."],
+    ) -> dict:
+        await asyncio.sleep(0.8)
+        open_incidents = random.choice(
+            [
+                [],
+                [
+                    {
+                        "id": "INC-421",
+                        "severity": "high",
+                        "summary": "Readiness probe flapping",
+                    }
+                ],
+            ]
+        )
+        return {
+            "service": service,
+            "cluster": cluster,
+            "open_incidents": open_incidents,
+        }
+
+    @tools.action(
+        "Fetch the error-rate trend for the last 30 minutes.",
+    )
+    async def get_error_rate_trend(
+        service: Annotated[str, "Service name."],
+        cluster: Annotated[str, "Target cluster."],
+    ) -> dict:
+        await asyncio.sleep(0.7)
+        elevated = random.choice([True, False])
+        return {
+            "elevated": elevated,
+            "last_30m_error_rate": "2.8%" if elevated else "0.2%",
+        }
+
+    return SupervisorAgent(
+        name="Incident Analyst",
+        description=(
+            "Investigates incidents and error spikes for a service on a cluster. "
+            "Use this for outage checks, elevated error rates, and triage questions."
+        ),
+        handoff_instructions=(
+            "Always include the service name. Include the cluster if the user gave one."
+        ),
+        instructions=(
+            "You are an SRE incident analyst.\n\n"
+            "When asked about incidents or elevated errors:\n"
+            "1. If cluster is missing, call clarify() asking whether to check dev, demo, or both.\n"
+            "2. status('Checking open incidents...') then call get_open_incidents().\n"
+            "3. status('Checking recent error-rate trend...') then call get_error_rate_trend().\n"
+            "4. call done() with:\n"
+            "   - Current risk level (low/medium/high)\n"
+            "   - Whether immediate action is needed\n"
+            "   - One short recommendation\n\n"
+            "Never skip status() before each slow step."
+        ),
+        tools=tools,
+        llm=ChatOpenAI(model="gpt-4o-mini", temperature=0),
+        max_iterations=10,
+        holding_instruction=(
+            "Say one short sentence that you are running incident checks, then stop."
+        ),
+        result_instructions=(
+            "State the risk level first, then mention incidents and error trend briefly."
+        ),
+    )
+
+
 async def main() -> None:
     tools = Tools()
 
@@ -199,9 +282,11 @@ async def main() -> None:
             "Answer simple questions (time, definitions, quick maths) directly.\n\n"
             "For anything involving deployments, rollouts, service health, "
             "image tags, Helm charts, or 'is X ready', hand off to the "
-            "Deployment Analyst — do not try to answer those yourself."
+            "Deployment Analyst.\n"
+            "For incidents, outages, and error spikes, hand off to the Incident Analyst.\n"
+            "Do not attempt those analyses yourself."
         ),
-        supervisor_agent=build_deployment_analyst(),
+        subagents=[build_deployment_analyst(), build_incident_analyst()],
         inactivity_timeout_seconds=90,
         inactivity_timeout_enabled=True,
         tools=tools,
@@ -209,8 +294,9 @@ async def main() -> None:
 
     print("🎙  Echo is ready.\n")
     print("  Try: 'Is the vizro backend ready to deploy?'")
+    print("       'Are there incidents for vizro-backend on demo?'")
     print("       'Check the demo cluster for vizro-worker.'")
-    print("       'What time is it?'  ← answered directly, no supervisor")
+    print("       'What time is it?'  <- answered directly, no subagent")
     print("\n  Speak mid-analysis to test interruption. Ctrl+C to stop.\n")
 
     await agent.run()

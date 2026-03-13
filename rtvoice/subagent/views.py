@@ -17,7 +17,7 @@ type ToolSignal = DoneSignal | ClarifySignal
 
 
 @dataclass
-class SupervisorAgentResult:
+class SubAgentResult:
     message: str
     success: bool = True
     tool_calls: list[ToolCall] = field(default_factory=list)

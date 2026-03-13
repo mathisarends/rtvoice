@@ -53,7 +53,7 @@ class UpdateToolChoiceCommand:
 
 
 @dataclass
-class CancelSupervisorCommand:
+class CancelSubAgentCommand:
     pass
 
 
@@ -102,11 +102,11 @@ class UserInactivityTimeoutEvent(BaseModel):
     timeout_seconds: float
 
 
-class SupervisorStartedEvent(BaseModel):
+class SubAgentStartedEvent(BaseModel):
     pass
 
 
-class SupervisorFinishedEvent(BaseModel):
+class SubAgentFinishedEvent(BaseModel):
     pass
 
 

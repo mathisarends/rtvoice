@@ -22,8 +22,8 @@ from rtvoice.events.views import (
     AssistantStoppedRespondingEvent,
     AssistantTranscriptCompletedEvent,
     StartAgentCommand,
-    SupervisorFinishedEvent,
-    SupervisorStartedEvent,
+    SubAgentFinishedEvent,
+    SubAgentStartedEvent,
     UpdateSpeechSpeedCommand,
     UserInactivityCountdownEvent,
     UserInactivityTimeoutEvent,
@@ -35,13 +35,14 @@ from rtvoice.mcp import MCPServer
 from rtvoice.realtime.providers import OpenAIProvider, RealtimeProvider
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
-from rtvoice.supervisor import SupervisorAgent
-from rtvoice.supervisor.views import SupervisorAgentResult
+from rtvoice.subagent import SubAgent
+from rtvoice.subagent.views import SubAgentResult
 from rtvoice.tools import RealtimeTools, SpecialToolParameters
 from rtvoice.views import (
     AgentListener,
     AgentResult,
     AssistantVoice,
+    ClarificationCheckpoint,
     NoiseReduction,
     RealtimeModel,
     SemanticVAD,
@@ -57,7 +58,7 @@ from rtvoice.watchdogs import (
     LifecycleWatchdog,
     SessionWatchdog,
     SpeechStateWatchdog,
-    SupervisorWatchdog,
+    SubagentInteractionWatchdog,
     ToolCallingWatchdog,
     TranscriptionWatchdog,
     UserInactivityTimeoutWatchdog,
@@ -70,7 +71,7 @@ class RealtimeAgent[T]:
     """Event-driven voice agent using the OpenAI Realtime API.
 
     Manages the full lifecycle of a real-time voice session: audio I/O,
-    WebSocket connection, tool calling, optional supervisor handoffs,
+    WebSocket connection, tool calling, optional subagent handoffs,
     MCP server integration, and inactivity timeouts.
 
     Call [prewarm()][rtvoice.service.RealtimeAgent.prewarm] before
@@ -138,11 +139,11 @@ class RealtimeAgent[T]:
                 "Tools receive the shared `context` and `event_bus` automatically."
             ),
         ] = None,
-        supervisor_agent: Annotated[
-            SupervisorAgent | None,
+        subagents: Annotated[
+            list[SubAgent] | None,
             Doc(
-                "Optional sub-agent reachable via an auto-registered handoff tool. "
-                "Prefer attaching MCP servers to the supervisor rather than the agent."
+                "Optional sub-agents reachable via auto-registered handoff tools. "
+                "Prefer attaching MCP servers to subagents rather than the agent."
             ),
         ] = None,
         mcp_servers: Annotated[
@@ -164,7 +165,7 @@ class RealtimeAgent[T]:
             T | None,
             Doc(
                 "Shared context object forwarded to all tool handlers "
-                "and the supervisor agent."
+                "and all subagents."
             ),
         ] = None,
         listener: Annotated[
@@ -210,10 +211,13 @@ class RealtimeAgent[T]:
             ),
         ] = None,
     ):
-        if supervisor_agent and mcp_servers:
+        self._subagents = list(subagents or [])
+        self._validate_subagent_names(self._subagents)
+
+        if self._subagents and mcp_servers:
             logger.warning(
-                "mcp_servers are set on RealtimeAgent alongside a supervisor. "
-                "Consider attaching MCP servers to the SupervisorAgent instead."
+                "mcp_servers are set on RealtimeAgent alongside subagents. "
+                "Consider attaching MCP servers to subagents instead."
             )
 
         if api_key and provider:
@@ -224,10 +228,10 @@ class RealtimeAgent[T]:
         self._voice = voice
         self._speech_speed = self._clip_speech_speed(speech_speed)
 
-        if transcription_model is None and supervisor_agent:
+        if transcription_model is None and self._subagents:
             logger.warning(
-                "transcription_model is None but a supervisor_agent is attached. "
-                "Transcription is required for supervisor handoffs — "
+                "transcription_model is None but subagents are attached. "
+                "Transcription is required for subagent handoffs — "
                 "defaulting to TranscriptionModel.WHISPER_1."
             )
             transcription_model = TranscriptionModel.WHISPER_1
@@ -237,7 +241,6 @@ class RealtimeAgent[T]:
         self._noise_reduction = noise_reduction
         self._turn_detection: TurnDetection = turn_detection or SemanticVAD()
         self._mcp_servers = mcp_servers or []
-        self._supervisor_agent = supervisor_agent
 
         if inactivity_timeout_seconds is not None and not inactivity_timeout_enabled:
             logger.warning(
@@ -273,8 +276,8 @@ class RealtimeAgent[T]:
                 conversation_history=self._conversation_history,
             )
         )
-        if self._supervisor_agent:
-            self._register_supervisor_agent(self._supervisor_agent)
+        for subagent in self._subagents:
+            self._register_subagent(subagent)
 
         self._websocket = RealtimeWebSocket(
             model=self._model,
@@ -312,53 +315,81 @@ class RealtimeAgent[T]:
 
         return clipped
 
-    def _register_supervisor_agent(self, agent: SupervisorAgent) -> None:
-        agent._inject(event_bus=self._event_bus, context=self._context)
+    def _validate_subagent_names(self, subagents: list[SubAgent]) -> None:
+        seen_names: set[str] = set()
+        for subagent in subagents:
+            if subagent.name in seen_names:
+                raise ValueError(
+                    f"Duplicate subagent name '{subagent.name}'. "
+                    "Subagent names must be unique."
+                )
+            seen_names.add(subagent.name)
 
-        description = agent.description
-        if agent.handoff_instructions:
-            description = f"{agent.description}\n\nHandoff instructions: {agent.handoff_instructions}"
+    def _register_subagent(self, subagent: SubAgent) -> None:
+        subagent._inject(event_bus=self._event_bus, context=self._context)
 
-        agent_name = agent.name
-        self._register_supervisor_handoff(agent, agent_name, description)
+        description = subagent.description
+        if subagent.handoff_instructions:
+            description = (
+                f"{subagent.description}\n\n"
+                f"Handoff instructions: {subagent.handoff_instructions}"
+            )
 
-    def _register_supervisor_handoff(
-        self, agent: SupervisorAgent, agent_name: str, description: str
+        subagent_name = subagent.name
+        self._register_subagent_handoff(subagent, subagent_name, description)
+
+    def _register_subagent_handoff(
+        self, subagent: SubAgent, subagent_name: str, description: str
     ) -> None:
+        paused_for_clarification: ClarificationCheckpoint | None = None
+
         @self._tools.action(
             description,
-            name=agent_name,
-            result_instruction=agent.result_instructions,
-            holding_instruction=agent.holding_instruction,
+            name=subagent_name,
+            result_instruction=subagent.result_instructions,
+            holding_instruction=subagent.holding_instruction,
         )
         async def _handoff(
             task: Annotated[
                 str,
-                Doc(
-                    "The task or question to delegate to this agent. "
-                    "Be specific and include enough context for the agent to act without clarification."
-                ),
+                "The task or question to delegate to this agent. Be specific and include enough context for the agent to act without clarification.",
             ],
             conversation_history: ConversationHistory,
             clarification_answer: Annotated[
                 str | None,
-                Doc(
-                    "If this is a follow-up call after a clarification request, "
-                    "provide the user's answer here. Leave empty for the initial call."
-                ),
+                "If this is a follow-up call after a clarification request, provide the user's answer here. Leave empty for the initial call.",
             ] = None,
-        ) -> SupervisorAgentResult:
-            resume = agent.consume_resume()
-            if resume is not None:
-                history, clarify_call_id = resume
-                return await agent.run(
+        ) -> SubAgentResult:
+            nonlocal paused_for_clarification
+
+            is_resuming = (
+                paused_for_clarification is not None
+                and clarification_answer is not None
+            )
+
+            if is_resuming:
+                checkpoint = paused_for_clarification
+                paused_for_clarification = None
+                result = await subagent.run(
                     task,
+                    resume_history=checkpoint.resume_history,
+                    clarify_call_id=checkpoint.clarify_call_id,
                     clarification_answer=clarification_answer,
-                    clarify_call_id=clarify_call_id,
-                    resume_history=history,
                 )
-            context = conversation_history.format() if conversation_history else None
-            return await agent.run(task, context=context)
+            else:
+                context = (
+                    conversation_history.format() if conversation_history else None
+                )
+                result = await subagent.run(task, context=context)
+
+            if result.clarification_needed:
+                # Subagent yielded control back to the realtime agent to collect user input
+                paused_for_clarification = ClarificationCheckpoint(
+                    resume_history=result.resume_history,
+                    clarify_call_id=result.clarify_call_id,
+                )
+
+            return result
 
     def _setup_shutdown_handlers(self) -> None:
         self._event_bus.subscribe(
@@ -389,26 +420,20 @@ class RealtimeAgent[T]:
                 event_bus=self._event_bus
             )
 
-        supervisor_tool_name = (
-            self._supervisor_agent.name if self._supervisor_agent else None
-        )
         self._tool_calling_watchdog = ToolCallingWatchdog(
             event_bus=self._event_bus,
             tools=self._tools,
             websocket=self._websocket,
-            supervisor_tool_names={supervisor_tool_name}
-            if supervisor_tool_name
-            else None,
+            subagent_tool_names={s.name for s in self._subagents} or None,
         )
-        if self._supervisor_agent:
-            self._supervisor_watchdog = SupervisorWatchdog(
+        if self._subagents:
+            self._subagent_watchdog = SubagentInteractionWatchdog(
                 event_bus=self._event_bus,
                 tools=self._tools,
                 websocket=self._websocket,
             )
-            self._supervisor_watchdog.register_supervisor(
-                supervisor_tool_name, self._supervisor_agent
-            )
+            for subagent in self._subagents:
+                self._subagent_watchdog.register_subagent(subagent.name, subagent)
         self._error_watchdog = ErrorWatchdog(event_bus=self._event_bus)
         self._speech_state_watchdog = SpeechStateWatchdog(event_bus=self._event_bus)
 
@@ -429,7 +454,7 @@ class RealtimeAgent[T]:
             return
 
         self._warn_listener_countdown_mismatch_if_necessary()
-        self._warn_listener_supervisor_mismatch_if_necessary()
+        self._warn_listener_subagent_mismatch_if_necessary()
 
         self._event_bus.subscribe(
             UserTranscriptCompletedEvent,
@@ -474,12 +499,12 @@ class RealtimeAgent[T]:
             lambda e: self._listener.on_user_inactivity_countdown(e.remaining_seconds),
         )
         self._event_bus.subscribe(
-            SupervisorStartedEvent,
-            lambda _: self._listener.on_supervisor_started(),
+            SubAgentStartedEvent,
+            lambda _: self._listener.on_subagent_started(),
         )
         self._event_bus.subscribe(
-            SupervisorFinishedEvent,
-            lambda _: self._listener.on_supervisor_finished(),
+            SubAgentFinishedEvent,
+            lambda _: self._listener.on_subagent_finished(),
         )
 
     def _warn_listener_countdown_mismatch_if_necessary(self) -> None:
@@ -507,26 +532,22 @@ class RealtimeAgent[T]:
             return False
         return listener_method is not AgentListener.on_user_inactivity_countdown
 
-    def _warn_listener_supervisor_mismatch_if_necessary(self) -> None:
-        if (
-            self._listener_overrides_supervisor_callbacks()
-            and not self._supervisor_agent
-        ):
+    def _warn_listener_subagent_mismatch_if_necessary(self) -> None:
+        if self._listener_overrides_subagent_callbacks() and not self._subagents:
             logger.warning(
-                "Listener '%s' overrides on_supervisor_started or on_supervisor_finished "
-                "but no supervisor_agent is configured — callbacks will never fire.",
+                "Listener '%s' overrides on_subagent_started or on_subagent_finished "
+                "but no subagents are configured — callbacks will never fire.",
                 type(self._listener).__name__,
             )
 
-    def _listener_overrides_supervisor_callbacks(self) -> bool:
+    def _listener_overrides_subagent_callbacks(self) -> bool:
         cls = type(self._listener)
-        started = getattr(cls, "on_supervisor_started", None)
-        finished = getattr(cls, "on_supervisor_finished", None)
+        started = getattr(cls, "on_subagent_started", None)
+        finished = getattr(cls, "on_subagent_finished", None)
         return (
-            started is not None and started is not AgentListener.on_supervisor_started
+            started is not None and started is not AgentListener.on_subagent_started
         ) or (
-            finished is not None
-            and finished is not AgentListener.on_supervisor_finished
+            finished is not None and finished is not AgentListener.on_subagent_finished
         )
 
     async def _on_inactivity_timeout(self, event: UserInactivityTimeoutEvent) -> None:
@@ -581,15 +602,14 @@ class RealtimeAgent[T]:
     async def prewarm(
         self,
     ) -> Annotated[Self, Doc("Returns `self` for optional chaining with `run()`.")]:
-        """Prewarm MCP and supervisor connections before `run()`.
+        """Prewarm MCP and subagent connections before `run()`.
 
         Calling this explicitly avoids a cold-start delay when the session begins.
         Safe to call multiple times — subsequent calls are no-ops for MCP servers
         that are already connected.
         """
         tasks = [self._connect_mcp_servers()]
-        if self._supervisor_agent:
-            tasks.append(self._supervisor_agent.prewarm())
+        tasks.extend(subagent.prewarm() for subagent in self._subagents)
 
         await asyncio.gather(*tasks, return_exceptions=True)
         return self

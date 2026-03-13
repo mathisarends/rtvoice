@@ -295,11 +295,19 @@ class AgentListener:
     async def on_assistant_stopped_responding(self) -> None:
         """Called when the assistant has finished streaming its audio response."""
 
-    async def on_supervisor_started(self) -> None:
-        """Called when the supervisor agent starts running."""
+    async def on_subagent_started(self, agent_name: str) -> None:
+        """Called when a subagent starts running.
 
-    async def on_supervisor_finished(self) -> None:
-        """Called when the supervisor agent finishes running."""
+        Args:
+            agent_name: Name of the started subagent.
+        """
+
+    async def on_subagent_finished(self, agent_name: str) -> None:
+        """Called when a subagent finishes running.
+
+        Args:
+            agent_name: Name of the finished subagent.
+        """
 
 
 class AgentResult(BaseModel):
@@ -327,3 +335,9 @@ class AgentResult(BaseModel):
 
     recording_path: Path | None = None
     """Path to the recorded session audio, or `None` if recording was disabled."""
+
+
+@dataclass
+class ClarificationCheckpoint:
+    resume_history: list
+    clarify_call_id: str

@@ -138,13 +138,13 @@ class TestUnknownTool:
         tools.execute.assert_not_called()
 
 
-class TestSupervisorToolSkipped:
+class TestSubAgentToolskipped:
     @pytest.fixture
     def watchdog_with_supervisor(
         self, event_bus: EventBus, tools: MagicMock, websocket: AsyncMock
     ) -> ToolCallingWatchdog:
         return ToolCallingWatchdog(
-            event_bus, tools, websocket, supervisor_tool_names={"slow_job"}
+            event_bus, tools, websocket, subagent_tool_names={"slow_job"}
         )
 
     @pytest.mark.asyncio

@@ -9,7 +9,7 @@ class StatusMessage:
     message: str
 
 
-class SupervisorChannel:
+class SubAgentChannel:
     def __init__(self, post_speech_delay: float = 5.5) -> None:
         self._outbox: asyncio.Queue[StatusMessage] = asyncio.Queue()
         self._cancelled = asyncio.Event()

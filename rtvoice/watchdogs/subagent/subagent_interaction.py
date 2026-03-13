@@ -5,9 +5,9 @@ import logging
 from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AssistantStoppedRespondingEvent,
-    CancelSupervisorCommand,
-    SupervisorFinishedEvent,
-    SupervisorStartedEvent,
+    CancelSubAgentCommand,
+    SubAgentFinishedEvent,
+    SubAgentStartedEvent,
     UpdateSessionToolsCommand,
 )
 from rtvoice.realtime.schemas import (
@@ -16,12 +16,12 @@ from rtvoice.realtime.schemas import (
     ToolChoiceMode,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
-from rtvoice.supervisor import SupervisorAgent
-from rtvoice.supervisor.channel import SupervisorChannel
-from rtvoice.supervisor.views import SupervisorAgentResult
+from rtvoice.subagent import SubAgent
+from rtvoice.subagent.channel import SubAgentChannel
+from rtvoice.subagent.views import SubAgentResult
 from rtvoice.tools import Tools
 from rtvoice.tools.registry.views import Tool
-from rtvoice.watchdogs.supervisor.views import PendingToolCall
+from rtvoice.watchdogs.subagent.views import PendingSubAgentCall
 from rtvoice.watchdogs.tool_calling.helpers import ToolCallWebSocketHelper
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ _DEFAULT_HOLDING_INSTRUCTION = (
 )
 
 
-class SupervisorWatchdog:
+class SubAgentInteractionWatchdog:
     def __init__(
         self,
         event_bus: EventBus,
@@ -47,25 +47,22 @@ class SupervisorWatchdog:
         self._ws = ToolCallWebSocketHelper(websocket)
         self._websocket = websocket
         self._cancel_tool = self._register_cancel_tool()
-        self._active: PendingToolCall | None = None
-        self._queued_clarification_resume: tuple[list, str] | None = None
-        self._supervisor_agent: SupervisorAgent | None = None
-        self._supervisor_tool_name: str | None = None
+        self._active: PendingSubAgentCall | None = None
+        self._subagents_by_tool_name: dict[str, SubAgent] = {}
+
+        # When a subagent yields control back for clarification, only that
+        # subagent is allowed to be called next — enforced in _handle_tool_call.
+        self._awaiting_clarification_for: str | None = None
 
         self._event_bus.subscribe(FunctionCallItem, self._handle_tool_call)
-        self._event_bus.subscribe(
-            CancelSupervisorCommand, self._cancel_active_supervisor
-        )
+        self._event_bus.subscribe(CancelSubAgentCommand, self._cancel_active_subagent)
         self._event_bus.subscribe(
             AssistantStoppedRespondingEvent, self._forward_speech_end_to_channel
         )
 
-    def register_supervisor(self, tool_name: str, agent: SupervisorAgent) -> None:
-        self._supervisor_tool_name = tool_name
-        self._supervisor_agent = agent
-        logger.debug(
-            "Supervisor agent '%s' registered on tool '%s'", agent.name, tool_name
-        )
+    def register_subagent(self, tool_name: str, agent: SubAgent) -> None:
+        self._subagents_by_tool_name[tool_name] = agent
+        logger.debug("Subagent '%s' registered on tool '%s'", agent.name, tool_name)
 
     def _register_cancel_tool(self) -> Tool:
         @self._tools.action(
@@ -75,7 +72,7 @@ class SupervisorWatchdog:
             result_instruction="Tell the user naturally that the task has been cancelled.",
         )
         async def _cancel_agent(event_bus: EventBus) -> str:
-            await event_bus.dispatch(CancelSupervisorCommand())
+            await event_bus.dispatch(CancelSubAgentCommand())
             return "The agent task has been cancelled."
 
         tool = self._tools.get("cancel_agent")
@@ -84,7 +81,8 @@ class SupervisorWatchdog:
         return tool
 
     async def _handle_tool_call(self, event: FunctionCallItem) -> None:
-        if event.name != self._supervisor_tool_name:
+        subagent = self._subagents_by_tool_name.get(event.name)
+        if subagent is None:
             return
 
         tool = self._tools.get(event.name)
@@ -94,7 +92,7 @@ class SupervisorWatchdog:
 
         if self._active is not None:
             logger.warning(
-                "Supervisor already running, suppressing duplicate call for '%s'",
+                "Subagent already running, suppressing duplicate call for '%s'",
                 event.name,
             )
             await self._ws.send_function_call_output(
@@ -102,38 +100,45 @@ class SupervisorWatchdog:
             )
             return
 
+        if (
+            self._awaiting_clarification_for is not None
+            and event.name != self._awaiting_clarification_for
+        ):
+            logger.warning(
+                "Subagent '%s' called while waiting for clarification answer for '%s' — rejecting.",
+                event.name,
+                self._awaiting_clarification_for,
+            )
+            await self._ws.send_function_call_output(
+                event.call_id,
+                f"Cannot start a new task yet. Still waiting for the user's answer "
+                f"to complete the '{self._awaiting_clarification_for}' task.",
+            )
+            return
+
         logger.info(
-            "Supervisor tool call: '%s' [args=%s]",
+            "Subagent tool call: '%s' [args=%s]",
             event.name,
             json.dumps(event.arguments or {}, ensure_ascii=False),
         )
 
-        self._resume_agent_if_clarification_pending()
-
-        channel = await self._open_channel_for_status_updates()
+        channel = await self._open_channel_for_status_updates(subagent)
         result_task = asyncio.create_task(
             self._tools.execute(event.name, event.arguments or {})
         )
 
-        active = PendingToolCall(
+        active = PendingSubAgentCall(
             call_id=event.call_id,
-            tool_name=event.name,
-            result_task=result_task,
-            tool=tool,
+            subagent_name=event.name,
+            execution_task=result_task,
+            handoff_tool=tool,
             channel=channel,
         )
         self._active = active
 
-        await self._event_bus.dispatch(SupervisorStartedEvent())
+        await self._event_bus.dispatch(SubAgentStartedEvent(agent_name=event.name))
         await self._send_holding_message(tool)
         asyncio.create_task(self._wait_for_result_and_respond(active))
-
-    def _resume_agent_if_clarification_pending(self) -> None:
-        if self._queued_clarification_resume is None:
-            return
-        history, clarify_call_id = self._queued_clarification_resume
-        self._queued_clarification_resume = None
-        self._supervisor_agent.set_resume(history, clarify_call_id)
 
     async def _send_holding_message(self, tool: Tool) -> None:
         await self._websocket.send(
@@ -143,25 +148,26 @@ class SupervisorWatchdog:
             )
         )
 
-    async def _cancel_active_supervisor(self, _: CancelSupervisorCommand) -> None:
+    async def _cancel_active_subagent(self, _: CancelSubAgentCommand) -> None:
         if self._active is None:
             return
         logger.info(
-            "Cancelling supervisor task '%s' by request", self._active.tool_name
+            "Cancelling subagent task '%s' by request", self._active.subagent_name
         )
-        self._queued_clarification_resume = None
+        active_tool_name = self._active.subagent_name
         self._abort_pending_call(self._active)
         self._active = None
-        await self._notify_supervisor_finished()
-        await self._eject_cancel_supervisor_tool()
+        self._awaiting_clarification_for = None
+        await self._notify_subagent_finished(active_tool_name)
+        await self._eject_cancel_subagent_tool()
 
-    async def _wait_for_result_and_respond(self, active: PendingToolCall) -> None:
+    async def _wait_for_result_and_respond(self, active: PendingSubAgentCall) -> None:
         active.channel_task = asyncio.create_task(self._stream_status_updates(active))
 
         try:
-            result = await active.result_task
+            result = await active.execution_task
         except asyncio.CancelledError:
-            logger.info("Tool '%s' was cancelled", active.tool_name)
+            logger.info("Subagent '%s' was cancelled", active.subagent_name)
             if not active.channel_task.done():
                 active.channel_task.cancel()
             return
@@ -172,35 +178,36 @@ class SupervisorWatchdog:
         try:
             await self._wait_for_status_updates_to_finish(active)
 
-            if (
-                isinstance(result, SupervisorAgentResult)
-                and result.clarification_needed
-            ):
+            if isinstance(result, SubAgentResult) and result.clarification_needed:
                 await self._ask_user_for_clarification(active, result)
                 return
 
+            self._awaiting_clarification_for = None
             serialized = self._ws.serialize(result)
-            logger.info("Tool result: '%s' [result=%s]", active.tool_name, serialized)
+            logger.info(
+                "Subagent result: '%s' [result=%s]",
+                active.subagent_name,
+                serialized,
+            )
             await self._ws.send_function_call_output(active.call_id, serialized)
-            await self._ws.send_response_event(active.tool)
+            await self._ws.send_response_event(active.handoff_tool)
 
-            await self._notify_supervisor_finished()
-            await self._eject_cancel_supervisor_tool()
+            await self._notify_subagent_finished(active.subagent_name)
+            await self._eject_cancel_subagent_tool()
         except Exception:
-            logger.exception("Failed to deliver result for '%s'", active.tool_name)
+            logger.exception("Failed to deliver result for '%s'", active.subagent_name)
 
     async def _ask_user_for_clarification(
-        self, active: PendingToolCall, result: SupervisorAgentResult
+        self, active: PendingSubAgentCall, result: SubAgentResult
     ) -> None:
         logger.info(
-            "Supervisor '%s' needs clarification: %s",
-            active.tool_name,
+            "Subagent '%s' needs clarification: %s",
+            active.subagent_name,
             result.clarification_needed,
         )
-        self._queued_clarification_resume = (
-            result.resume_history,
-            result.clarify_call_id,
-        )
+
+        # Lock the interaction to this subagent until the clarification is resolved.
+        self._awaiting_clarification_for = active.subagent_name
 
         await self._ws.send_function_call_output(
             active.call_id,
@@ -209,16 +216,18 @@ class SupervisorWatchdog:
         await self._websocket.send(
             ConversationResponseCreateEvent.from_instructions(
                 f'Ask the user: "{result.clarification_needed}". '
-                f"Once they answer, call {self._supervisor_tool_name} again "
+                f"Once they answer, call {active.subagent_name} again "
                 f"with their answer in the `clarification_answer` field. "
                 f"Do not make up the answer yourself.",
                 tool_choice=ToolChoiceMode.AUTO,
             )
         )
-        await self._notify_supervisor_finished()
-        await self._eject_cancel_supervisor_tool()
+        await self._notify_subagent_finished(active.subagent_name)
+        await self._eject_cancel_subagent_tool()
 
-    async def _wait_for_status_updates_to_finish(self, active: PendingToolCall) -> None:
+    async def _wait_for_status_updates_to_finish(
+        self, active: PendingSubAgentCall
+    ) -> None:
         if not active.channel_task:
             return
         try:
@@ -226,17 +235,23 @@ class SupervisorWatchdog:
         except asyncio.CancelledError:
             logger.debug(
                 "Status updates for '%s' were cancelled before finishing",
-                active.tool_name,
+                active.subagent_name,
             )
         except Exception:
-            logger.debug("Status updates for '%s' ended with error", active.tool_name)
+            logger.debug(
+                "Status updates for '%s' ended with error", active.subagent_name
+            )
 
-    async def _stream_status_updates(self, active: PendingToolCall) -> None:
+    async def _stream_status_updates(self, active: PendingSubAgentCall) -> None:
         if not active.channel:
             return
 
         async for status in active.channel.events():
-            logger.debug("Status update for '%s': %s", active.tool_name, status.message)
+            logger.debug(
+                "Status update for '%s': %s",
+                active.subagent_name,
+                status.message,
+            )
             await self._websocket.send(
                 ConversationResponseCreateEvent.from_instructions(
                     "Briefly summarise what was done in one short natural sentence (max 12 words). "
@@ -247,31 +262,32 @@ class SupervisorWatchdog:
                 )
             )
 
-        logger.debug("All status updates sent for '%s'", active.tool_name)
+        logger.debug("All status updates sent for '%s'", active.subagent_name)
 
-    async def _open_channel_for_status_updates(self) -> SupervisorChannel:
-        channel = SupervisorChannel()
-        self._supervisor_agent._attach_channel(channel)
-        await self._inject_cancel_tool()
+    async def _open_channel_for_status_updates(
+        self, subagent: SubAgent
+    ) -> SubAgentChannel:
+        channel = SubAgentChannel()
+        subagent._attach_channel(channel)
+        await self._inject_cancel_subagent_tool()
         return channel
 
-    def _abort_pending_call(self, active: PendingToolCall) -> None:
+    def _abort_pending_call(self, active: PendingSubAgentCall) -> None:
         if active.channel_task and not active.channel_task.done():
             active.channel_task.cancel()
         active.channel.cancel()
-        active.result_task.cancel()
+        active.execution_task.cancel()
 
-    async def _notify_supervisor_finished(self) -> None:
-        if self._active is None:
-            await self._event_bus.dispatch(SupervisorFinishedEvent())
+    async def _notify_subagent_finished(self, agent_name: str) -> None:
+        await self._event_bus.dispatch(SubAgentFinishedEvent(agent_name=agent_name))
 
-    async def _inject_cancel_tool(self) -> None:
+    async def _inject_cancel_subagent_tool(self) -> None:
         if not self._tools.is_registered(self._cancel_tool):
             self._tools.inject_tool(self._cancel_tool)
             await self._sync_session_tools()
             logger.debug("Cancel tool '%s' injected", self._cancel_tool.name)
 
-    async def _eject_cancel_supervisor_tool(self) -> None:
+    async def _eject_cancel_subagent_tool(self) -> None:
         if self._cancel_tool:
             self._tools.eject_tool(self._cancel_tool.name)
             await self._sync_session_tools()

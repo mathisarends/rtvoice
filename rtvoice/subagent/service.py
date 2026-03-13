@@ -23,7 +23,6 @@ from rtvoice.subagent.views import (
     SubAgentResult,
 )
 from rtvoice.tools import SubAgentTools
-from rtvoice.tools.views import SpecialToolParameters
 
 logger = logging.getLogger(__name__)
 
@@ -125,8 +124,9 @@ class SubAgent[T]:
         self.description = description
         self._instructions = instructions
         self._llm = llm
-        self._tools = tools.clone() if tools else SubAgentTools()
-        self._tools.set_context(SpecialToolParameters(context=context))
+        self._tools = SubAgentTools()
+        if tools:
+            self._tools.merge(tools)
 
         self._mcp_servers = mcp_servers or []
         self._max_iterations = max_iterations

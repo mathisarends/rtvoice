@@ -274,7 +274,7 @@ class RealtimeAgent[T]:
 
         self._tools = RealtimeTools()
         if tools:
-            self._tools._registry.tools = tools._registry.tools.copy()
+            self._tools.merge(tools)
 
         self._tools.set_context(
             SpecialToolParameters(

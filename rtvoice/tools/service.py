@@ -172,6 +172,9 @@ class Tools:
         new._registry.tools = self._registry.tools.copy()
         return new
 
+    def merge(self, other: Tools) -> None:
+        self._registry.tools.update(other._registry.tools)
+
     def is_registered(self, tool: Tool) -> bool:
         return tool in self._registry.tools.values()
 

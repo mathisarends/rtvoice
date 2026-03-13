@@ -168,6 +168,13 @@ class RealtimeAgent[T]:
                 "and all subagents."
             ),
         ] = None,
+        event_bus: Annotated[
+            EventBus | None,
+            Doc(
+                "Event bus for session event dispatch. "
+                "If omitted, a new bus is created automatically."
+            ),
+        ] = None,
         listener: Annotated[
             AgentListener | None,
             Doc(
@@ -262,7 +269,7 @@ class RealtimeAgent[T]:
         self._stop_called = False
         self._mcp_ready = asyncio.Event()
 
-        self._event_bus = EventBus()
+        self._event_bus = event_bus or EventBus()
         self._conversation_history = ConversationHistory(self._event_bus)
 
         self._tools = RealtimeTools()
@@ -326,8 +333,6 @@ class RealtimeAgent[T]:
             seen_names.add(subagent.name)
 
     def _register_subagent(self, subagent: SubAgent) -> None:
-        subagent._inject(event_bus=self._event_bus, context=self._context)
-
         description = subagent.description
         if subagent.handoff_instructions:
             description = (

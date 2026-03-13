@@ -2,7 +2,7 @@ from ._logging import configure_logging
 from .mcp import MCPServerStdio
 from .realtime import AzureOpenAIProvider, OpenAIProvider, RealtimeProvider
 from .service import RealtimeAgent
-from .subagent import SupervisorAgent
+from .subagent import SubAgent
 from .tools import RealtimeTools, SubAgentTools, Tools
 from .views import (
     AgentListener,
@@ -30,8 +30,8 @@ __all__ = [
     "SemanticEagerness",
     "SemanticVAD",
     "ServerVAD",
+    "SubAgent",
     "SubAgentTools",
-    "SupervisorAgent",
     "Tools",
     "TranscriptionModel",
     "TurnDetection",

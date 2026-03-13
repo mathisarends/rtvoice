@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from typing import Annotated, Any, Self
+from typing import Annotated, Self
 
 from llmify import (
     BaseChatModel,
@@ -14,7 +14,6 @@ from llmify import (
 from pydantic import BaseModel
 from typing_extensions import Doc
 
-from rtvoice.events.bus import EventBus
 from rtvoice.mcp import MCPServer
 from rtvoice.shared.decorators import timed
 from rtvoice.subagent.channel import SubAgentChannel
@@ -29,7 +28,7 @@ from rtvoice.tools.views import SpecialToolParameters
 logger = logging.getLogger(__name__)
 
 
-class SubAgent:
+class SubAgent[T]:
     """Agentic sub-agent that can be delegated tasks from a `RealtimeAgent`.
 
         Runs an LLM-driven tool-calling loop to complete a given task, with built-in
@@ -118,32 +117,28 @@ class SubAgent:
                 "working (e.g. *'One moment, checking your calendar…'*)."
             ),
         ] = None,
+        context: Annotated[
+            T | None, Doc("Shared context object forwarded to all tool handlers.")
+        ] = None,
     ) -> None:
         self.name = name.replace(" ", "_")
         self.description = description
         self._instructions = instructions
         self._llm = llm
-        self._tools = SubAgentTools()
-        if tools:
-            self._tools._registry.tools = tools._registry.tools.copy()
+        self._tools = tools.clone() if tools else SubAgentTools()
+        self._tools.set_context(SpecialToolParameters(context=context))
+
         self._mcp_servers = mcp_servers or []
         self._max_iterations = max_iterations
         self.handoff_instructions = handoff_instructions
         self.result_instructions = result_instructions
         self.holding_instruction = holding_instruction
 
-        self._event_bus: EventBus | None = None
         self._channel: SubAgentChannel | None = None
         self._mcp_ready = asyncio.Event()
 
         self._register_done_tool()
         self._register_clarify_tool()
-
-    def _inject(self, *, event_bus: EventBus, context: Any = None) -> None:
-        self._event_bus = event_bus
-        self._tools.set_context(
-            SpecialToolParameters(event_bus=event_bus, context=context)
-        )
 
     def _attach_channel(self, channel: SubAgentChannel) -> None:
         """Called by ToolCallingWatchdog at the start of each run."""

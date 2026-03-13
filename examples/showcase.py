@@ -50,7 +50,7 @@ from typing import Annotated
 from dotenv import load_dotenv
 from llmify import ChatOpenAI
 
-from rtvoice import RealtimeAgent, SupervisorAgent, Tools
+from rtvoice import RealtimeAgent, SubAgent, Tools
 
 load_dotenv(override=True)
 
@@ -135,7 +135,7 @@ def build_deployment_tools() -> Tools:
     return tools
 
 
-def build_deployment_analyst() -> SupervisorAgent:
+def build_deployment_analyst() -> SubAgent:
     """
     Coordinates four sequential checks and narrates every step.
 
@@ -144,7 +144,7 @@ def build_deployment_analyst() -> SupervisorAgent:
     - use clarify() when the cluster is ambiguous,
     - finish with done() summarising all findings in plain language.
     """
-    return SupervisorAgent(
+    return SubAgent(
         name="Deployment Analyst",
         description=(
             "Analyses whether a service is healthy and ready to deploy by "
@@ -193,7 +193,7 @@ def build_deployment_analyst() -> SupervisorAgent:
     )
 
 
-def build_incident_analyst() -> SupervisorAgent:
+def build_incident_analyst() -> SubAgent:
     tools = Tools()
 
     @tools.action(
@@ -236,7 +236,7 @@ def build_incident_analyst() -> SupervisorAgent:
             "last_30m_error_rate": "2.8%" if elevated else "0.2%",
         }
 
-    return SupervisorAgent(
+    return SubAgent(
         name="Incident Analyst",
         description=(
             "Investigates incidents and error spikes for a service on a cluster. "

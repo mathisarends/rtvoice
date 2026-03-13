@@ -16,7 +16,7 @@ from rtvoice.realtime.schemas import (
     ToolChoiceMode,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
-from rtvoice.subagent import SupervisorAgent
+from rtvoice.subagent import SubAgent
 from rtvoice.subagent.channel import SubAgentChannel
 from rtvoice.subagent.views import SubAgentResult
 from rtvoice.tools import Tools
@@ -48,7 +48,7 @@ class SubagentInteractionWatchdog:
         self._websocket = websocket
         self._cancel_tool = self._register_cancel_tool()
         self._active: PendingToolCall | None = None
-        self._subagents_by_tool_name: dict[str, SupervisorAgent] = {}
+        self._subagents_by_tool_name: dict[str, SubAgent] = {}
 
         self._event_bus.subscribe(FunctionCallItem, self._handle_tool_call)
         self._event_bus.subscribe(CancelSubAgentCommand, self._cancel_active_supervisor)
@@ -56,7 +56,7 @@ class SubagentInteractionWatchdog:
             AssistantStoppedRespondingEvent, self._forward_speech_end_to_channel
         )
 
-    def register_subagent(self, tool_name: str, agent: SupervisorAgent) -> None:
+    def register_subagent(self, tool_name: str, agent: SubAgent) -> None:
         self._subagents_by_tool_name[tool_name] = agent
         logger.debug("Subagent '%s' registered on tool '%s'", agent.name, tool_name)
 
@@ -225,7 +225,7 @@ class SubagentInteractionWatchdog:
         logger.debug("All status updates sent for '%s'", active.tool_name)
 
     async def _open_channel_for_status_updates(
-        self, subagent: SupervisorAgent
+        self, subagent: SubAgent
     ) -> SubAgentChannel:
         channel = SubAgentChannel()
         subagent._attach_channel(channel)

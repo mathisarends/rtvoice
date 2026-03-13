@@ -103,11 +103,11 @@ class UserInactivityTimeoutEvent(BaseModel):
 
 
 class SubAgentStartedEvent(BaseModel):
-    pass
+    agent_name: str
 
 
 class SubAgentFinishedEvent(BaseModel):
-    pass
+    agent_name: str
 
 
 class AssistantInterruptedEvent(BaseModel):

@@ -1,3 +1,3 @@
-from .subagent_interatction import SubagentInteractionWatchdog
+from .subagent_interaction import SubAgentInteractionWatchdog
 
-__all__ = ["SubagentInteractionWatchdog"]
+__all__ = ["SubAgentInteractionWatchdog"]

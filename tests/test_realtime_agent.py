@@ -12,6 +12,8 @@ from rtvoice.events.views import (
     AssistantStartedRespondingEvent,
     AssistantStoppedRespondingEvent,
     AssistantTranscriptCompletedEvent,
+    SubAgentFinishedEvent,
+    SubAgentStartedEvent,
     UserInactivityTimeoutEvent,
     UserStartedSpeakingEvent,
     UserStoppedSpeakingEvent,
@@ -417,6 +419,24 @@ class TestListenerWiring:
         await agent._event_bus.dispatch(AssistantStoppedRespondingEvent())
 
         listener.on_assistant_stopped_responding.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_on_subagent_started_is_called_with_agent_name(self) -> None:
+        listener = AsyncMock(spec=AgentListener)
+        agent = make_agent(listener=listener)
+
+        await agent._event_bus.dispatch(SubAgentStartedEvent(agent_name="research"))
+
+        listener.on_subagent_started.assert_called_once_with("research")
+
+    @pytest.mark.asyncio
+    async def test_on_subagent_finished_is_called_with_agent_name(self) -> None:
+        listener = AsyncMock(spec=AgentListener)
+        agent = make_agent(listener=listener)
+
+        await agent._event_bus.dispatch(SubAgentFinishedEvent(agent_name="research"))
+
+        listener.on_subagent_finished.assert_called_once_with("research")
 
     @pytest.mark.asyncio
     async def test_no_listener_events_do_not_raise(self) -> None:

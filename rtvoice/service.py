@@ -58,7 +58,7 @@ from rtvoice.watchdogs import (
     LifecycleWatchdog,
     SessionWatchdog,
     SpeechStateWatchdog,
-    SubagentInteractionWatchdog,
+    SubAgentInteractionWatchdog,
     ToolCallingWatchdog,
     TranscriptionWatchdog,
     UserInactivityTimeoutWatchdog,
@@ -432,7 +432,7 @@ class RealtimeAgent[T]:
             subagent_tool_names={s.name for s in self._subagents} or None,
         )
         if self._subagents:
-            self._subagent_watchdog = SubagentInteractionWatchdog(
+            self._subagent_watchdog = SubAgentInteractionWatchdog(
                 event_bus=self._event_bus,
                 tools=self._tools,
                 websocket=self._websocket,
@@ -505,11 +505,11 @@ class RealtimeAgent[T]:
         )
         self._event_bus.subscribe(
             SubAgentStartedEvent,
-            lambda _: self._listener.on_subagent_started(),
+            lambda e: self._listener.on_subagent_started(e.agent_name),
         )
         self._event_bus.subscribe(
             SubAgentFinishedEvent,
-            lambda _: self._listener.on_subagent_finished(),
+            lambda e: self._listener.on_subagent_finished(e.agent_name),
         )
 
     def _warn_listener_countdown_mismatch_if_necessary(self) -> None:

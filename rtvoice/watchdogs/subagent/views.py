@@ -6,10 +6,10 @@ from rtvoice.tools.registry.views import Tool
 
 
 @dataclass
-class PendingToolCall:
+class PendingSubAgentCall:
     call_id: str
-    tool_name: str
-    result_task: asyncio.Task
-    tool: Tool
+    subagent_name: str
+    execution_task: asyncio.Task
+    handoff_tool: Tool
     channel: SubAgentChannel
     channel_task: asyncio.Task | None = None

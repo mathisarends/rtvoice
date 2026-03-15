@@ -33,24 +33,23 @@ logger = logging.getLogger(__name__)
 class SubAgent[T]:
     """Agentic sub-agent that can be delegated tasks from a `RealtimeAgent`.
 
-        Runs an LLM-driven tool-calling loop to complete a given task, with built-in
-        support for clarification questions, MCP server integration, and handoff
-        from a parent voice agent.
+    Runs an LLM-driven tool-calling loop to complete a given task, with built-in
+    support for clarification questions, MCP server integration, and handoff
+    from a parent voice agent.
 
-        The agent exposes two special tools to the LLM automatically:
+    The agent exposes two special tools to the LLM automatically:
 
-        - **done** — signals task completion and returns the final result.
-        - **clarify** — asks the user a question and blocks until they answer.
+    - **done** — signals task completion and returns the final result.
+    - **clarify** — asks the user a question and blocks until they answer.
 
-        Example:
     ```python
-            agent = SubAgent(
-                name="calendar_agent",
-                description="Manages the user's calendar.",
-                instructions="You are a calendar assistant ...",
-                llm=OpenAIChat(model="gpt-4o"),
-            )
-            result = await agent.run("Schedule a meeting with Alice tomorrow at 3pm.")
+    agent = SubAgent(
+        name="calendar_agent",
+        description="Manages the user's calendar.",
+        instructions="You are a calendar assistant ...",
+        llm=OpenAIChat(model="gpt-4o"),
+    )
+    result = await agent.run("Schedule a meeting with Alice tomorrow at 3pm.")
     ```
     """
 

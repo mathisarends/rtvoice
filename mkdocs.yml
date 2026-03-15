@@ -47,4 +47,5 @@ nav:
       - Lifecycle Events: api/lifecycle_events.md
       - SubAgent: api/subagent.md
       - Tools: api/tools.md
+      - Skills: api/skills.md
       - Audio: api/audio.md

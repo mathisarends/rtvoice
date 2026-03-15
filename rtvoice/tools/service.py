@@ -167,12 +167,14 @@ class SubAgentTools(BaseTools):
         name: str | None = None,
         result_instruction: str | None = None,
         status: str | None = None,
+        suppress_response: bool = False,
     ) -> Callable:
         return self._registry.action(
             description,
             name=name,
             result_instruction=result_instruction,
             status=status,
+            suppress_response=suppress_response,
         )
 
     def get(self, name: str) -> SubAgentTool | None:

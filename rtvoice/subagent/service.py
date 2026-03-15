@@ -398,6 +398,9 @@ class SubAgent[T]:
                     success=True,
                     message=msg,
                     tool_calls=executed_tool_calls,
+                    suppress_realtime_response=self._should_suppress_realtime_response(
+                        executed_tool_calls
+                    ),
                 )
             case ClarifySignal(question=question):
                 logger.debug("Tool 'clarify' called with question: %s", question)
@@ -417,6 +420,17 @@ class SubAgent[T]:
             ToolResultMessage(tool_call_id=tool_call.id, content=str(result))
         )
         return None
+
+    def _should_suppress_realtime_response(
+        self, executed_tool_calls: list[ToolCall]
+    ) -> bool:
+        if not executed_tool_calls:
+            return False
+
+        last_call = executed_tool_calls[-1]
+        last_tool = self._tools.get(last_call.name)
+
+        return bool(last_tool and getattr(last_tool, "suppress_response", False))
 
     async def _send_tool_status(self, tool_call: ToolCall) -> None:
         if not self._channel or self._is_default_registered_tool(tool_call.name):

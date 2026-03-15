@@ -191,7 +191,17 @@ class SubAgentInteractionWatchdog:
                 serialized,
             )
             await self._ws.send_function_call_output(active.call_id, serialized)
-            await self._ws.send_response_event(active.handoff_tool)
+            should_suppress_response = isinstance(result, SubAgentResult) and bool(
+                result.suppress_realtime_response
+            )
+
+            if should_suppress_response:
+                logger.info(
+                    "Skipping realtime response inference for '%s' due to suppress_realtime_response",
+                    active.subagent_name,
+                )
+            else:
+                await self._ws.send_response_event(active.handoff_tool)
 
             await self._notify_subagent_finished(active.subagent_name)
             await self._eject_cancel_subagent_tool()

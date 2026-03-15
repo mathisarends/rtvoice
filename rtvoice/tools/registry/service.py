@@ -125,6 +125,7 @@ class SubAgentToolRegistry(ToolRegistry):
         name: str | None = None,
         result_instruction: str | None = None,
         status: str | None = None,
+        suppress_response: bool = False,
     ):
         def decorator(func: Callable) -> Callable:
             from rtvoice.tools.registry.views import SubAgentTool
@@ -141,6 +142,7 @@ class SubAgentToolRegistry(ToolRegistry):
                 schema=schema,
                 result_instruction=result_instruction,
                 status=status,
+                suppress_response=suppress_response,
             )
             self._register_tool(tool)
             return func

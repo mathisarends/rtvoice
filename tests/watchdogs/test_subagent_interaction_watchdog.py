@@ -15,6 +15,7 @@ from rtvoice.realtime.schemas import (
     ConversationResponseCreateEvent,
     FunctionCallItem,
 )
+from rtvoice.subagent.views import SubAgentResult
 from rtvoice.tools import Tools
 from rtvoice.tools.registry.views import Tool
 from rtvoice.watchdogs.subagent.subagent_interaction import SubAgentInteractionWatchdog
@@ -302,6 +303,44 @@ class TestResultDelivery:
 
         sent_types = [type(c.args[0]) for c in websocket.send.call_args_list]
         assert ConversationResponseCreateEvent in sent_types
+
+    @pytest.mark.asyncio
+    async def test_skips_response_create_when_subagent_result_is_silent(
+        self,
+        event_bus: EventBus,
+        watchdog: SubAgentInteractionWatchdog,
+        websocket: AsyncMock,
+        tools: Tools,
+    ) -> None:
+        register_tool(tools)
+        tool = tools.get("slow_job")
+        assert tool is not None
+
+        async def silent_done_tool(query: str | None = None) -> SubAgentResult:
+            return SubAgentResult(
+                message="job_done",
+                suppress_realtime_response=True,
+            )
+
+        tool.function = silent_done_tool
+
+        await event_bus.dispatch(make_function_call_item(call_id="call_silent"))
+        await asyncio.sleep(0.05)
+
+        sent_payloads = [c.args[0] for c in websocket.send.call_args_list]
+        response_events = [
+            event
+            for event in sent_payloads
+            if isinstance(event, ConversationResponseCreateEvent)
+        ]
+        item_events = [
+            event
+            for event in sent_payloads
+            if isinstance(event, ConversationItemCreateEvent)
+        ]
+
+        assert len(response_events) == 1
+        assert len(item_events) == 1
 
     @pytest.mark.asyncio
     async def test_pending_cleared_after_result_delivered(

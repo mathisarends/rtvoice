@@ -76,6 +76,7 @@ class SubAgentTool(Tool):
         schema: FunctionParameters,
         result_instruction: str | None = None,
         status: str | None = None,
+        suppress_response: bool = False,
     ):
         super().__init__(
             name=name,
@@ -85,6 +86,7 @@ class SubAgentTool(Tool):
             result_instruction=result_instruction,
         )
         self.status = status
+        self.suppress_response = suppress_response
 
     def format_status(self, args: BaseModel | dict[str, Any]) -> str | None:
         if self.status is None:

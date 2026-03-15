@@ -91,6 +91,20 @@ class TestActionDecorator:
             def draft_email(recipient: str, subject: str, body: str) -> str:
                 return "ok"
 
+    def test_stores_suppress_response_flag(self, registry: ToolRegistry) -> None:
+        subagent_registry = SubAgentToolRegistry()
+
+        @subagent_registry.action(
+            description="Silent task",
+            suppress_response=True,
+        )
+        def silent_task(topic: str) -> str:
+            return topic
+
+        tool = subagent_registry.get("silent_task")
+        assert tool is not None
+        assert tool.suppress_response is True
+
     def test_duplicate_name_raises_value_error(self, registry: ToolRegistry) -> None:
         @registry.action(description="First")
         def greet() -> None: ...

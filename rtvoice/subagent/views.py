@@ -21,6 +21,7 @@ class SubAgentResult:
     message: str
     success: bool = True
     tool_calls: list[ToolCall] = field(default_factory=list)
+    tool_statuses: list[str] = field(default_factory=list)
     suppress_realtime_response: bool = False
     clarification_needed: str | None = None
     resume_history: list[Message] | None = None

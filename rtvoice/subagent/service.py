@@ -314,6 +314,7 @@ class SubAgent[T]:
 
         tool_schema = self._tools.get_json_tool_schema()
         executed_tool_calls: list[ToolCall] = []
+        tool_statuses: list[str] = []
 
         try:
             for _ in range(self._max_iterations):
@@ -322,6 +323,7 @@ class SubAgent[T]:
                         message="Task was cancelled by the user.",
                         success=False,
                         tool_calls=executed_tool_calls,
+                        tool_statuses=tool_statuses,
                     )
 
                 response = await self._llm.invoke(messages, tools=tool_schema)
@@ -330,13 +332,14 @@ class SubAgent[T]:
                     return SubAgentResult(
                         message=response.content,
                         tool_calls=executed_tool_calls,
+                        tool_statuses=tool_statuses,
                     )
 
                 messages.append(response.to_message())
 
                 for tool_call in response.tool_calls:
                     early_return = await self._execute_tool_call(
-                        tool_call, executed_tool_calls, messages
+                        tool_call, executed_tool_calls, tool_statuses, messages
                     )
                     if early_return is not None:
                         return early_return
@@ -345,6 +348,7 @@ class SubAgent[T]:
                 message="Max iterations reached without a final answer.",
                 success=False,
                 tool_calls=executed_tool_calls,
+                tool_statuses=tool_statuses,
             )
         finally:
             if self._channel:
@@ -384,10 +388,13 @@ class SubAgent[T]:
         self,
         tool_call: ToolCall,
         executed_tool_calls: list[ToolCall],
+        tool_statuses: list[str],
         messages: list,
     ) -> SubAgentResult | None:
         logger.debug("Executing tool call: '%s'", tool_call.name)
-        await self._send_tool_status(tool_call)
+        status = await self._send_tool_status(tool_call)
+        if status is not None:
+            tool_statuses.append(status)
 
         result = await self._tools.execute(tool_call.name, tool_call.tool)
 
@@ -398,6 +405,7 @@ class SubAgent[T]:
                     success=True,
                     message=msg,
                     tool_calls=executed_tool_calls,
+                    tool_statuses=tool_statuses,
                     suppress_realtime_response=self._should_suppress_realtime_response(
                         executed_tool_calls
                     ),
@@ -408,6 +416,7 @@ class SubAgent[T]:
                     message="",
                     success=False,
                     tool_calls=executed_tool_calls,
+                    tool_statuses=tool_statuses,
                     clarification_needed=question,
                     resume_history=list(messages),
                     clarify_call_id=tool_call.id,
@@ -432,20 +441,23 @@ class SubAgent[T]:
 
         return bool(last_tool and getattr(last_tool, "suppress_response", False))
 
-    async def _send_tool_status(self, tool_call: ToolCall) -> None:
-        if not self._channel or self._is_default_registered_tool(tool_call.name):
-            return
+    async def _send_tool_status(self, tool_call: ToolCall) -> str | None:
+        if self._is_default_registered_tool(tool_call.name):
+            return None
 
         tool = self._tools.get(tool_call.name)
         if tool is None:
-            return
+            return None
 
         status = tool.format_status(tool_call.tool)
         if status is None:
-            return
+            return None
 
         logger.debug("Sending status update via channel: %s", status)
-        self._channel.buffer_status(status)
+        if self._channel:
+            self._channel.buffer_status(status)
+
+        return status
 
     def _is_default_registered_tool(self, tool_name: str) -> bool:
         return tool_name in ("done", "clarify")

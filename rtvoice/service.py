@@ -38,7 +38,7 @@ from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
 from rtvoice.subagent import SubAgent
 from rtvoice.subagent.views import SubAgentResult
-from rtvoice.tools import RealtimeTools, SpecialToolParameters
+from rtvoice.tools import SpecialToolParameters, Tools
 from rtvoice.views import (
     AgentListener,
     AgentResult,
@@ -142,7 +142,7 @@ class RealtimeAgent[T]:
             ),
         ] = None,
         tools: Annotated[
-            RealtimeTools | None,
+            Tools | None,
             Doc(
                 "Pre-registered tool set exposed to the model. "
                 "Tools receive the shared `context` and `event_bus` automatically."
@@ -283,7 +283,7 @@ class RealtimeAgent[T]:
         self._event_bus = event_bus or EventBus()
         self._conversation_history = ConversationHistory(self._event_bus)
 
-        self._tools = RealtimeTools()
+        self._tools = Tools()
         if tools:
             self._tools.merge(tools)
 

@@ -40,7 +40,7 @@ from dotenv import load_dotenv
 from llmify import ChatOpenAI
 from pydantic import BaseModel
 
-from rtvoice import RealtimeAgent, SubAgent, Tools
+from rtvoice import RealtimeAgent, SubAgent, SubAgentTools, Tools
 
 load_dotenv(override=True)
 
@@ -92,8 +92,8 @@ class HueApplyResult(BaseModel):
     action: str
 
 
-def _build_mail_tools() -> Tools:
-    tools = Tools()
+def _build_mail_tools() -> SubAgentTools:
+    tools = SubAgentTools()
 
     _mock_emails = [
         Email(
@@ -120,7 +120,8 @@ def _build_mail_tools() -> Tools:
     ]
 
     @tools.action(
-        "Fetch the inbox and return all emails with sender, subject, and read state."
+        "Fetch the inbox and return all emails with sender, subject, and read state.",
+        status="Lade Posteingang...",
     )
     async def get_inbox() -> Inbox:
         await asyncio.sleep(0.8)
@@ -129,7 +130,10 @@ def _build_mail_tools() -> Tools:
             emails=_mock_emails,
         )
 
-    @tools.action("Fetch the full body of a specific email by its ID.")
+    @tools.action(
+        "Fetch the full body of a specific email by its ID.",
+        status="Lade Email {email_id}...",
+    )
     async def get_email_body(
         email_id: Annotated[str, "The email ID from the inbox listing."],
     ) -> EmailBody:
@@ -148,6 +152,7 @@ def _build_mail_tools() -> Tools:
 
     @tools.action(
         "Send an email. Use this to reply to an existing email or compose a new one.",
+        status="Sende Email an {to}...",
     )
     async def send_email(
         to: Annotated[str, "Recipient email address."],
@@ -175,15 +180,13 @@ def build_mail_assistant() -> SubAgent:
         instructions=(
             "You are a personal email assistant.\n\n"
             "Reading flow:\n"
-            "1. status('Fetching inbox…') → call get_inbox()\n"
-            "2. If the user wants to read a specific email:\n"
-            "   status('Loading email from <sender>…') → call get_email_body()\n"
-            "3. call done() with a natural conversational summary.\n\n"
+            "1. Call get_inbox() to fetch all emails.\n"
+            "2. If the user wants to read a specific email, call get_email_body().\n"
+            "3. Call done() with a natural conversational summary.\n\n"
             "Sending flow:\n"
             "1. If recipient, subject, or message content is unclear, call clarify().\n"
-            "2. status('Sending email to <recipient>…') → call send_email()\n"
-            "3. call done() confirming what was sent and to whom.\n\n"
-            "Always use status() before slow steps. "
+            "2. Call send_email().\n"
+            "3. Call done() confirming what was sent and to whom.\n\n"
             "Summarise emails conversationally — never read them out verbatim."
         ),
         tools=_build_mail_tools(),
@@ -200,8 +203,8 @@ def build_mail_assistant() -> SubAgent:
     )
 
 
-def _build_hue_tools() -> Tools:
-    tools = Tools()
+def _build_hue_tools() -> SubAgentTools:
+    tools = SubAgentTools()
 
     _mock_rooms: list[HueRoom] = [
         HueRoom(
@@ -234,12 +237,18 @@ def _build_hue_tools() -> Tools:
         HueScene(id="scene-4", name="Relax", room="Living Room"),
     ]
 
-    @tools.action("List all available Hue rooms and their current light state.")
+    @tools.action(
+        "List all available Hue rooms and their current light state.",
+        status="Lade verfügbare Räume...",
+    )
     async def list_rooms() -> list[HueRoom]:
         await asyncio.sleep(0.5)
         return list(_mock_rooms)
 
-    @tools.action("List available Hue scenes, optionally filtered by room name.")
+    @tools.action(
+        "List available Hue scenes, optionally filtered by room name.",
+        status="Lade Szenen...",
+    )
     async def list_scenes(
         room: Annotated[
             str | None, "Filter by room name. Pass None to list all."
@@ -250,7 +259,10 @@ def _build_hue_tools() -> Tools:
             return [s for s in _mock_scenes if s.room.lower() == room.lower()]
         return list(_mock_scenes)
 
-    @tools.action("Turn the lights in a room on or off.")
+    @tools.action(
+        "Turn the lights in a room on or off.",
+        status="Schalte Licht in Raum {room_id}...",
+    )
     async def set_room_power(
         room_id: Annotated[str, "The room ID from list_rooms()."],
         on: Annotated[bool, "True to turn on, False to turn off."],
@@ -263,7 +275,10 @@ def _build_hue_tools() -> Tools:
             action="turned on" if on else "turned off",
         )
 
-    @tools.action("Apply a Hue scene to a room.")
+    @tools.action(
+        "Apply a Hue scene to a room.",
+        status="Aktiviere Szene {scene_id}...",
+    )
     async def apply_scene(
         scene_id: Annotated[str, "The scene ID from list_scenes()."],
         room_id: Annotated[str, "The room ID from list_rooms()."],
@@ -277,7 +292,10 @@ def _build_hue_tools() -> Tools:
             action=f"scene '{scene.name if scene else scene_id}' applied",
         )
 
-    @tools.action("Set the brightness of a room's lights to a value between 0 and 100.")
+    @tools.action(
+        "Set the brightness of a room's lights to a value between 0 and 100.",
+        status="Setze Helligkeit auf {brightness}%...",
+    )
     async def set_brightness(
         room_id: Annotated[str, "The room ID from list_rooms()."],
         brightness: Annotated[int, "Brightness level: 0 (off) to 100 (full)."],
@@ -308,20 +326,14 @@ def build_hue_assistant() -> SubAgent:
         ),
         instructions=(
             "You are a smart home lighting assistant.\n\n"
-            "Always start by fetching available rooms:\n"
-            "1. status('Fetching rooms…') → call list_rooms()\n"
-            "   Match the user's room name to the closest result. "
-            "   If ambiguous, call clarify().\n\n"
-            "Power control:\n"
-            "   status('Switching <room> <on/off>…') → call set_room_power()\n\n"
-            "Scene activation:\n"
-            "   status('Loading scenes for <room>…') → call list_scenes(room=...)\n"
-            "   Match the closest scene name. "
-            "   status('Applying scene <name>…') → call apply_scene()\n\n"
-            "Brightness:\n"
-            "   status('Adjusting brightness in <room>…') → call set_brightness()\n\n"
-            "Always finish with done() confirming what changed and in which room. "
-            "Never skip status() before a slow step."
+            "Always start by calling list_rooms() to fetch available rooms. "
+            "Match the user's room name to the closest result. "
+            "If ambiguous, call clarify().\n\n"
+            "Power control: call set_room_power() with the matched room ID.\n\n"
+            "Scene activation: call list_scenes(room=...) to find available scenes, "
+            "match the closest scene name, then call apply_scene().\n\n"
+            "Brightness: call set_brightness() with the desired level.\n\n"
+            "Always finish with done() confirming what changed and in which room."
         ),
         tools=_build_hue_tools(),
         llm=ChatOpenAI(model="gpt-4o-mini", temperature=0),

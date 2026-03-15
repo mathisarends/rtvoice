@@ -4,6 +4,7 @@ import logging
 
 from rtvoice.events import EventBus
 from rtvoice.events.views import (
+    AssistantStartedRespondingEvent,
     AssistantStoppedRespondingEvent,
     CancelSubAgentCommand,
     SubAgentFinishedEvent,
@@ -20,17 +21,18 @@ from rtvoice.subagent import SubAgent
 from rtvoice.subagent.channel import SubAgentChannel
 from rtvoice.subagent.views import SubAgentResult
 from rtvoice.tools import Tools
-from rtvoice.tools.registry.views import Tool
+from rtvoice.tools.registry.views import RealtimeTool
 from rtvoice.watchdogs.subagent.views import PendingSubAgentCall
 from rtvoice.watchdogs.tool_calling.helpers import ToolCallWebSocketHelper
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_HOLDING_INSTRUCTION = (
-    "The user's request is being processed. "
-    "Say ONE brief sentence acknowledging it naturally "
-    "(e.g. 'Let me look that up for you!'). "
-    "Then stop. Do not keep talking and do not reveal any results. "
+    "The user's request is being processed in the background. "
+    "Say ONE very short, generic sentence (e.g. 'On it!', 'Give me a moment!', 'Sure, let me handle that!'). "
+    "Do NOT mention what the task is. "
+    "Do NOT state or imply whether it succeeded or failed — you don't know yet. "
+    "Do NOT paraphrase the task. "
     "Always respond in the same language the user is speaking."
 )
 
@@ -54,17 +56,23 @@ class SubAgentInteractionWatchdog:
         # subagent is allowed to be called next — enforced in _handle_tool_call.
         self._awaiting_clarification_for: str | None = None
 
+        self._response_idle = asyncio.Event()
+        self._response_idle.set()
+
         self._event_bus.subscribe(FunctionCallItem, self._handle_tool_call)
         self._event_bus.subscribe(CancelSubAgentCommand, self._cancel_active_subagent)
         self._event_bus.subscribe(
-            AssistantStoppedRespondingEvent, self._forward_speech_end_to_channel
+            AssistantStartedRespondingEvent, self._on_response_started
+        )
+        self._event_bus.subscribe(
+            AssistantStoppedRespondingEvent, self._on_response_stopped
         )
 
     def register_subagent(self, tool_name: str, agent: SubAgent) -> None:
         self._subagents_by_tool_name[tool_name] = agent
         logger.debug("Subagent '%s' registered on tool '%s'", agent.name, tool_name)
 
-    def _register_cancel_tool(self) -> Tool:
+    def _register_cancel_tool(self) -> RealtimeTool:
         @self._tools.action(
             "Cancel the currently running background agent. "
             "Call this when the user explicitly wants to stop, cancel, or abandon the ongoing task.",
@@ -140,7 +148,7 @@ class SubAgentInteractionWatchdog:
         await self._send_holding_message(tool)
         asyncio.create_task(self._wait_for_result_and_respond(active))
 
-    async def _send_holding_message(self, tool: Tool) -> None:
+    async def _send_holding_message(self, tool: RealtimeTool) -> None:
         await self._websocket.send(
             ConversationResponseCreateEvent.from_instructions(
                 tool.holding_instruction or _DEFAULT_HOLDING_INSTRUCTION,
@@ -177,6 +185,7 @@ class SubAgentInteractionWatchdog:
 
         try:
             await self._wait_for_status_updates_to_finish(active)
+            await self._response_idle.wait()
 
             if isinstance(result, SubAgentResult) and result.clarification_needed:
                 await self._ask_user_for_clarification(active, result)
@@ -190,7 +199,17 @@ class SubAgentInteractionWatchdog:
                 serialized,
             )
             await self._ws.send_function_call_output(active.call_id, serialized)
-            await self._ws.send_response_event(active.handoff_tool)
+            should_suppress_response = isinstance(result, SubAgentResult) and bool(
+                result.suppress_realtime_response
+            )
+
+            if should_suppress_response:
+                logger.info(
+                    "Skipping realtime response inference for '%s' due to suppress_realtime_response",
+                    active.subagent_name,
+                )
+            else:
+                await self._ws.send_response_event(active.handoff_tool)
 
             await self._notify_subagent_finished(active.subagent_name)
             await self._eject_cancel_subagent_tool()
@@ -298,8 +317,10 @@ class SubAgentInteractionWatchdog:
             UpdateSessionToolsCommand(tools=self._tools.get_tool_schema())
         )
 
-    async def _forward_speech_end_to_channel(
-        self, _: AssistantStoppedRespondingEvent
-    ) -> None:
+    async def _on_response_started(self, _: AssistantStartedRespondingEvent) -> None:
+        self._response_idle.clear()
+
+    async def _on_response_stopped(self, _: AssistantStoppedRespondingEvent) -> None:
+        self._response_idle.set()
         if self._active is not None:
             self._active.channel.notify_speech_ended()

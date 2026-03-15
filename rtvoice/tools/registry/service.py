@@ -1,4 +1,5 @@
 import inspect
+import re
 from collections.abc import Callable
 
 from rtvoice.mcp import MCPServer
@@ -17,7 +18,6 @@ class ToolRegistry:
         description: str,
         name: str | None = None,
         result_instruction: str | None = None,
-        holding_instruction: str | None = None,
     ):
         def decorator(func: Callable) -> Callable:
             tool = self._build_tool(
@@ -25,12 +25,26 @@ class ToolRegistry:
                 name=name or func.__name__,
                 description=description,
                 result_instruction=result_instruction,
-                holding_instruction=holding_instruction,
             )
             self._register_tool(tool)
             return func
 
         return decorator
+
+    def _validate_status_template(self, status: str, function: Callable) -> None:
+        placeholders = {match.group(1) for match in re.finditer(r"\{(\w+)\}", status)}
+        param_names = {
+            name
+            for name in inspect.signature(function).parameters
+            if name not in {"self", "cls"}
+        }
+
+        unknown_placeholders = placeholders - param_names
+        if unknown_placeholders:
+            raise ValueError(
+                "Status template contains unknown placeholders: "
+                f"{unknown_placeholders}. Available parameters: {param_names}"
+            )
 
     def get(self, name: str) -> Tool | None:
         return self.tools.get(name)
@@ -44,7 +58,6 @@ class ToolRegistry:
         name: str,
         description: str,
         result_instruction: str | None,
-        holding_instruction: str | None = None,
     ) -> Tool:
         bound_func = getattr(self, func.__name__, func)
         schema = self._schema_builder.build(func)
@@ -55,7 +68,6 @@ class ToolRegistry:
             function=bound_func,
             schema=schema,
             result_instruction=result_instruction,
-            holding_instruction=holding_instruction,
         )
 
     def _register_tool(self, tool: Tool) -> None:
@@ -77,3 +89,62 @@ class ToolRegistry:
             schema=tool.parameters,
         )
         self._register_tool(mcp_tool)
+
+
+class RealtimeToolRegistry(ToolRegistry):
+    def action(
+        self,
+        description: str,
+        name: str | None = None,
+        result_instruction: str | None = None,
+        holding_instruction: str | None = None,
+    ):
+        def decorator(func: Callable) -> Callable:
+            from rtvoice.tools.registry.views import RealtimeTool
+
+            bound_func = getattr(self, func.__name__, func)
+            schema = self._schema_builder.build(func)
+            tool = RealtimeTool(
+                name=name or func.__name__,
+                description=description,
+                function=bound_func,
+                schema=schema,
+                result_instruction=result_instruction,
+                holding_instruction=holding_instruction,
+            )
+            self._register_tool(tool)
+            return func
+
+        return decorator
+
+
+class SubAgentToolRegistry(ToolRegistry):
+    def action(
+        self,
+        description: str,
+        name: str | None = None,
+        result_instruction: str | None = None,
+        status: str | None = None,
+        suppress_response: bool = False,
+    ):
+        def decorator(func: Callable) -> Callable:
+            from rtvoice.tools.registry.views import SubAgentTool
+
+            if status is not None:
+                self._validate_status_template(status, func)
+
+            bound_func = getattr(self, func.__name__, func)
+            schema = self._schema_builder.build(func)
+            tool = SubAgentTool(
+                name=name or func.__name__,
+                description=description,
+                function=bound_func,
+                schema=schema,
+                result_instruction=result_instruction,
+                status=status,
+                suppress_response=suppress_response,
+            )
+            self._register_tool(tool)
+            return func
+
+        return decorator

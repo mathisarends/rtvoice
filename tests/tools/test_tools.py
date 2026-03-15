@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from rtvoice.events.bus import EventBus
-from rtvoice.tools import RealtimeTools, SubAgentTools, Tools
+from rtvoice.tools import SubAgentTools, Tools
 from rtvoice.tools.views import SpecialToolParameters
 
 
@@ -160,10 +160,10 @@ class TestClone:
         assert tools.get("clone_only") is None
 
     def test_clone_preserves_type(self) -> None:
-        realtime = RealtimeTools()
+        realtime = Tools()
         clone = realtime.clone()
 
-        assert type(clone) is RealtimeTools
+        assert type(clone) is Tools
 
 
 class TestRegisterMcp:
@@ -195,7 +195,7 @@ class TestRegisterMcp:
 
 class TestRealtimeTools:
     def test_get_tool_schema_returns_list(self) -> None:
-        realtime = RealtimeTools()
+        realtime = Tools()
 
         @realtime.action(description="A tool")
         def my_tool(name: str) -> None: ...
@@ -205,9 +205,15 @@ class TestRealtimeTools:
         assert len(schema) == 1
 
     def test_get_tool_schema_empty_for_no_tools(self) -> None:
-        realtime = RealtimeTools()
+        realtime = Tools()
 
         assert realtime.get_tool_schema() == []
+
+    def test_action_does_not_accept_status(self) -> None:
+        realtime = Tools()
+
+        with pytest.raises(TypeError, match="status"):
+            realtime.action(description="A tool", status="Working...")
 
 
 class TestSubAgentTools:
@@ -245,3 +251,65 @@ class TestSubAgentTools:
         agent = SubAgentTools()
 
         assert agent.get_json_tool_schema() == []
+
+    def test_action_does_not_accept_holding_instruction(self) -> None:
+        agent = SubAgentTools()
+
+        with pytest.raises(TypeError, match="holding_instruction"):
+            agent.action(description="A tool", holding_instruction="Please wait")
+
+    def test_tool_format_status_formats_template(self) -> None:
+        agent = SubAgentTools()
+
+        @agent.action(
+            description="Search events",
+            status="Suche nach '{query}' im Kalender...",
+        )
+        def search_events(query: str, date: str) -> list:
+            return []
+
+        tool = agent.get("search_events")
+        assert tool is not None
+        status = tool.format_status({"query": "Zahnarzt", "date": "2026-03-15"})
+
+        assert status == "Suche nach 'Zahnarzt' im Kalender..."
+
+    def test_tool_format_status_returns_none_without_status_template(self) -> None:
+        agent = SubAgentTools()
+
+        @agent.action(description="Search events")
+        def search_events(query: str) -> list:
+            return []
+
+        tool = agent.get("search_events")
+        assert tool is not None
+        status = tool.format_status({"query": "Dentist"})
+
+        assert status is None
+
+    def test_tool_format_status_falls_back_to_template_on_missing_key(self) -> None:
+        agent = SubAgentTools()
+
+        @agent.action(
+            description="Create event",
+            status="Erstelle Termin am {date} mit {attendees}...",
+        )
+        def create_event(date: str, attendees: str) -> str:
+            return "ok"
+
+        tool = agent.get("create_event")
+        assert tool is not None
+        status = tool.format_status({"date": "Montag"})
+
+        assert status == "Erstelle Termin am {date} mit {attendees}..."
+
+    def test_action_stores_suppress_response_flag(self) -> None:
+        agent = SubAgentTools()
+
+        @agent.action(description="Silent op", suppress_response=True)
+        def silent_op() -> str:
+            return "ok"
+
+        tool = agent.get("silent_op")
+        assert tool is not None
+        assert tool.suppress_response is True

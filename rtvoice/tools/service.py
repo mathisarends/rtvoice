@@ -2,46 +2,41 @@ from __future__ import annotations
 
 import inspect
 import logging
-from typing import Any, Self
+from abc import ABC, abstractmethod
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Self
 
 from rtvoice.mcp.server import MCPServer
 from rtvoice.realtime.schemas import FunctionTool
-from rtvoice.tools.registry import ToolRegistry
+from rtvoice.tools.registry import (
+    RealtimeToolRegistry,
+    SubAgentToolRegistry,
+    ToolRegistry,
+)
 from rtvoice.tools.registry.views import Tool
 from rtvoice.tools.views import SpecialToolParameters
 
+if TYPE_CHECKING:
+    from rtvoice.tools.registry.views import RealtimeTool, SubAgentTool
+
 logger = logging.getLogger(__name__)
 
-__all__ = [
-    "RealtimeTools",
-    "SubAgentTools",
-    "Tools",
-]
+__all__ = ["RealtimeTools", "SubAgentTools", "Tools"]
 
 
-class Tools:
-    """Base class for managing and executing tools exposed to the model.
+class BaseTools(ABC):
+    """Abstract base class shared by all tool registries.
 
-    `Tools` acts as a registry for callable actions that the model can invoke
-    during a session. Use the [`action`][rtvoice.tools.Tools.action] decorator
-    to register your own tools, then pass the instance to `RealtimeAgent`.
-
-    Example:
-        ```python
-        tools = Tools()
-
-
-        @tools.action("Get the current time in a given timezone")
-        async def get_time(timezone: str) -> str: ...
-
-
-        agent = RealtimeAgent(tools=tools)
-        ```
+    Internal helper for shared execution and argument-injection behavior.
     """
 
     def __init__(self):
-        self._registry = ToolRegistry()
+        self._registry = self._create_registry()
         self._context: SpecialToolParameters = SpecialToolParameters()
+
+    @abstractmethod
+    def _create_registry(self) -> ToolRegistry:
+        """Return the concrete registry implementation for this tool set."""
 
     def set_context(self, context: SpecialToolParameters) -> None:
         self._context = context
@@ -52,67 +47,10 @@ class Tools:
     def eject_tool(self, name: str) -> None:
         self._registry.tools.pop(name, None)
 
-    def action(
-        self,
-        description: str,
-        name: str | None = None,
-        result_instruction: str | None = None,
-        holding_instruction: str | None = None,
-    ):
-        """Register a function as a tool the model can call.
-
-        Decorate any async function with this to make it available to the model.
-        Parameters annotated with [`EventBus`][rtvoice.events.EventBus],
-        [`ConversationHistory`][rtvoice.conversation.ConversationHistory], or the
-        shared `context` object are injected automatically — do not include them
-        in the model-facing schema.
-
-        Args:
-            description: Natural-language description shown to the model.
-                Write this as an instruction, e.g. *"Get the current weather
-                for a given city"*.
-            name: Override the tool name exposed to the model. Defaults to the
-                function name.
-            result_instruction: Optional instruction appended to the tool result
-                telling the model how to interpret or present the output.
-            holding_instruction: Message spoken by the assistant while the
-                subagent is running in the background.
-
-        Returns:
-            A decorator that registers the decorated function and returns it unchanged.
-
-        Example:
-            ```python
-            tools = Tools()
-
-
-            @tools.action(
-                "Get the current weather for a given city",
-                result_instruction="Summarise the weather in one sentence.",
-            )
-            async def get_weather(city: str) -> str: ...
-            ```
-        """
-        return self._registry.action(
-            description,
-            name=name,
-            result_instruction=result_instruction,
-            holding_instruction=holding_instruction,
-        )
-
     def register_mcp(self, tool: FunctionTool, server: MCPServer) -> None:
         self._registry.register_mcp(tool, server)
 
     def get(self, name: str) -> Tool | None:
-        """Look up a registered tool by name.
-
-        Args:
-            name: The tool name as registered (or overridden via `action(name=...)`).
-
-        Returns:
-            The [`Tool`][rtvoice.tools.registry.views.Tool] instance, or `None`
-            if no tool with that name exists.
-        """
         return self._registry.get(name)
 
     def get_tool_schema(self) -> list[FunctionTool]:
@@ -162,58 +100,87 @@ class Tools:
         }
 
     def clone(self) -> Self:
-        """Create a shallow copy of this tool registry.
-
-        Returns:
-            A new instance of the same type with a copied tool registry.
-            The shared context is not copied and must be set separately.
-        """
+        """Create a shallow copy of this tool registry."""
         new = type(self)()
         new._registry.tools = self._registry.tools.copy()
         return new
 
-    def merge(self, other: Tools) -> None:
+    def merge(self, other: BaseTools) -> None:
         self._registry.tools.update(other._registry.tools)
 
     def is_registered(self, tool: Tool) -> bool:
         return tool in self._registry.tools.values()
 
 
-class RealtimeTools(Tools):
+class Tools(BaseTools):
     """Tool registry for the OpenAI Realtime API.
 
-    Extends [`Tools`][rtvoice.tools.Tools] with schema serialisation in the
-    format expected by the Realtime API. Used internally by `RealtimeAgent` —
-    pass a plain [`Tools`][rtvoice.tools.Tools] instance to the agent rather
-    than constructing this directly.
+    This is the user-facing tools class for `RealtimeAgent`.
     """
 
-    def get_tool_schema(self) -> list[FunctionTool]:
-        """Return all registered tools serialised as Realtime API function schemas.
+    def _create_registry(self) -> ToolRegistry:
+        return RealtimeToolRegistry()
 
-        Returns:
-            List of [`FunctionTool`][rtvoice.realtime.schemas.FunctionTool] objects
-            ready to be sent in a session update.
+    def action(
+        self,
+        description: str,
+        name: str | None = None,
+        result_instruction: str | None = None,
+        holding_instruction: str | None = None,
+    ) -> Callable:
+        """Register a function as a realtime tool.
+
+        Args:
+            description: Natural-language description shown to the model.
+            name: Optional tool name override.
+            result_instruction: Optional instruction for result phrasing.
+            holding_instruction: Optional speech instruction while a delegated
+                subagent runs in the background.
         """
+        return self._registry.action(
+            description,
+            name=name,
+            result_instruction=result_instruction,
+            holding_instruction=holding_instruction,
+        )
+
+    def get(self, name: str) -> RealtimeTool | None:
+        return self._registry.get(name)
+
+    def get_tool_schema(self) -> list[FunctionTool]:
         return self._registry.get_tool_schema()
 
 
-class SubAgentTools(Tools):
-    """Tool registry for non-realtime (text) agents such as `SubAgent`.
+class RealtimeTools(Tools):
+    """Backward-compatible alias for `Tools`."""
 
-    Extends [`Tools`][rtvoice.tools.Tools] with schema serialisation in the
-    OpenAI Chat Completions `tools` format. Used internally — pass a plain
-    [`Tools`][rtvoice.tools.Tools] instance to the agent rather than
-    constructing this directly.
-    """
+
+class SubAgentTools(BaseTools):
+    """Tool registry for non-realtime (text) agents such as `SubAgent`."""
+
+    def _create_registry(self) -> ToolRegistry:
+        return SubAgentToolRegistry()
+
+    def action(
+        self,
+        description: str,
+        name: str | None = None,
+        result_instruction: str | None = None,
+        status: str | None = None,
+        suppress_response: bool = False,
+    ) -> Callable:
+        return self._registry.action(
+            description,
+            name=name,
+            result_instruction=result_instruction,
+            status=status,
+            suppress_response=suppress_response,
+        )
+
+    def get(self, name: str) -> SubAgentTool | None:
+        return self._registry.get(name)
 
     def get_json_tool_schema(self) -> list[dict]:
-        """Return all registered tools serialised as Chat Completions tool schemas.
-
-        Returns:
-            List of dicts in the `{"type": "function", "function": {...}}` format
-            expected by the Chat Completions API.
-        """
         return [
             {
                 "type": "function",

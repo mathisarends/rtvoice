@@ -2,7 +2,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from rtvoice.tools.registry import ToolRegistry
+from rtvoice.tools.registry import (
+    RealtimeToolRegistry,
+    SubAgentToolRegistry,
+    ToolRegistry,
+)
 
 
 @pytest.fixture
@@ -40,10 +44,16 @@ class TestActionDecorator:
         )
 
     def test_stores_holding_instruction(self, registry: ToolRegistry) -> None:
-        @registry.action(description="Long task", holding_instruction="Please wait...")
+        realtime_registry = RealtimeToolRegistry()
+
+        @realtime_registry.action(
+            description="Long task", holding_instruction="Please wait..."
+        )
         def long_task() -> None: ...
 
-        assert registry.get("long_task").holding_instruction == "Please wait..."
+        tool = realtime_registry.get("long_task")
+        assert tool is not None
+        assert tool.holding_instruction == "Please wait..."
 
     def test_decorator_returns_original_function(self, registry: ToolRegistry) -> None:
         def greet(name: str) -> str:
@@ -52,6 +62,48 @@ class TestActionDecorator:
         decorated = registry.action(description="Greet")(greet)
 
         assert decorated is greet
+
+    def test_stores_status_template(self, registry: ToolRegistry) -> None:
+        subagent_registry = SubAgentToolRegistry()
+
+        @subagent_registry.action(
+            description="Draft email",
+            status="Entwerfe eine Email an {recipient}...",
+        )
+        def draft_email(recipient: str, subject: str, body: str) -> str:
+            return "ok"
+
+        tool = subagent_registry.get("draft_email")
+        assert tool is not None
+        assert tool.status == "Entwerfe eine Email an {recipient}..."
+
+    def test_invalid_status_template_raises_value_error(
+        self, registry: ToolRegistry
+    ) -> None:
+        subagent_registry = SubAgentToolRegistry()
+
+        with pytest.raises(ValueError, match="unknown placeholders"):
+
+            @subagent_registry.action(
+                description="Draft email",
+                status="Entwerfe eine Email an {empfaenger}...",
+            )
+            def draft_email(recipient: str, subject: str, body: str) -> str:
+                return "ok"
+
+    def test_stores_suppress_response_flag(self, registry: ToolRegistry) -> None:
+        subagent_registry = SubAgentToolRegistry()
+
+        @subagent_registry.action(
+            description="Silent task",
+            suppress_response=True,
+        )
+        def silent_task(topic: str) -> str:
+            return topic
+
+        tool = subagent_registry.get("silent_task")
+        assert tool is not None
+        assert tool.suppress_response is True
 
     def test_duplicate_name_raises_value_error(self, registry: ToolRegistry) -> None:
         @registry.action(description="First")

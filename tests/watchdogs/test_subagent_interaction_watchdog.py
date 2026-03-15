@@ -15,7 +15,8 @@ from rtvoice.realtime.schemas import (
     ConversationResponseCreateEvent,
     FunctionCallItem,
 )
-from rtvoice.tools import RealtimeTools
+from rtvoice.subagent.views import SubAgentResult
+from rtvoice.tools import Tools
 from rtvoice.tools.registry.views import Tool
 from rtvoice.watchdogs.subagent.subagent_interaction import SubAgentInteractionWatchdog
 
@@ -33,13 +34,13 @@ def websocket() -> AsyncMock:
 
 
 @pytest.fixture
-def tools() -> RealtimeTools:
-    return RealtimeTools()
+def tools() -> Tools:
+    return Tools()
 
 
 @pytest.fixture
 def watchdog(
-    event_bus: EventBus, tools: RealtimeTools, websocket: AsyncMock
+    event_bus: EventBus, tools: Tools, websocket: AsyncMock
 ) -> SubAgentInteractionWatchdog:
     return SubAgentInteractionWatchdog(event_bus, tools, websocket)
 
@@ -61,7 +62,7 @@ def make_function_call_item(
 
 
 def register_tool(
-    tools: RealtimeTools,
+    tools: Tools,
     name: str = "slow_job",
     result_instruction: str | None = None,
     holding_instruction: str | None = None,
@@ -81,7 +82,7 @@ def register_tool(
 
 
 def register_tool_with_calls(
-    tools: RealtimeTools,
+    tools: Tools,
     name: str = "slow_job",
     result_instruction: str | None = None,
     holding_instruction: str | None = None,
@@ -118,7 +119,7 @@ class TestNonSupervisorToolIgnored:
         event_bus: EventBus,
         watchdog: SubAgentInteractionWatchdog,
         websocket: AsyncMock,
-        tools: RealtimeTools,
+        tools: Tools,
     ) -> None:
         register_tool(tools, name="other")
         watchdog.register_subagent("slow_job", make_subagent())
@@ -132,7 +133,7 @@ class TestNonSupervisorToolIgnored:
         self,
         event_bus: EventBus,
         watchdog: SubAgentInteractionWatchdog,
-        tools: RealtimeTools,
+        tools: Tools,
     ) -> None:
         _, calls = register_tool_with_calls(tools, name="other")
         watchdog.register_subagent("slow_job", make_subagent())
@@ -153,7 +154,7 @@ class TestToolCallHandling:
         event_bus: EventBus,
         watchdog: SubAgentInteractionWatchdog,
         websocket: AsyncMock,
-        tools: RealtimeTools,
+        tools: Tools,
     ) -> None:
         await event_bus.dispatch(make_function_call_item())
 
@@ -164,7 +165,7 @@ class TestToolCallHandling:
         self,
         event_bus: EventBus,
         watchdog: SubAgentInteractionWatchdog,
-        tools: RealtimeTools,
+        tools: Tools,
     ) -> None:
         await event_bus.dispatch(make_function_call_item())
         tool = tools.get("slow_job")
@@ -176,7 +177,7 @@ class TestToolCallHandling:
         event_bus: EventBus,
         watchdog: SubAgentInteractionWatchdog,
         websocket: AsyncMock,
-        tools: RealtimeTools,
+        tools: Tools,
     ) -> None:
         register_tool(tools)
 
@@ -191,7 +192,7 @@ class TestToolCallHandling:
         self,
         event_bus: EventBus,
         watchdog: SubAgentInteractionWatchdog,
-        tools: RealtimeTools,
+        tools: Tools,
     ) -> None:
         register_tool(tools)
         received: list[SubAgentStartedEvent] = []
@@ -211,7 +212,7 @@ class TestToolCallHandling:
         self,
         event_bus: EventBus,
         watchdog: SubAgentInteractionWatchdog,
-        tools: RealtimeTools,
+        tools: Tools,
     ) -> None:
         _, calls = register_tool_with_calls(tools)
 
@@ -227,7 +228,7 @@ class TestToolCallHandling:
         event_bus: EventBus,
         watchdog: SubAgentInteractionWatchdog,
         websocket: AsyncMock,
-        tools: RealtimeTools,
+        tools: Tools,
     ) -> None:
         register_tool(tools)
         _block = asyncio.Event()
@@ -263,7 +264,7 @@ class TestResultDelivery:
         event_bus: EventBus,
         watchdog: SubAgentInteractionWatchdog,
         websocket: AsyncMock,
-        tools: RealtimeTools,
+        tools: Tools,
     ) -> None:
         register_tool(tools)
         tool = tools.get("slow_job")
@@ -286,7 +287,7 @@ class TestResultDelivery:
         event_bus: EventBus,
         watchdog: SubAgentInteractionWatchdog,
         websocket: AsyncMock,
-        tools: RealtimeTools,
+        tools: Tools,
     ) -> None:
         register_tool(tools)
         tool = tools.get("slow_job")
@@ -304,11 +305,49 @@ class TestResultDelivery:
         assert ConversationResponseCreateEvent in sent_types
 
     @pytest.mark.asyncio
+    async def test_skips_response_create_when_subagent_result_is_silent(
+        self,
+        event_bus: EventBus,
+        watchdog: SubAgentInteractionWatchdog,
+        websocket: AsyncMock,
+        tools: Tools,
+    ) -> None:
+        register_tool(tools)
+        tool = tools.get("slow_job")
+        assert tool is not None
+
+        async def silent_done_tool(query: str | None = None) -> SubAgentResult:
+            return SubAgentResult(
+                message="job_done",
+                suppress_realtime_response=True,
+            )
+
+        tool.function = silent_done_tool
+
+        await event_bus.dispatch(make_function_call_item(call_id="call_silent"))
+        await asyncio.sleep(0.05)
+
+        sent_payloads = [c.args[0] for c in websocket.send.call_args_list]
+        response_events = [
+            event
+            for event in sent_payloads
+            if isinstance(event, ConversationResponseCreateEvent)
+        ]
+        item_events = [
+            event
+            for event in sent_payloads
+            if isinstance(event, ConversationItemCreateEvent)
+        ]
+
+        assert len(response_events) == 1
+        assert len(item_events) == 1
+
+    @pytest.mark.asyncio
     async def test_pending_cleared_after_result_delivered(
         self,
         event_bus: EventBus,
         watchdog: SubAgentInteractionWatchdog,
-        tools: RealtimeTools,
+        tools: Tools,
     ) -> None:
         register_tool(tools)
         tool = tools.get("slow_job")
@@ -329,7 +368,7 @@ class TestResultDelivery:
         self,
         event_bus: EventBus,
         watchdog: SubAgentInteractionWatchdog,
-        tools: RealtimeTools,
+        tools: Tools,
     ) -> None:
         register_tool(tools)
         tool = tools.get("slow_job")
@@ -358,7 +397,7 @@ class TestResultDelivery:
         event_bus: EventBus,
         watchdog: SubAgentInteractionWatchdog,
         websocket: AsyncMock,
-        tools: RealtimeTools,
+        tools: Tools,
     ) -> None:
         register_tool(tools)
         block = asyncio.Event()
@@ -394,7 +433,7 @@ class TestCancelSupervisor:
         self,
         event_bus: EventBus,
         watchdog: SubAgentInteractionWatchdog,
-        tools: RealtimeTools,
+        tools: Tools,
     ) -> None:
         register_tool(tools)
         _block = asyncio.Event()
@@ -417,7 +456,7 @@ class TestCancelSupervisor:
         self,
         event_bus: EventBus,
         watchdog: SubAgentInteractionWatchdog,
-        tools: RealtimeTools,
+        tools: Tools,
     ) -> None:
         register_tool(tools)
         _block = asyncio.Event()
@@ -459,7 +498,7 @@ class TestCancelSupervisor:
         self,
         event_bus: EventBus,
         watchdog: SubAgentInteractionWatchdog,
-        tools: RealtimeTools,
+        tools: Tools,
     ) -> None:
         register_tool(tools)
         _block = asyncio.Event()
@@ -491,7 +530,7 @@ class TestCancelTool:
         self,
         event_bus: EventBus,
         watchdog: SubAgentInteractionWatchdog,
-        tools: RealtimeTools,
+        tools: Tools,
     ) -> None:
         register_tool(tools)
         tool = tools.get("slow_job")

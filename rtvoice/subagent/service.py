@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 from pathlib import Path
 from typing import Annotated, Self
@@ -12,7 +11,6 @@ from llmify import (
     ToolResultMessage,
     UserMessage,
 )
-from pydantic import BaseModel
 from typing_extensions import Doc
 
 from rtvoice.mcp import MCPServer
@@ -174,6 +172,9 @@ class SubAgent[T]:
         """Called by ToolCallingWatchdog at the start of each run."""
         self._channel = channel
 
+    def attach_channel(self, channel: SubAgentChannel) -> None:
+        self._attach_channel(channel)
+
     def _register_done_tool(self) -> None:
         @self._tools.action(
             "Signal that the task is complete and return the final result to the user. "
@@ -313,6 +314,7 @@ class SubAgent[T]:
 
         tool_schema = self._tools.get_json_tool_schema()
         executed_tool_calls: list[ToolCall] = []
+        tool_statuses: list[str] = []
 
         try:
             for _ in range(self._max_iterations):
@@ -321,6 +323,7 @@ class SubAgent[T]:
                         message="Task was cancelled by the user.",
                         success=False,
                         tool_calls=executed_tool_calls,
+                        tool_statuses=tool_statuses,
                     )
 
                 response = await self._llm.invoke(messages, tools=tool_schema)
@@ -329,21 +332,62 @@ class SubAgent[T]:
                     return SubAgentResult(
                         message=response.content,
                         tool_calls=executed_tool_calls,
+                        tool_statuses=tool_statuses,
                     )
 
                 messages.append(response.to_message())
 
                 for tool_call in response.tool_calls:
-                    early_return = await self._execute_tool_call(
-                        tool_call, executed_tool_calls, messages
+                    logger.debug("Executing tool call: '%s'", tool_call.name)
+
+                    status = await self._send_tool_status(tool_call)
+                    if status is not None:
+                        tool_statuses.append(status)
+
+                    result = await self._tools.execute(tool_call.name, tool_call.tool)
+
+                    match result:
+                        case DoneSignal(result=msg):
+                            logger.debug("Tool 'done' called with result: %s", msg)
+                            return SubAgentResult(
+                                success=True,
+                                message=msg,
+                                tool_calls=executed_tool_calls,
+                                tool_statuses=tool_statuses,
+                                suppress_realtime_response=self._should_suppress_realtime_response(
+                                    executed_tool_calls
+                                ),
+                            )
+                        case ClarifySignal(question=question):
+                            logger.debug(
+                                "Tool 'clarify' called with question: %s", question
+                            )
+                            return SubAgentResult(
+                                message="",
+                                success=False,
+                                tool_calls=executed_tool_calls,
+                                tool_statuses=tool_statuses,
+                                clarification_needed=question,
+                                resume_history=list(messages),
+                                clarify_call_id=tool_call.id,
+                            )
+
+                    executed_tool_calls.append(
+                        ToolCall(
+                            id=tool_call.id, name=tool_call.name, tool=tool_call.tool
+                        )
                     )
-                    if early_return is not None:
-                        return early_return
+                    messages.append(
+                        ToolResultMessage(
+                            tool_call_id=tool_call.id, content=str(result)
+                        )
+                    )
 
             return SubAgentResult(
                 message="Max iterations reached without a final answer.",
                 success=False,
                 tool_calls=executed_tool_calls,
+                tool_statuses=tool_statuses,
             )
         finally:
             if self._channel:
@@ -379,58 +423,34 @@ class SubAgent[T]:
 
         return "\n".join(parts)
 
-    async def _execute_tool_call(
-        self,
-        tool_call: ToolCall,
-        executed_tool_calls: list[ToolCall],
-        messages: list,
-    ) -> SubAgentResult | None:
-        logger.debug("Executing tool call: '%s'", tool_call.name)
-        await self._send_tool_status(tool_call)
+    def _should_suppress_realtime_response(
+        self, executed_tool_calls: list[ToolCall]
+    ) -> bool:
+        if not executed_tool_calls:
+            return False
 
-        result = await self._tools.execute(tool_call.name, tool_call.tool)
+        last_call = executed_tool_calls[-1]
+        last_tool = self._tools.get(last_call.name)
 
-        match result:
-            case DoneSignal(result=msg):
-                logger.debug("Tool 'done' called with result: %s", msg)
-                return SubAgentResult(
-                    success=True,
-                    message=msg,
-                    tool_calls=executed_tool_calls,
-                )
-            case ClarifySignal(question=question):
-                logger.debug("Tool 'clarify' called with question: %s", question)
-                return SubAgentResult(
-                    message="",
-                    success=False,
-                    tool_calls=executed_tool_calls,
-                    clarification_needed=question,
-                    resume_history=list(messages),
-                    clarify_call_id=tool_call.id,
-                )
+        return bool(last_tool and getattr(last_tool, "suppress_response", False))
 
-        executed_tool_calls.append(
-            ToolCall(id=tool_call.id, name=tool_call.name, tool=tool_call.tool)
-        )
-        messages.append(
-            ToolResultMessage(tool_call_id=tool_call.id, content=str(result))
-        )
-        return None
+    async def _send_tool_status(self, tool_call: ToolCall) -> str | None:
+        if self._is_default_registered_tool(tool_call.name):
+            return None
 
-    async def _send_tool_status(self, tool_call: ToolCall) -> None:
-        if not self._channel or self._is_default_registered_tool(tool_call.name):
-            return
+        tool = self._tools.get(tool_call.name)
+        if tool is None:
+            return None
 
-        if isinstance(tool_call.tool, BaseModel):
-            args_str = tool_call.tool.model_dump_json(exclude_none=True)
-        elif isinstance(tool_call.tool, dict):
-            args_str = json.dumps(tool_call.tool, ensure_ascii=False)
-        else:
-            args_str = str(tool_call.tool)
+        status = tool.format_status(tool_call.tool)
+        if status is None:
+            return None
 
-        status = f"{tool_call.name}({args_str})"
         logger.debug("Sending status update via channel: %s", status)
-        self._channel.buffer_status(status)
+        if self._channel:
+            self._channel.buffer_status(status)
+
+        return status
 
     def _is_default_registered_tool(self, tool_name: str) -> bool:
         return tool_name in ("done", "clarify")

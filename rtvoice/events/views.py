@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict
 
 if TYPE_CHECKING:
     from rtvoice.realtime.schemas import FunctionTool, ToolChoiceMode
-    from rtvoice.tools import RealtimeTools
+    from rtvoice.tools import Tools
     from rtvoice.views import (
         AgentError,
         AssistantVoice,
@@ -29,7 +29,7 @@ class StartAgentCommand:
     output_modalities: list[OutputModality]
     noise_reduction: NoiseReduction
     turn_detection: TurnDetection
-    tools: RealtimeTools
+    tools: Tools
 
 
 @dataclass
@@ -42,7 +42,7 @@ class ConfigureSessionCommand:
     output_modalities: list[OutputModality]
     noise_reduction: NoiseReduction
     turn_detection: TurnDetection
-    tools: RealtimeTools
+    tools: Tools
 
 
 @dataclass

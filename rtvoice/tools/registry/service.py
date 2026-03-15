@@ -18,20 +18,13 @@ class ToolRegistry:
         description: str,
         name: str | None = None,
         result_instruction: str | None = None,
-        holding_instruction: str | None = None,
-        status: str | None = None,
     ):
         def decorator(func: Callable) -> Callable:
-            if status is not None:
-                self._validate_status_template(status, func)
-
             tool = self._build_tool(
                 func=func,
                 name=name or func.__name__,
                 description=description,
                 result_instruction=result_instruction,
-                holding_instruction=holding_instruction,
-                status=status,
             )
             self._register_tool(tool)
             return func
@@ -65,8 +58,6 @@ class ToolRegistry:
         name: str,
         description: str,
         result_instruction: str | None,
-        holding_instruction: str | None = None,
-        status: str | None = None,
     ) -> Tool:
         bound_func = getattr(self, func.__name__, func)
         schema = self._schema_builder.build(func)
@@ -77,8 +68,6 @@ class ToolRegistry:
             function=bound_func,
             schema=schema,
             result_instruction=result_instruction,
-            holding_instruction=holding_instruction,
-            status=status,
         )
 
     def _register_tool(self, tool: Tool) -> None:
@@ -100,3 +89,60 @@ class ToolRegistry:
             schema=tool.parameters,
         )
         self._register_tool(mcp_tool)
+
+
+class RealtimeToolRegistry(ToolRegistry):
+    def action(
+        self,
+        description: str,
+        name: str | None = None,
+        result_instruction: str | None = None,
+        holding_instruction: str | None = None,
+    ):
+        def decorator(func: Callable) -> Callable:
+            from rtvoice.tools.registry.views import RealtimeTool
+
+            bound_func = getattr(self, func.__name__, func)
+            schema = self._schema_builder.build(func)
+            tool = RealtimeTool(
+                name=name or func.__name__,
+                description=description,
+                function=bound_func,
+                schema=schema,
+                result_instruction=result_instruction,
+                holding_instruction=holding_instruction,
+            )
+            self._register_tool(tool)
+            return func
+
+        return decorator
+
+
+class SubAgentToolRegistry(ToolRegistry):
+    def action(
+        self,
+        description: str,
+        name: str | None = None,
+        result_instruction: str | None = None,
+        status: str | None = None,
+    ):
+        def decorator(func: Callable) -> Callable:
+            from rtvoice.tools.registry.views import SubAgentTool
+
+            if status is not None:
+                self._validate_status_template(status, func)
+
+            bound_func = getattr(self, func.__name__, func)
+            schema = self._schema_builder.build(func)
+            tool = SubAgentTool(
+                name=name or func.__name__,
+                description=description,
+                function=bound_func,
+                schema=schema,
+                result_instruction=result_instruction,
+                status=status,
+            )
+            self._register_tool(tool)
+            return func
+
+        return decorator

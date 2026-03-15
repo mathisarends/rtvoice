@@ -172,6 +172,9 @@ class SubAgent[T]:
         """Called by ToolCallingWatchdog at the start of each run."""
         self._channel = channel
 
+    def attach_channel(self, channel: SubAgentChannel) -> None:
+        self._attach_channel(channel)
+
     def _register_done_tool(self) -> None:
         @self._tools.action(
             "Signal that the task is complete and return the final result to the user. "

@@ -20,7 +20,7 @@ from rtvoice.subagent import SubAgent
 from rtvoice.subagent.channel import SubAgentChannel
 from rtvoice.subagent.views import SubAgentResult
 from rtvoice.tools import Tools
-from rtvoice.tools.registry.views import Tool
+from rtvoice.tools.registry.views import RealtimeTool
 from rtvoice.watchdogs.subagent.views import PendingSubAgentCall
 from rtvoice.watchdogs.tool_calling.helpers import ToolCallWebSocketHelper
 
@@ -65,7 +65,7 @@ class SubAgentInteractionWatchdog:
         self._subagents_by_tool_name[tool_name] = agent
         logger.debug("Subagent '%s' registered on tool '%s'", agent.name, tool_name)
 
-    def _register_cancel_tool(self) -> Tool:
+    def _register_cancel_tool(self) -> RealtimeTool:
         @self._tools.action(
             "Cancel the currently running background agent. "
             "Call this when the user explicitly wants to stop, cancel, or abandon the ongoing task.",
@@ -141,7 +141,7 @@ class SubAgentInteractionWatchdog:
         await self._send_holding_message(tool)
         asyncio.create_task(self._wait_for_result_and_respond(active))
 
-    async def _send_holding_message(self, tool: Tool) -> None:
+    async def _send_holding_message(self, tool: RealtimeTool) -> None:
         await self._websocket.send(
             ConversationResponseCreateEvent.from_instructions(
                 tool.holding_instruction or _DEFAULT_HOLDING_INSTRUCTION,

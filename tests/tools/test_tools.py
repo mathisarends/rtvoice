@@ -209,6 +209,12 @@ class TestRealtimeTools:
 
         assert realtime.get_tool_schema() == []
 
+    def test_action_does_not_accept_status(self) -> None:
+        realtime = RealtimeTools()
+
+        with pytest.raises(TypeError, match="status"):
+            realtime.action(description="A tool", status="Working...")
+
 
 class TestSubAgentTools:
     def test_get_json_tool_schema_returns_list(self) -> None:
@@ -245,6 +251,12 @@ class TestSubAgentTools:
         agent = SubAgentTools()
 
         assert agent.get_json_tool_schema() == []
+
+    def test_action_does_not_accept_holding_instruction(self) -> None:
+        agent = SubAgentTools()
+
+        with pytest.raises(TypeError, match="holding_instruction"):
+            agent.action(description="A tool", holding_instruction="Please wait")
 
     def test_tool_format_status_formats_template(self) -> None:
         agent = SubAgentTools()

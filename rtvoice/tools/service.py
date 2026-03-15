@@ -2,21 +2,23 @@ from __future__ import annotations
 
 import inspect
 import logging
-from typing import Any, Self
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Self
 
 from rtvoice.mcp.server import MCPServer
 from rtvoice.realtime.schemas import FunctionTool
-from rtvoice.tools.registry import ToolRegistry
+from rtvoice.tools.registry import (
+    RealtimeToolRegistry,
+    SubAgentToolRegistry,
+    ToolRegistry,
+)
 from rtvoice.tools.registry.views import Tool
 from rtvoice.tools.views import SpecialToolParameters
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from rtvoice.tools.registry.views import RealtimeTool, SubAgentTool
 
-__all__ = [
-    "RealtimeTools",
-    "SubAgentTools",
-    "Tools",
-]
+logger = logging.getLogger(__name__)
 
 
 class Tools:
@@ -57,9 +59,7 @@ class Tools:
         description: str,
         name: str | None = None,
         result_instruction: str | None = None,
-        holding_instruction: str | None = None,
-        status: str | None = None,
-    ):
+    ) -> Callable:
         """Register a function as a tool the model can call.
 
         Decorate any async function with this to make it available to the model.
@@ -76,11 +76,6 @@ class Tools:
                 function name.
             result_instruction: Optional instruction appended to the tool result
                 telling the model how to interpret or present the output.
-            holding_instruction: Message spoken by the assistant while the
-                subagent is running in the background.
-            status: Optional status message template used by `SubAgent` while
-                this tool is running. Supports Python format placeholders from
-                tool arguments, e.g. `"Searching calendar for '{query}'..."`.
 
         Returns:
             A decorator that registers the decorated function and returns it unchanged.
@@ -101,8 +96,6 @@ class Tools:
             description,
             name=name,
             result_instruction=result_instruction,
-            holding_instruction=holding_instruction,
-            status=status,
         )
 
     def register_mcp(self, tool: FunctionTool, server: MCPServer) -> None:
@@ -193,6 +186,27 @@ class RealtimeTools(Tools):
     than constructing this directly.
     """
 
+    def __init__(self):
+        super().__init__()
+        self._registry = RealtimeToolRegistry()
+
+    def action(
+        self,
+        description: str,
+        name: str | None = None,
+        result_instruction: str | None = None,
+        holding_instruction: str | None = None,
+    ) -> Callable:
+        return self._registry.action(
+            description,
+            name=name,
+            result_instruction=result_instruction,
+            holding_instruction=holding_instruction,
+        )
+
+    def get(self, name: str) -> RealtimeTool | None:
+        return self._registry.get(name)
+
     def get_tool_schema(self) -> list[FunctionTool]:
         """Return all registered tools serialised as Realtime API function schemas.
 
@@ -211,6 +225,27 @@ class SubAgentTools(Tools):
     [`Tools`][rtvoice.tools.Tools] instance to the agent rather than
     constructing this directly.
     """
+
+    def __init__(self):
+        super().__init__()
+        self._registry = SubAgentToolRegistry()
+
+    def action(
+        self,
+        description: str,
+        name: str | None = None,
+        result_instruction: str | None = None,
+        status: str | None = None,
+    ) -> Callable:
+        return self._registry.action(
+            description,
+            name=name,
+            result_instruction=result_instruction,
+            status=status,
+        )
+
+    def get(self, name: str) -> SubAgentTool | None:
+        return self._registry.get(name)
 
     def get_json_tool_schema(self) -> list[dict]:
         """Return all registered tools serialised as Chat Completions tool schemas.

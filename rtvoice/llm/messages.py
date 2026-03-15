@@ -44,7 +44,9 @@ class ImageURL(BaseModel):
     @staticmethod
     def _format_url(url: str, max_length: int = 50) -> str:
         if url.startswith("data:"):
-            media_type = url.split(";")[0].split(":")[1] if ";" in url else "image"
+            media_type = (
+                url.split(";", 1)[0].split(":", 1)[1] if ";" in url else "image"
+            )
             return f"<base64 {media_type}>"
         return _truncate(url, max_length)
 

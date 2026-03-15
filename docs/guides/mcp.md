@@ -1,6 +1,6 @@
 # MCP Servers
 
-[Model Context Protocol (MCP)](https://modelcontextprotocol.io/) is an open standard for exposing tools to LLMs. `rtvoice` supports connecting any MCP server that communicates over stdio, and registering its tools with the voice agent or the supervisor.
+[Model Context Protocol (MCP)](https://modelcontextprotocol.io/) is an open standard for exposing tools to LLMs. `rtvoice` supports connecting any MCP server that communicates over stdio, and registering its tools with the voice agent or one or more subagents.
 
 ---
 
@@ -42,13 +42,13 @@ server = MCPServerStdio(
 )
 ```
 
-| Parameter | Description |
-|---|---|
-| `command` | Executable to spawn as the MCP server process. |
-| `args` | Command-line arguments. |
-| `env` | Environment variables for the subprocess. Inherits the current environment when `None`. |
-| `cache_tools_list` | Cache the tool list after the first `list_tools()` call. |
-| `allowed_tools` | Whitelist of tool names to expose. All tools are exposed when `None`. |
+| Parameter          | Description                                                                             |
+| ------------------ | --------------------------------------------------------------------------------------- |
+| `command`          | Executable to spawn as the MCP server process.                                          |
+| `args`             | Command-line arguments.                                                                 |
+| `env`              | Environment variables for the subprocess. Inherits the current environment when `None`. |
+| `cache_tools_list` | Cache the tool list after the first `list_tools()` call.                                |
+| `allowed_tools`    | Whitelist of tool names to expose. All tools are exposed when `None`.                   |
 
 ---
 
@@ -67,13 +67,13 @@ async with MCPServerStdio(command="npx", args=["-y", "@my/server"]) as server:
 
 ---
 
-## Attaching MCP servers to the supervisor (recommended)
+## Attaching MCP servers to a subagent (recommended)
 
-For complex workflows, attach MCP servers to the `SupervisorAgent` rather than `RealtimeAgent`. This keeps the realtime model's tool list short and delegates the actual work to the supervisor:
+For complex workflows, attach MCP servers to a `SubAgent` rather than `RealtimeAgent`. This keeps the realtime model's tool list short and delegates the actual work to the subagent:
 
 ```python
 from llmify import ChatOpenAI
-from rtvoice import RealtimeAgent, SupervisorAgent
+from rtvoice import RealtimeAgent, SubAgent
 from rtvoice.mcp import MCPServerStdio
 
 calendar_server = MCPServerStdio(
@@ -81,7 +81,7 @@ calendar_server = MCPServerStdio(
     args=["-y", "@example/calendar-mcp"],
 )
 
-calendar_agent = SupervisorAgent(
+calendar_agent = SubAgent(
     name="Calendar Assistant",
     description="Manages the user's calendar events.",
     instructions="Use the provided calendar tools to read and create events.",
@@ -91,13 +91,13 @@ calendar_agent = SupervisorAgent(
 
 agent = RealtimeAgent(
     instructions="Delegate all calendar requests to the Calendar Assistant.",
-    supervisor_agent=calendar_agent,
+    subagents=[calendar_agent],
 )
 await agent.run()
 ```
 
 !!! tip
-    Prefer attaching MCP servers to the supervisor rather than to `RealtimeAgent` directly. The realtime model has a limited tool window; keeping the supervisor's domain tools separate reduces noise and improves routing accuracy.
+Prefer attaching MCP servers to subagents rather than to `RealtimeAgent` directly. The realtime model has a limited tool window; keeping subagent domain tools separate reduces noise and improves routing accuracy.
 
 ---
 

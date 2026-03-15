@@ -78,7 +78,7 @@ class TranscriptionModel(StrEnum):
 
     Note:
         Pass `transcription_model=None` to `RealtimeAgent` to disable
-        transcription entirely. Note that a supervisor agent requires
+        transcription entirely. Note that subagents require
         transcription to be enabled.
     """
 

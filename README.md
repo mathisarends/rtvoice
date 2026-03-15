@@ -66,13 +66,13 @@ For long-running tools, set `is_long_running=True` and provide a `holding_instru
 
 ---
 
-## Supervisor agents
+## Subagents
 
 Delegate complex, multi-step tasks to a dedicated LLM-driven sub-agent. The voice agent hands off the task, speaks a holding phrase, and presents the result when done:
 
 ```python
 from llmify import ChatOpenAI
-from rtvoice import RealtimeAgent, SupervisorAgent, Tools
+from rtvoice import RealtimeAgent, SubAgent, Tools
 
 tools = Tools()
 
@@ -80,7 +80,7 @@ tools = Tools()
 async def book_table(restaurant: str, date: str, time: str, party_size: int) -> str:
     return f"Booked table for {party_size} at {restaurant} on {date} at {time}."
 
-booking_agent = SupervisorAgent(
+booking_agent = SubAgent(
     name="Booking Assistant",
     description="Books restaurant tables for the user.",
     holding_instruction="I'm checking availability, just a moment.",
@@ -91,11 +91,11 @@ booking_agent = SupervisorAgent(
 
 agent = RealtimeAgent(
     instructions="Delegate restaurant bookings to the Booking Assistant.",
-    supervisor_agent=booking_agent,
+    subagents=[booking_agent],
 )
 ```
 
-If the supervisor needs information from the user (e.g. party size), it asks a clarifying question through the voice agent automatically. → [Supervisor guide](https://mathisarends.github.io/rtvoice/guides/supervisor/)
+If a subagent needs information from the user (e.g. party size), it asks a clarifying question through the voice agent automatically. → [Subagents guide](https://mathisarends.github.io/rtvoice/guides/subagent/)
 
 ---
 
@@ -118,7 +118,7 @@ agent = RealtimeAgent(
 )
 ```
 
-Prefer attaching MCP servers to a `SupervisorAgent` rather than `RealtimeAgent` directly to keep the realtime model's tool list short. → [MCP guide](https://mathisarends.github.io/rtvoice/guides/mcp/)
+Prefer attaching MCP servers to a `SubAgent` rather than `RealtimeAgent` directly to keep the realtime model's tool list short. → [MCP guide](https://mathisarends.github.io/rtvoice/guides/mcp/)
 
 ---
 
@@ -158,7 +158,7 @@ Full documentation including guides and API reference: **[mathisarends.github.io
 
 - [Quickstart](https://mathisarends.github.io/rtvoice/quickstart/)
 - [Tools](https://mathisarends.github.io/rtvoice/guides/tools/)
-- [Supervisor Agent](https://mathisarends.github.io/rtvoice/guides/supervisor/)
+- [Subagents](https://mathisarends.github.io/rtvoice/guides/subagent/)
 - [MCP Servers](https://mathisarends.github.io/rtvoice/guides/mcp/)
 - [Listener](https://mathisarends.github.io/rtvoice/guides/listener/)
 - [API Reference](https://mathisarends.github.io/rtvoice/api/agent/)

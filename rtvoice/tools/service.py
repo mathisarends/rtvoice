@@ -76,7 +76,7 @@ class Tools:
             result_instruction: Optional instruction appended to the tool result
                 telling the model how to interpret or present the output.
             holding_instruction: Message spoken by the assistant while the
-                supervisor is running in the background.
+                subagent is running in the background.
 
         Returns:
             A decorator that registers the decorated function and returns it unchanged.
@@ -199,7 +199,7 @@ class RealtimeTools(Tools):
 
 
 class SubAgentTools(Tools):
-    """Tool registry for non-realtime (text) agents such as `SupervisorAgent`.
+    """Tool registry for non-realtime (text) agents such as `SubAgent`.
 
     Extends [`Tools`][rtvoice.tools.Tools] with schema serialisation in the
     OpenAI Chat Completions `tools` format. Used internally — pass a plain

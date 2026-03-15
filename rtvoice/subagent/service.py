@@ -338,11 +338,50 @@ class SubAgent[T]:
                 messages.append(response.to_message())
 
                 for tool_call in response.tool_calls:
-                    early_return = await self._execute_tool_call(
-                        tool_call, executed_tool_calls, tool_statuses, messages
+                    logger.debug("Executing tool call: '%s'", tool_call.name)
+
+                    status = await self._send_tool_status(tool_call)
+                    if status is not None:
+                        tool_statuses.append(status)
+
+                    result = await self._tools.execute(tool_call.name, tool_call.tool)
+
+                    match result:
+                        case DoneSignal(result=msg):
+                            logger.debug("Tool 'done' called with result: %s", msg)
+                            return SubAgentResult(
+                                success=True,
+                                message=msg,
+                                tool_calls=executed_tool_calls,
+                                tool_statuses=tool_statuses,
+                                suppress_realtime_response=self._should_suppress_realtime_response(
+                                    executed_tool_calls
+                                ),
+                            )
+                        case ClarifySignal(question=question):
+                            logger.debug(
+                                "Tool 'clarify' called with question: %s", question
+                            )
+                            return SubAgentResult(
+                                message="",
+                                success=False,
+                                tool_calls=executed_tool_calls,
+                                tool_statuses=tool_statuses,
+                                clarification_needed=question,
+                                resume_history=list(messages),
+                                clarify_call_id=tool_call.id,
+                            )
+
+                    executed_tool_calls.append(
+                        ToolCall(
+                            id=tool_call.id, name=tool_call.name, tool=tool_call.tool
+                        )
                     )
-                    if early_return is not None:
-                        return early_return
+                    messages.append(
+                        ToolResultMessage(
+                            tool_call_id=tool_call.id, content=str(result)
+                        )
+                    )
 
             return SubAgentResult(
                 message="Max iterations reached without a final answer.",
@@ -383,52 +422,6 @@ class SubAgent[T]:
                 parts.append(self._skill_registry.format_all_instructions())
 
         return "\n".join(parts)
-
-    async def _execute_tool_call(
-        self,
-        tool_call: ToolCall,
-        executed_tool_calls: list[ToolCall],
-        tool_statuses: list[str],
-        messages: list,
-    ) -> SubAgentResult | None:
-        logger.debug("Executing tool call: '%s'", tool_call.name)
-        status = await self._send_tool_status(tool_call)
-        if status is not None:
-            tool_statuses.append(status)
-
-        result = await self._tools.execute(tool_call.name, tool_call.tool)
-
-        match result:
-            case DoneSignal(result=msg):
-                logger.debug("Tool 'done' called with result: %s", msg)
-                return SubAgentResult(
-                    success=True,
-                    message=msg,
-                    tool_calls=executed_tool_calls,
-                    tool_statuses=tool_statuses,
-                    suppress_realtime_response=self._should_suppress_realtime_response(
-                        executed_tool_calls
-                    ),
-                )
-            case ClarifySignal(question=question):
-                logger.debug("Tool 'clarify' called with question: %s", question)
-                return SubAgentResult(
-                    message="",
-                    success=False,
-                    tool_calls=executed_tool_calls,
-                    tool_statuses=tool_statuses,
-                    clarification_needed=question,
-                    resume_history=list(messages),
-                    clarify_call_id=tool_call.id,
-                )
-
-        executed_tool_calls.append(
-            ToolCall(id=tool_call.id, name=tool_call.name, tool=tool_call.tool)
-        )
-        messages.append(
-            ToolResultMessage(tool_call_id=tool_call.id, content=str(result))
-        )
-        return None
 
     def _should_suppress_realtime_response(
         self, executed_tool_calls: list[ToolCall]

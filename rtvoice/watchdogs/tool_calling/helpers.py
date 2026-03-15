@@ -8,6 +8,7 @@ from rtvoice.realtime.schemas import (
     ConversationResponseCreateEvent,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
+from rtvoice.subagent.views import SubAgentResult
 from rtvoice.tools.registry.views import Tool
 from rtvoice.tools.views import VoidResult
 
@@ -19,6 +20,8 @@ class ToolCallWebSocketHelper:
     def serialize(self, result: Any) -> str:
         if isinstance(result, VoidResult):
             return str(result)
+        if isinstance(result, SubAgentResult):
+            return result.to_agent_output()
         if isinstance(result, str):
             return result
         if isinstance(result, BaseModel):

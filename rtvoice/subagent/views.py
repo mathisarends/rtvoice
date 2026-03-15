@@ -27,5 +27,23 @@ class SubAgentResult:
     resume_history: list[Message] | None = None
     clarify_call_id: str | None = None
 
+    def to_agent_output(self) -> str:
+        return str(self)
+
     def __str__(self) -> str:
-        return self.message or ("Success" if self.success else "Failed")
+        parts: list[str] = []
+
+        status = "✓" if self.success else "✗"
+        parts.append(
+            f"[{status}] {self.message or ('Success' if self.success else 'Failed')}"
+        )
+
+        if self.tool_statuses:
+            steps = " → ".join(self.tool_statuses)
+            parts.append(f"Steps: {steps}")
+
+        if self.tool_calls:
+            calls = ", ".join(tc.name for tc in self.tool_calls)
+            parts.append(f"Tools used: {calls}")
+
+        return " | ".join(parts)

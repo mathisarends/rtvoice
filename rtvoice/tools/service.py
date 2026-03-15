@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "RealtimeTools",
-    "SupervisorTools",
+    "SubAgentTools",
     "Tools",
 ]
 
@@ -76,7 +76,7 @@ class Tools:
             result_instruction: Optional instruction appended to the tool result
                 telling the model how to interpret or present the output.
             holding_instruction: Message spoken by the assistant while the
-                supervisor is running in the background.
+                subagent is running in the background.
 
         Returns:
             A decorator that registers the decorated function and returns it unchanged.
@@ -172,6 +172,9 @@ class Tools:
         new._registry.tools = self._registry.tools.copy()
         return new
 
+    def merge(self, other: Tools) -> None:
+        self._registry.tools.update(other._registry.tools)
+
     def is_registered(self, tool: Tool) -> bool:
         return tool in self._registry.tools.values()
 
@@ -195,8 +198,8 @@ class RealtimeTools(Tools):
         return self._registry.get_tool_schema()
 
 
-class SupervisorTools(Tools):
-    """Tool registry for non-realtime (text) agents such as `SupervisorAgent`.
+class SubAgentTools(Tools):
+    """Tool registry for non-realtime (text) agents such as `SubAgent`.
 
     Extends [`Tools`][rtvoice.tools.Tools] with schema serialisation in the
     OpenAI Chat Completions `tools` format. Used internally — pass a plain

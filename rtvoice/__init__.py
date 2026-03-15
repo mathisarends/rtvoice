@@ -2,12 +2,13 @@ from ._logging import configure_logging
 from .mcp import MCPServerStdio
 from .realtime import AzureOpenAIProvider, OpenAIProvider, RealtimeProvider
 from .service import RealtimeAgent
-from .supervisor import SupervisorAgent
-from .tools import RealtimeTools, SupervisorTools, Tools
+from .subagent import SubAgent
+from .tools import RealtimeTools, SubAgentTools, Tools
 from .views import (
     AgentListener,
     AssistantVoice,
     NoiseReduction,
+    OutputModality,
     RealtimeModel,
     SemanticEagerness,
     SemanticVAD,
@@ -23,6 +24,7 @@ __all__ = [
     "MCPServerStdio",
     "NoiseReduction",
     "OpenAIProvider",
+    "OutputModality",
     "RealtimeAgent",
     "RealtimeModel",
     "RealtimeProvider",
@@ -30,8 +32,8 @@ __all__ = [
     "SemanticEagerness",
     "SemanticVAD",
     "ServerVAD",
-    "SupervisorAgent",
-    "SupervisorTools",
+    "SubAgent",
+    "SubAgentTools",
     "Tools",
     "TranscriptionModel",
     "TurnDetection",

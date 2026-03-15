@@ -1,10 +1,17 @@
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel
 
 from rtvoice.conversation.views import ConversationTurn
+
+type OutputModality = Literal["text", "audio"]
+"""Supported assistant response output modalities.
+
+Use one or both values when configuring `RealtimeAgent.output_modalities`.
+"""
 
 
 class RealtimeModel(StrEnum):
@@ -71,7 +78,7 @@ class TranscriptionModel(StrEnum):
 
     Note:
         Pass `transcription_model=None` to `RealtimeAgent` to disable
-        transcription entirely. Note that a supervisor agent requires
+        transcription entirely. Note that subagents require
         transcription to be enabled.
     """
 
@@ -283,6 +290,16 @@ class AgentListener:
             transcript: The full transcript of the assistant's response.
         """
 
+    async def on_assistant_transcript_delta(self, delta: str) -> None:
+        """Called when a partial assistant text delta is streamed.
+
+        This is emitted for text output events such as `response.text.delta`
+        and `response.output_text.delta`.
+
+        Args:
+            delta: Incremental transcript text chunk.
+        """
+
     async def on_user_started_speaking(self) -> None:
         """Called when VAD detects that the user has started speaking."""
 
@@ -295,11 +312,19 @@ class AgentListener:
     async def on_assistant_stopped_responding(self) -> None:
         """Called when the assistant has finished streaming its audio response."""
 
-    async def on_supervisor_started(self) -> None:
-        """Called when the supervisor agent starts running."""
+    async def on_subagent_started(self, agent_name: str) -> None:
+        """Called when a subagent starts running.
 
-    async def on_supervisor_finished(self) -> None:
-        """Called when the supervisor agent finishes running."""
+        Args:
+            agent_name: Name of the started subagent.
+        """
+
+    async def on_subagent_finished(self, agent_name: str) -> None:
+        """Called when a subagent finishes running.
+
+        Args:
+            agent_name: Name of the finished subagent.
+        """
 
 
 class AgentResult(BaseModel):
@@ -327,3 +352,9 @@ class AgentResult(BaseModel):
 
     recording_path: Path | None = None
     """Path to the recorded session audio, or `None` if recording was disabled."""
+
+
+@dataclass
+class ClarificationCheckpoint:
+    resume_history: list
+    clarify_call_id: str

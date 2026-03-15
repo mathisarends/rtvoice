@@ -36,7 +36,7 @@ Press `Ctrl+C` to stop the session.
 
 ## What happens when you call `run()`
 
-1. `prepare()` is called automatically — MCP servers connect, supervisor warms up.
+1. `prepare()` is called automatically — MCP servers connect, subagents warm up.
 2. A WebSocket session opens to the OpenAI Realtime API.
 3. The microphone starts streaming audio to the API.
 4. The API detects when you finish speaking (semantic VAD by default) and generates a response.
@@ -116,7 +116,7 @@ The session ends automatically after 30 seconds without the user speaking. Usefu
 ## Next steps
 
 - [Tools](guides/tools.md) — register functions the model can call
-- [Supervisor Agent](guides/supervisor.md) — delegate complex tasks to an LLM-driven sub-agent
+- [Subagents](guides/subagent.md) — delegate complex tasks to an LLM-driven sub-agent
 - [MCP Servers](guides/mcp.md) — connect stdio-based tool servers
 - [Listener](guides/listener.md) — react to session lifecycle events
 - [API Reference](api/agent.md) — full parameter list for `RealtimeAgent`

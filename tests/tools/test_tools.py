@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from rtvoice.events.bus import EventBus
-from rtvoice.tools import RealtimeTools, SupervisorTools, Tools
+from rtvoice.tools import RealtimeTools, SubAgentTools, Tools
 from rtvoice.tools.views import SpecialToolParameters
 
 
@@ -210,9 +210,9 @@ class TestRealtimeTools:
         assert realtime.get_tool_schema() == []
 
 
-class TestSupervisorTools:
+class TestSubAgentTools:
     def test_get_json_tool_schema_returns_list(self) -> None:
-        agent = SupervisorTools()
+        agent = SubAgentTools()
 
         @agent.action(description="A tool")
         def my_tool(name: str) -> None: ...
@@ -222,7 +222,7 @@ class TestSupervisorTools:
         assert len(schema) == 1
 
     def test_get_json_tool_schema_has_function_type(self) -> None:
-        agent = SupervisorTools()
+        agent = SubAgentTools()
 
         @agent.action(description="A tool")
         def my_tool(name: str) -> None: ...
@@ -232,7 +232,7 @@ class TestSupervisorTools:
         assert schema[0]["type"] == "function"
 
     def test_get_json_tool_schema_contains_function_key(self) -> None:
-        agent = SupervisorTools()
+        agent = SubAgentTools()
 
         @agent.action(description="A tool")
         def my_tool(name: str) -> None: ...
@@ -242,6 +242,6 @@ class TestSupervisorTools:
         assert "function" in schema[0]
 
     def test_get_json_tool_schema_empty_for_no_tools(self) -> None:
-        agent = SupervisorTools()
+        agent = SubAgentTools()
 
         assert agent.get_json_tool_schema() == []

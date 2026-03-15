@@ -18,17 +18,17 @@ class ToolCallingWatchdog:
         event_bus: EventBus,
         tools: Tools,
         websocket: RealtimeWebSocket,
-        supervisor_tool_names: set[str] | None = None,
+        subagent_tool_names: set[str] | None = None,
     ) -> None:
         self._tools = tools
         self._ws = ToolCallWebSocketHelper(websocket)
-        self._supervisor_tool_names: set[str] = supervisor_tool_names or set()
+        self._subagent_tool_names: set[str] = subagent_tool_names or set()
 
         event_bus.subscribe(FunctionCallItem, self._handle_tool_call)
         logger.debug("ToolCallingWatchdog initialized")
 
     def _is_supervisor_tool(self, tool_name: str) -> bool:
-        return tool_name in self._supervisor_tool_names
+        return tool_name in self._subagent_tool_names
 
     async def _handle_tool_call(self, event: FunctionCallItem) -> None:
         if self._is_supervisor_tool(event.name):

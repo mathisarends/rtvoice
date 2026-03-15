@@ -12,6 +12,7 @@ if TYPE_CHECKING:
         AgentError,
         AssistantVoice,
         NoiseReduction,
+        OutputModality,
         RealtimeModel,
         TranscriptionModel,
         TurnDetection,
@@ -25,6 +26,7 @@ class StartAgentCommand:
     voice: AssistantVoice
     speech_speed: float
     transcription_model: TranscriptionModel | None
+    output_modalities: list[OutputModality]
     noise_reduction: NoiseReduction
     turn_detection: TurnDetection
     tools: RealtimeTools
@@ -37,6 +39,7 @@ class ConfigureSessionCommand:
     voice: AssistantVoice
     speech_speed: float
     transcription_model: TranscriptionModel | None
+    output_modalities: list[OutputModality]
     noise_reduction: NoiseReduction
     turn_detection: TurnDetection
     tools: RealtimeTools
@@ -53,7 +56,7 @@ class UpdateToolChoiceCommand:
 
 
 @dataclass
-class CancelSupervisorCommand:
+class CancelSubAgentCommand:
     pass
 
 
@@ -87,6 +90,13 @@ class AssistantTranscriptChunkReceivedEvent(BaseModel):
     chunk: str
 
 
+class AssistantTranscriptDeltaEvent(BaseModel):
+    delta: str
+    item_id: str
+    output_index: int
+    content_index: int
+
+
 class AssistantTranscriptCompletedEvent(BaseModel):
     transcript: str
     item_id: str
@@ -102,12 +112,12 @@ class UserInactivityTimeoutEvent(BaseModel):
     timeout_seconds: float
 
 
-class SupervisorStartedEvent(BaseModel):
-    pass
+class SubAgentStartedEvent(BaseModel):
+    agent_name: str
 
 
-class SupervisorFinishedEvent(BaseModel):
-    pass
+class SubAgentFinishedEvent(BaseModel):
+    agent_name: str
 
 
 class AssistantInterruptedEvent(BaseModel):

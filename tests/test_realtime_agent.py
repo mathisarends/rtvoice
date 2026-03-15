@@ -12,6 +12,9 @@ from rtvoice.events.views import (
     AssistantStartedRespondingEvent,
     AssistantStoppedRespondingEvent,
     AssistantTranscriptCompletedEvent,
+    AssistantTranscriptDeltaEvent,
+    SubAgentFinishedEvent,
+    SubAgentStartedEvent,
     UserInactivityTimeoutEvent,
     UserStartedSpeakingEvent,
     UserStoppedSpeakingEvent,
@@ -98,6 +101,10 @@ class TestInitDefaults:
         agent = make_agent()
         assert agent._stop_called is False
 
+    def test_text_output_mode_enables_transcription_watchdog_without_stt(self) -> None:
+        agent = make_agent(transcription_model=None, output_modalities=["text"])
+        assert hasattr(agent, "_transcription_watchdog")
+
 
 class TestSpeechSpeedClipping:
     def test_value_within_range_is_unchanged(self) -> None:
@@ -161,7 +168,7 @@ class TestInitWarnings:
         supervisor.handoff_instructions = None
         supervisor.result_instructions = None
         supervisor.holding_instruction = None
-        agent = make_agent(transcription_model=None, supervisor_agent=supervisor)
+        agent = make_agent(transcription_model=None, subagents=[supervisor])
         assert agent._transcription_model == TranscriptionModel.WHISPER_1
 
     def test_transcription_none_with_supervisor_logs_warning(
@@ -174,10 +181,10 @@ class TestInitWarnings:
         supervisor.result_instructions = None
         supervisor.holding_instruction = None
         with caplog.at_level(logging.WARNING, logger="rtvoice.service"):
-            make_agent(transcription_model=None, supervisor_agent=supervisor)
+            make_agent(transcription_model=None, subagents=[supervisor])
         assert any("Transcription is required" in r.message for r in caplog.records)
 
-    def test_mcp_servers_with_supervisor_logs_warning(
+    def test_mcp_servers_with_subagents_logs_warning(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         supervisor = MagicMock()
@@ -188,7 +195,7 @@ class TestInitWarnings:
         supervisor.holding_instruction = None
         mcp_server = MagicMock()
         with caplog.at_level(logging.WARNING, logger="rtvoice.service"):
-            make_agent(supervisor_agent=supervisor, mcp_servers=[mcp_server])
+            make_agent(subagents=[supervisor], mcp_servers=[mcp_server])
         assert any("mcp_servers are set" in r.message for r in caplog.records)
 
 
@@ -303,7 +310,7 @@ class TestPrepare:
         mcp_server.connect.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_prepares_supervisor_agent(self) -> None:
+    async def test_prepares_subagents(self) -> None:
         supervisor = MagicMock()
         supervisor.name = "helper"
         supervisor.description = "Helps"
@@ -311,11 +318,19 @@ class TestPrepare:
         supervisor.result_instructions = None
         supervisor.holding_instruction = None
         supervisor.prewarm = AsyncMock()
-        agent = make_agent(supervisor_agent=supervisor)
+        other = MagicMock()
+        other.name = "other"
+        other.description = "Other"
+        other.handoff_instructions = None
+        other.result_instructions = None
+        other.holding_instruction = None
+        other.prewarm = AsyncMock()
+        agent = make_agent(subagents=[supervisor, other])
 
         await agent.prewarm()
 
         supervisor.prewarm.assert_called_once()
+        other.prewarm.assert_called_once()
 
 
 class TestListenerWiring:
@@ -345,6 +360,22 @@ class TestListenerWiring:
         )
 
         listener.on_assistant_transcript.assert_called_once_with("hi there")
+
+    @pytest.mark.asyncio
+    async def test_on_assistant_transcript_delta_is_called(self) -> None:
+        listener = AsyncMock(spec=AgentListener)
+        agent = make_agent(listener=listener)
+
+        await agent._event_bus.dispatch(
+            AssistantTranscriptDeltaEvent(
+                delta="hi",
+                item_id="y",
+                output_index=0,
+                content_index=0,
+            )
+        )
+
+        listener.on_assistant_transcript_delta.assert_called_once_with("hi")
 
     @pytest.mark.asyncio
     async def test_on_agent_session_connected_is_called(self) -> None:
@@ -409,6 +440,24 @@ class TestListenerWiring:
         await agent._event_bus.dispatch(AssistantStoppedRespondingEvent())
 
         listener.on_assistant_stopped_responding.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_on_subagent_started_is_called_with_agent_name(self) -> None:
+        listener = AsyncMock(spec=AgentListener)
+        agent = make_agent(listener=listener)
+
+        await agent._event_bus.dispatch(SubAgentStartedEvent(agent_name="research"))
+
+        listener.on_subagent_started.assert_called_once_with("research")
+
+    @pytest.mark.asyncio
+    async def test_on_subagent_finished_is_called_with_agent_name(self) -> None:
+        listener = AsyncMock(spec=AgentListener)
+        agent = make_agent(listener=listener)
+
+        await agent._event_bus.dispatch(SubAgentFinishedEvent(agent_name="research"))
+
+        listener.on_subagent_finished.assert_called_once_with("research")
 
     @pytest.mark.asyncio
     async def test_no_listener_events_do_not_raise(self) -> None:
@@ -477,3 +526,46 @@ class TestListenerCountdownWarnings:
             )
 
         assert not any("countdown" in r.message for r in caplog.records)
+
+
+class TestListenerTextModalityWarnings:
+    def test_override_delta_without_text_output_modality_logs_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        class ListenerWithDelta(AgentListener):
+            async def on_assistant_transcript_delta(self, _: str) -> None:
+                pass
+
+        with caplog.at_level(logging.WARNING, logger="rtvoice.service"):
+            make_agent(listener=ListenerWithDelta(), output_modalities=["audio"])
+
+        assert any("on_assistant_transcript_delta" in r.message for r in caplog.records)
+
+    def test_override_delta_with_text_output_modality_no_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        class ListenerWithDelta(AgentListener):
+            async def on_assistant_transcript_delta(self, _: str) -> None:
+                pass
+
+        with caplog.at_level(logging.WARNING, logger="rtvoice.service"):
+            make_agent(
+                listener=ListenerWithDelta(), output_modalities=["audio", "text"]
+            )
+
+        assert not any(
+            "on_assistant_transcript_delta" in r.message for r in caplog.records
+        )
+
+    def test_no_override_delta_without_text_output_modality_no_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        class ListenerWithoutDelta(AgentListener):
+            pass
+
+        with caplog.at_level(logging.WARNING, logger="rtvoice.service"):
+            make_agent(listener=ListenerWithoutDelta(), output_modalities=["audio"])
+
+        assert not any(
+            "on_assistant_transcript_delta" in r.message for r in caplog.records
+        )

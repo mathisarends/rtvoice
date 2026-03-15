@@ -36,15 +36,15 @@ nav:
   - Home: index.md
   - Quickstart: quickstart.md
   - Guides:
-    - Tools: guides/tools.md
-    - Supervisor Agent: guides/supervisor.md
-    - MCP Servers: guides/mcp.md
-    - Listener: guides/listener.md
+      - Tools: guides/tools.md
+      - Subagents: guides/subagent.md
+      - MCP Servers: guides/mcp.md
+      - Listener: guides/listener.md
   - API Reference:
-    - RealtimeAgent: api/agent.md
-    - Providers: api/providers.md
-    - Configuration: api/configuration.md
-    - Lifecycle Events: api/lifecycle_events.md
-    - Supervisor: api/supervisor.md
-    - Tools: api/tools.md
-    - Audio: api/audio.md
+      - RealtimeAgent: api/agent.md
+      - Providers: api/providers.md
+      - Configuration: api/configuration.md
+      - Lifecycle Events: api/lifecycle_events.md
+      - SubAgent: api/subagent.md
+      - Tools: api/tools.md
+      - Audio: api/audio.md

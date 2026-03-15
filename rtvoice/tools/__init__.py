@@ -1,11 +1,11 @@
 from .registry import ToolRegistry
-from .service import RealtimeTools, SupervisorTools, Tools
+from .service import RealtimeTools, SubAgentTools, Tools
 from .views import SpecialToolParameters
 
 __all__ = [
     "RealtimeTools",
     "SpecialToolParameters",
-    "SupervisorTools",
+    "SubAgentTools",
     "ToolRegistry",
     "Tools",
 ]

@@ -6,8 +6,8 @@ from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentSessionConnectedEvent,
     AudioPlaybackCompletedEvent,
-    SupervisorFinishedEvent,
-    SupervisorStartedEvent,
+    SubAgentFinishedEvent,
+    SubAgentStartedEvent,
     UserInactivityCountdownEvent,
     UserInactivityTimeoutEvent,
 )
@@ -32,11 +32,9 @@ class UserInactivityTimeoutWatchdog:
         self._user_has_stopped_speaking = False
         self._agent_is_busy = False
 
+        self.event_bus.subscribe(SubAgentStartedEvent, self._handle_supervisor_started)
         self.event_bus.subscribe(
-            SupervisorStartedEvent, self._handle_supervisor_started
-        )
-        self.event_bus.subscribe(
-            SupervisorFinishedEvent, self._handle_supervisor_finished
+            SubAgentFinishedEvent, self._handle_supervisor_finished
         )
         self.event_bus.subscribe(
             AgentSessionConnectedEvent, self._handle_session_connected
@@ -52,12 +50,12 @@ class UserInactivityTimeoutWatchdog:
             AudioPlaybackCompletedEvent, self._handle_assistant_done
         )
 
-    async def _handle_supervisor_started(self, _: SupervisorStartedEvent) -> None:
+    async def _handle_supervisor_started(self, _: SubAgentStartedEvent) -> None:
         self._agent_is_busy = True
         self._is_monitoring = False
         logger.debug("Agent is busy - pausing inactivity timeout monitoring")
 
-    async def _handle_supervisor_finished(self, _: SupervisorFinishedEvent) -> None:
+    async def _handle_supervisor_finished(self, _: SubAgentFinishedEvent) -> None:
         self._agent_is_busy = False
         logger.debug("Agent no longer busy - resuming inactivity timeout monitoring")
         self._try_start_monitoring()

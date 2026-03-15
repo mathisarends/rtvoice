@@ -19,7 +19,7 @@ asyncio.run(main())
 
 - **One-class API** — `RealtimeAgent` manages the full voice loop out of the box
 - **Tool calling** — register async functions with `@tools.action(...)` in seconds
-- **Supervisor agents** — delegate complex tasks to an LLM-driven sub-agent with automatic handoff
+- **Subagents** — delegate complex tasks to an LLM-driven sub-agent with automatic handoff
 - **MCP integration** — connect any Model Context Protocol server via `MCPServerStdio`
 - **Listener hooks** — receive transcripts, speaking state, and errors through `AgentListener`
 - **VAD options** — semantic (default) or energy-based voice-activity detection
@@ -58,6 +58,6 @@ agent = RealtimeAgent(api_key="sk-...")
 
 - [Quickstart](quickstart.md) — a minimal working agent in 10 lines
 - [Tools guide](guides/tools.md) — register functions the model can call
-- [Supervisor guide](guides/supervisor.md) — delegate complex tasks to a sub-agent
+- [Subagent guide](guides/subagent.md) — delegate complex tasks to a sub-agent
 - [MCP guide](guides/mcp.md) — connect external tool servers
 - [Listener guide](guides/listener.md) — hook into session events for UI integration

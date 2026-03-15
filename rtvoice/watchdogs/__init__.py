@@ -6,7 +6,7 @@ from .lifecycle import LifecycleWatchdog
 from .recording import AudioRecordingWatchdog
 from .session import SessionWatchdog
 from .speech_state import SpeechStateWatchdog
-from .supervisor import SupervisorWatchdog
+from .subagent import SubAgentInteractionWatchdog
 from .tool_calling import ToolCallingWatchdog
 from .transcription import TranscriptionWatchdog
 from .user_inactivity_timeout import UserInactivityTimeoutWatchdog
@@ -20,7 +20,7 @@ __all__ = [
     "LifecycleWatchdog",
     "SessionWatchdog",
     "SpeechStateWatchdog",
-    "SupervisorWatchdog",
+    "SubAgentInteractionWatchdog",
     "ToolCallingWatchdog",
     "TranscriptionWatchdog",
     "UserInactivityTimeoutWatchdog",

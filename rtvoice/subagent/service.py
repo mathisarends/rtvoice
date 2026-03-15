@@ -1,9 +1,13 @@
 import asyncio
+import json
 import logging
 from pathlib import Path
 from typing import Annotated, Self
 
-from llmify import (
+from typing_extensions import Doc
+
+from rtvoice.llm import (
+    AssistantMessage,
     BaseChatModel,
     Message,
     SystemMessage,
@@ -11,8 +15,6 @@ from llmify import (
     ToolResultMessage,
     UserMessage,
 )
-from typing_extensions import Doc
-
 from rtvoice.mcp import MCPServer
 from rtvoice.shared.decorators import timed
 from rtvoice.skills import Skill, SkillRegistry
@@ -328,23 +330,31 @@ class SubAgent[T]:
 
                 response = await self._llm.invoke(messages, tools=tool_schema)
 
-                if not response.has_tool_calls:
+                if not response.tool_calls:
                     return SubAgentResult(
-                        message=response.content,
+                        message=response.completion,
                         tool_calls=executed_tool_calls,
                         tool_statuses=tool_statuses,
                     )
 
-                messages.append(response.to_message())
+                messages.append(
+                    AssistantMessage(
+                        content=response.completion,
+                        tool_calls=response.tool_calls,
+                    )
+                )
 
                 for tool_call in response.tool_calls:
-                    logger.debug("Executing tool call: '%s'", tool_call.name)
+                    tool_name = tool_call.function.name
+                    tool_args = json.loads(tool_call.function.arguments)
+
+                    logger.debug("Executing tool call: '%s'", tool_name)
 
                     status = await self._send_tool_status(tool_call)
                     if status is not None:
                         tool_statuses.append(status)
 
-                    result = await self._tools.execute(tool_call.name, tool_call.tool)
+                    result = await self._tools.execute(tool_name, tool_args)
 
                     match result:
                         case DoneSignal(result=msg):
@@ -372,11 +382,7 @@ class SubAgent[T]:
                                 clarify_call_id=tool_call.id,
                             )
 
-                    executed_tool_calls.append(
-                        ToolCall(
-                            id=tool_call.id, name=tool_call.name, tool=tool_call.tool
-                        )
-                    )
+                    executed_tool_calls.append(tool_call)
                     messages.append(
                         ToolResultMessage(
                             tool_call_id=tool_call.id, content=str(result)
@@ -396,14 +402,14 @@ class SubAgent[T]:
 
     def _build_messages(self, task: str, context: str | None) -> list[Message]:
         system_content = self._build_system_prompt()
-        messages = [SystemMessage(system_content)]
+        messages = [SystemMessage(content=system_content)]
         if context:
             messages.append(
                 UserMessage(
-                    f"<conversation_history>\n{context}\n</conversation_history>"
+                    content=f"<conversation_history>\n{context}\n</conversation_history>"
                 )
             )
-        messages.append(UserMessage(f"<task>\n{task}\n</task>"))
+        messages.append(UserMessage(content=f"<task>\n{task}\n</task>"))
         return messages
 
     def _build_system_prompt(self) -> str:
@@ -430,19 +436,21 @@ class SubAgent[T]:
             return False
 
         last_call = executed_tool_calls[-1]
-        last_tool = self._tools.get(last_call.name)
+        last_tool = self._tools.get(last_call.function.name)
 
         return bool(last_tool and getattr(last_tool, "suppress_response", False))
 
     async def _send_tool_status(self, tool_call: ToolCall) -> str | None:
-        if self._is_default_registered_tool(tool_call.name):
+        tool_name = tool_call.function.name
+        if self._is_default_registered_tool(tool_name):
             return None
 
-        tool = self._tools.get(tool_call.name)
+        tool = self._tools.get(tool_name)
         if tool is None:
             return None
 
-        status = tool.format_status(tool_call.tool)
+        tool_args = json.loads(tool_call.function.arguments)
+        status = tool.format_status(tool_args)
         if status is None:
             return None
 

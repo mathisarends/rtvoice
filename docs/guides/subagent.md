@@ -18,7 +18,7 @@ Use a subagent when a task:
 ## Creating a subagent
 
 ```python
-from llmify import ChatOpenAI
+from rtvoice.llm import ChatOpenAI
 from rtvoice import SubAgent, Tools
 from typing import Annotated
 
@@ -144,7 +144,7 @@ result = await (await agent.prepare()).run()
 ```python
 import asyncio
 from typing import Annotated
-from llmify import ChatOpenAI
+from rtvoice.llm import ChatOpenAI
 from rtvoice import RealtimeAgent, SubAgent, Tools
 
 tools = Tools()

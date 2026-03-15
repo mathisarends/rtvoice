@@ -71,7 +71,7 @@ For long-running tools, set `is_long_running=True` and provide a `holding_instru
 Delegate complex, multi-step tasks to a dedicated LLM-driven sub-agent. The voice agent hands off the task, speaks a holding phrase, and presents the result when done:
 
 ```python
-from llmify import ChatOpenAI
+from rtvoice.llm import ChatOpenAI
 from rtvoice import RealtimeAgent, SubAgent, Tools
 
 tools = Tools()

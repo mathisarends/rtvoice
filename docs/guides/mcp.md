@@ -72,7 +72,7 @@ async with MCPServerStdio(command="npx", args=["-y", "@my/server"]) as server:
 For complex workflows, attach MCP servers to a `SubAgent` rather than `RealtimeAgent`. This keeps the realtime model's tool list short and delegates the actual work to the subagent:
 
 ```python
-from llmify import ChatOpenAI
+from rtvoice.llm import ChatOpenAI
 from rtvoice import RealtimeAgent, SubAgent
 from rtvoice.mcp import MCPServerStdio
 

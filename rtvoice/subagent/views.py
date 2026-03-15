@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from llmify import Message, ToolCall
+from rtvoice.llm import Message, ToolCall
 
 
 @dataclass
@@ -43,7 +43,7 @@ class SubAgentResult:
             parts.append(f"Steps: {steps}")
 
         if self.tool_calls:
-            calls = ", ".join(tc.name for tc in self.tool_calls)
+            calls = ", ".join(tc.function.name for tc in self.tool_calls)
             parts.append(f"Tools used: {calls}")
 
         return " | ".join(parts)

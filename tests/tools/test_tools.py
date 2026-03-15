@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from rtvoice.events.bus import EventBus
-from rtvoice.tools import RealtimeTools, SubAgentTools, Tools
+from rtvoice.tools import SubAgentTools, Tools
 from rtvoice.tools.views import SpecialToolParameters
 
 
@@ -160,10 +160,10 @@ class TestClone:
         assert tools.get("clone_only") is None
 
     def test_clone_preserves_type(self) -> None:
-        realtime = RealtimeTools()
+        realtime = Tools()
         clone = realtime.clone()
 
-        assert type(clone) is RealtimeTools
+        assert type(clone) is Tools
 
 
 class TestRegisterMcp:
@@ -195,7 +195,7 @@ class TestRegisterMcp:
 
 class TestRealtimeTools:
     def test_get_tool_schema_returns_list(self) -> None:
-        realtime = RealtimeTools()
+        realtime = Tools()
 
         @realtime.action(description="A tool")
         def my_tool(name: str) -> None: ...
@@ -205,12 +205,12 @@ class TestRealtimeTools:
         assert len(schema) == 1
 
     def test_get_tool_schema_empty_for_no_tools(self) -> None:
-        realtime = RealtimeTools()
+        realtime = Tools()
 
         assert realtime.get_tool_schema() == []
 
     def test_action_does_not_accept_status(self) -> None:
-        realtime = RealtimeTools()
+        realtime = Tools()
 
         with pytest.raises(TypeError, match="status"):
             realtime.action(description="A tool", status="Working...")

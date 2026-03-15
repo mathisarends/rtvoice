@@ -40,8 +40,7 @@ from dotenv import load_dotenv
 from llmify import ChatOpenAI
 from pydantic import BaseModel
 
-from rtvoice import RealtimeAgent, SubAgent, SubAgentTools
-from rtvoice.tools.service import RealtimeTools
+from rtvoice import RealtimeAgent, SubAgent, SubAgentTools, Tools
 
 load_dotenv(override=True)
 
@@ -349,7 +348,7 @@ def build_hue_assistant() -> SubAgent:
 
 
 async def main() -> None:
-    tools = RealtimeTools()
+    tools = Tools()
 
     @tools.action("Get the current time in a human-friendly format.")
     def get_current_time() -> str:

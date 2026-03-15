@@ -1,7 +1,6 @@
 import asyncio
 
-from llmify import ChatOpenAI
-
+from rtvoice.llm import ChatOpenAI
 from rtvoice.skills import Skill
 from rtvoice.subagent import SubAgent
 

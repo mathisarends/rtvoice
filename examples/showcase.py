@@ -37,10 +37,10 @@ from datetime import datetime
 from typing import Annotated
 
 from dotenv import load_dotenv
-from llmify import ChatOpenAI
 from pydantic import BaseModel
 
 from rtvoice import RealtimeAgent, SubAgent, SubAgentTools, Tools
+from rtvoice.llm import ChatOpenAI
 
 load_dotenv(override=True)
 

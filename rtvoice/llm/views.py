@@ -1,5 +1,6 @@
-from llmify.messages import ToolCall
 from pydantic import BaseModel
+
+from rtvoice.llm.messages import ToolCall
 
 
 class ChatInvokeUsage(BaseModel):

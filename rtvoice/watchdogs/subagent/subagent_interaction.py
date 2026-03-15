@@ -4,6 +4,7 @@ import logging
 
 from rtvoice.events import EventBus
 from rtvoice.events.views import (
+    AssistantStartedRespondingEvent,
     AssistantStoppedRespondingEvent,
     CancelSubAgentCommand,
     SubAgentFinishedEvent,
@@ -55,10 +56,16 @@ class SubAgentInteractionWatchdog:
         # subagent is allowed to be called next — enforced in _handle_tool_call.
         self._awaiting_clarification_for: str | None = None
 
+        self._response_idle = asyncio.Event()
+        self._response_idle.set()
+
         self._event_bus.subscribe(FunctionCallItem, self._handle_tool_call)
         self._event_bus.subscribe(CancelSubAgentCommand, self._cancel_active_subagent)
         self._event_bus.subscribe(
-            AssistantStoppedRespondingEvent, self._forward_speech_end_to_channel
+            AssistantStartedRespondingEvent, self._on_response_started
+        )
+        self._event_bus.subscribe(
+            AssistantStoppedRespondingEvent, self._on_response_stopped
         )
 
     def register_subagent(self, tool_name: str, agent: SubAgent) -> None:
@@ -178,6 +185,7 @@ class SubAgentInteractionWatchdog:
 
         try:
             await self._wait_for_status_updates_to_finish(active)
+            await self._response_idle.wait()
 
             if isinstance(result, SubAgentResult) and result.clarification_needed:
                 await self._ask_user_for_clarification(active, result)
@@ -309,8 +317,10 @@ class SubAgentInteractionWatchdog:
             UpdateSessionToolsCommand(tools=self._tools.get_tool_schema())
         )
 
-    async def _forward_speech_end_to_channel(
-        self, _: AssistantStoppedRespondingEvent
-    ) -> None:
+    async def _on_response_started(self, _: AssistantStartedRespondingEvent) -> None:
+        self._response_idle.clear()
+
+    async def _on_response_stopped(self, _: AssistantStoppedRespondingEvent) -> None:
+        self._response_idle.set()
         if self._active is not None:
             self._active.channel.notify_speech_ended()

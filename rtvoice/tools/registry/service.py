@@ -1,4 +1,5 @@
 import inspect
+import re
 from collections.abc import Callable
 
 from rtvoice.mcp import MCPServer
@@ -18,19 +19,39 @@ class ToolRegistry:
         name: str | None = None,
         result_instruction: str | None = None,
         holding_instruction: str | None = None,
+        status: str | None = None,
     ):
         def decorator(func: Callable) -> Callable:
+            if status is not None:
+                self._validate_status_template(status, func)
+
             tool = self._build_tool(
                 func=func,
                 name=name or func.__name__,
                 description=description,
                 result_instruction=result_instruction,
                 holding_instruction=holding_instruction,
+                status=status,
             )
             self._register_tool(tool)
             return func
 
         return decorator
+
+    def _validate_status_template(self, status: str, function: Callable) -> None:
+        placeholders = {match.group(1) for match in re.finditer(r"\{(\w+)\}", status)}
+        param_names = {
+            name
+            for name in inspect.signature(function).parameters
+            if name not in {"self", "cls"}
+        }
+
+        unknown_placeholders = placeholders - param_names
+        if unknown_placeholders:
+            raise ValueError(
+                "Status template contains unknown placeholders: "
+                f"{unknown_placeholders}. Available parameters: {param_names}"
+            )
 
     def get(self, name: str) -> Tool | None:
         return self.tools.get(name)
@@ -45,6 +66,7 @@ class ToolRegistry:
         description: str,
         result_instruction: str | None,
         holding_instruction: str | None = None,
+        status: str | None = None,
     ) -> Tool:
         bound_func = getattr(self, func.__name__, func)
         schema = self._schema_builder.build(func)
@@ -56,6 +78,7 @@ class ToolRegistry:
             schema=schema,
             result_instruction=result_instruction,
             holding_instruction=holding_instruction,
+            status=status,
         )
 
     def _register_tool(self, tool: Tool) -> None:

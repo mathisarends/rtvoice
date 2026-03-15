@@ -58,6 +58,7 @@ class Tools:
         name: str | None = None,
         result_instruction: str | None = None,
         holding_instruction: str | None = None,
+        status: str | None = None,
     ):
         """Register a function as a tool the model can call.
 
@@ -77,6 +78,9 @@ class Tools:
                 telling the model how to interpret or present the output.
             holding_instruction: Message spoken by the assistant while the
                 subagent is running in the background.
+            status: Optional status message template used by `SubAgent` while
+                this tool is running. Supports Python format placeholders from
+                tool arguments, e.g. `"Searching calendar for '{query}'..."`.
 
         Returns:
             A decorator that registers the decorated function and returns it unchanged.
@@ -98,6 +102,7 @@ class Tools:
             name=name,
             result_instruction=result_instruction,
             holding_instruction=holding_instruction,
+            status=status,
         )
 
     def register_mcp(self, tool: FunctionTool, server: MCPServer) -> None:

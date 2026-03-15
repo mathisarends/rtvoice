@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 from pathlib import Path
 from typing import Annotated, Self
@@ -12,7 +11,6 @@ from llmify import (
     ToolResultMessage,
     UserMessage,
 )
-from pydantic import BaseModel
 from typing_extensions import Doc
 
 from rtvoice.mcp import MCPServer
@@ -421,14 +419,14 @@ class SubAgent[T]:
         if not self._channel or self._is_default_registered_tool(tool_call.name):
             return
 
-        if isinstance(tool_call.tool, BaseModel):
-            args_str = tool_call.tool.model_dump_json(exclude_none=True)
-        elif isinstance(tool_call.tool, dict):
-            args_str = json.dumps(tool_call.tool, ensure_ascii=False)
-        else:
-            args_str = str(tool_call.tool)
+        tool = self._tools.get(tool_call.name)
+        if tool is None:
+            return
 
-        status = f"{tool_call.name}({args_str})"
+        status = tool.format_status(tool_call.tool)
+        if status is None:
+            return
+
         logger.debug("Sending status update via channel: %s", status)
         self._channel.buffer_status(status)
 

@@ -53,6 +53,31 @@ class TestActionDecorator:
 
         assert decorated is greet
 
+    def test_stores_status_template(self, registry: ToolRegistry) -> None:
+        @registry.action(
+            description="Draft email",
+            status="Entwerfe eine Email an {recipient}...",
+        )
+        def draft_email(recipient: str, subject: str, body: str) -> str:
+            return "ok"
+
+        assert (
+            registry.get("draft_email").status
+            == "Entwerfe eine Email an {recipient}..."
+        )
+
+    def test_invalid_status_template_raises_value_error(
+        self, registry: ToolRegistry
+    ) -> None:
+        with pytest.raises(ValueError, match="unknown placeholders"):
+
+            @registry.action(
+                description="Draft email",
+                status="Entwerfe eine Email an {empfaenger}...",
+            )
+            def draft_email(recipient: str, subject: str, body: str) -> str:
+                return "ok"
+
     def test_duplicate_name_raises_value_error(self, registry: ToolRegistry) -> None:
         @registry.action(description="First")
         def greet() -> None: ...

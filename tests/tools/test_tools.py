@@ -245,3 +245,48 @@ class TestSubAgentTools:
         agent = SubAgentTools()
 
         assert agent.get_json_tool_schema() == []
+
+    def test_tool_format_status_formats_template(self) -> None:
+        agent = SubAgentTools()
+
+        @agent.action(
+            description="Search events",
+            status="Suche nach '{query}' im Kalender...",
+        )
+        def search_events(query: str, date: str) -> list:
+            return []
+
+        tool = agent.get("search_events")
+        assert tool is not None
+        status = tool.format_status({"query": "Zahnarzt", "date": "2026-03-15"})
+
+        assert status == "Suche nach 'Zahnarzt' im Kalender..."
+
+    def test_tool_format_status_returns_none_without_status_template(self) -> None:
+        agent = SubAgentTools()
+
+        @agent.action(description="Search events")
+        def search_events(query: str) -> list:
+            return []
+
+        tool = agent.get("search_events")
+        assert tool is not None
+        status = tool.format_status({"query": "Dentist"})
+
+        assert status is None
+
+    def test_tool_format_status_falls_back_to_template_on_missing_key(self) -> None:
+        agent = SubAgentTools()
+
+        @agent.action(
+            description="Create event",
+            status="Erstelle Termin am {date} mit {attendees}...",
+        )
+        def create_event(date: str, attendees: str) -> str:
+            return "ok"
+
+        tool = agent.get("create_event")
+        assert tool is not None
+        status = tool.format_status({"date": "Montag"})
+
+        assert status == "Erstelle Termin am {date} mit {attendees}..."

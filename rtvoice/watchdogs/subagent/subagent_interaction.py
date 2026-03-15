@@ -27,10 +27,11 @@ from rtvoice.watchdogs.tool_calling.helpers import ToolCallWebSocketHelper
 logger = logging.getLogger(__name__)
 
 _DEFAULT_HOLDING_INSTRUCTION = (
-    "The user's request is being processed. "
-    "Say ONE brief sentence acknowledging it naturally "
-    "(e.g. 'Let me look that up for you!'). "
-    "Then stop. Do not keep talking and do not reveal any results. "
+    "The user's request is being processed in the background. "
+    "Say ONE very short, generic sentence (e.g. 'On it!', 'Give me a moment!', 'Sure, let me handle that!'). "
+    "Do NOT mention what the task is. "
+    "Do NOT state or imply whether it succeeded or failed — you don't know yet. "
+    "Do NOT paraphrase the task. "
     "Always respond in the same language the user is speaking."
 )
 

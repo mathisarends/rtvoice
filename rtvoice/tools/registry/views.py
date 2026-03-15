@@ -2,10 +2,13 @@ import inspect
 from collections.abc import Callable
 from typing import Any
 
+from pydantic import BaseModel
+
 from rtvoice.realtime.schemas import FunctionParameters, FunctionTool
 from rtvoice.tools.views import VoidResult
 
 
+# TODO: Das hier würde ich vieleicht lieber überladen weil status hat eigentlich nur ein SubAgentOol und mehr unterschiede soll es heir auch geben
 class Tool:
     def __init__(
         self,
@@ -15,6 +18,7 @@ class Tool:
         schema: FunctionParameters,
         result_instruction: str | None = None,
         holding_instruction: str | None = None,
+        status: str | None = None,
     ):
         self.name = name
         self.description = description
@@ -22,6 +26,7 @@ class Tool:
         self.schema = schema
         self.result_instruction = result_instruction
         self.holding_instruction = holding_instruction
+        self.status = status
 
     async def execute(self, arguments: dict[str, Any]) -> Any:
         if inspect.iscoroutinefunction(self.function):
@@ -37,6 +42,19 @@ class Tool:
             description=self.description,
             parameters=self.schema,
         )
+
+    def format_status(self, args: BaseModel | dict[str, Any]) -> str | None:
+        if self.status is None:
+            return None
+
+        args_dict = (
+            args.model_dump(exclude_none=True) if isinstance(args, BaseModel) else args
+        )
+
+        try:
+            return self.status.format(**args_dict)
+        except KeyError:
+            return self.status
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Tool):

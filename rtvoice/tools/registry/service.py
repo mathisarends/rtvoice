@@ -5,7 +5,7 @@ from collections.abc import Callable
 from rtvoice.mcp import MCPServer
 from rtvoice.realtime.schemas import FunctionTool
 from rtvoice.tools.registry.schema_builder import ToolSchemaBuilder
-from rtvoice.tools.registry.views import Tool
+from rtvoice.tools.registry.views import RealtimeTool, SubAgentTool, Tool
 
 
 class ToolRegistry:
@@ -100,8 +100,6 @@ class RealtimeToolRegistry(ToolRegistry):
         holding_instruction: str | None = None,
     ):
         def decorator(func: Callable) -> Callable:
-            from rtvoice.tools.registry.views import RealtimeTool
-
             bound_func = getattr(self, func.__name__, func)
             schema = self._schema_builder.build(func)
             tool = RealtimeTool(
@@ -128,8 +126,6 @@ class SubAgentToolRegistry(ToolRegistry):
         suppress_response: bool = False,
     ):
         def decorator(func: Callable) -> Callable:
-            from rtvoice.tools.registry.views import SubAgentTool
-
             if status is not None:
                 self._validate_status_template(status, func)
 

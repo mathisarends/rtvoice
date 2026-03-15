@@ -23,6 +23,7 @@ from rtvoice.subagent.views import (
     SubAgentResult,
 )
 from rtvoice.tools import SubAgentTools
+from rtvoice.tools.views import SpecialToolParameters
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,8 @@ class SubAgent[T]:
 
         self._channel: SubAgentChannel | None = None
         self._mcp_ready = asyncio.Event()
+
+        self._tools.set_context(SpecialToolParameters(context=context))
 
         self._register_done_tool()
         self._register_clarify_tool()

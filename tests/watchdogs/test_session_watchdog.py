@@ -49,6 +49,7 @@ def make_configure_command(**overrides) -> ConfigureSessionCommand:
         voice=AssistantVoice.MARIN,
         speech_speed=1.0,
         transcription_model=TranscriptionModel.WHISPER_1,
+        output_modalities=["audio"],
         noise_reduction=NoiseReduction.FAR_FIELD,
         turn_detection=SemanticVAD(),
         tools=tools,
@@ -119,6 +120,20 @@ class TestConfigureSession:
 
         sent: SessionUpdateEvent = websocket.send.call_args[0][0]
         assert sent.session.audio.output.speed == 1.25
+
+    @pytest.mark.asyncio
+    async def test_session_config_contains_output_modalities(
+        self,
+        event_bus: EventBus,
+        watchdog: SessionWatchdog,
+        websocket: MagicMock,
+    ) -> None:
+        await event_bus.dispatch(
+            make_configure_command(output_modalities=["audio", "text"])
+        )
+
+        sent: SessionUpdateEvent = websocket.send.call_args[0][0]
+        assert sent.session.output_modalities == ["audio", "text"]
 
     @pytest.mark.asyncio
     async def test_semantic_vad_turn_detection(

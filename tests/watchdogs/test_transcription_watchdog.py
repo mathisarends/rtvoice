@@ -3,12 +3,16 @@ import pytest
 from rtvoice.events.bus import EventBus
 from rtvoice.events.views import (
     AssistantTranscriptCompletedEvent,
+    AssistantTranscriptDeltaEvent,
     UserTranscriptCompletedEvent,
 )
 from rtvoice.realtime.schemas import (
     InputAudioTranscriptionCompleted,
     RealtimeServerEvent,
     ResponseOutputAudioTranscriptDone,
+    ResponseOutputTextDelta,
+    ResponseOutputTextDone,
+    ResponseTextDelta,
 )
 from rtvoice.watchdogs import TranscriptionWatchdog
 
@@ -124,3 +128,79 @@ class TestAssistantTranscription:
 
         assert received[0].output_index == 2
         assert received[0].content_index == 1
+
+    @pytest.mark.asyncio
+    async def test_text_delta_dispatches_assistant_delta_event(
+        self, event_bus: EventBus, watchdog: TranscriptionWatchdog
+    ) -> None:
+        received: list[AssistantTranscriptDeltaEvent] = []
+
+        async def capture(e: AssistantTranscriptDeltaEvent) -> None:
+            received.append(e)
+
+        event_bus.subscribe(AssistantTranscriptDeltaEvent, capture)
+        await event_bus.dispatch(
+            ResponseOutputTextDelta(
+                type=RealtimeServerEvent.RESPONSE_OUTPUT_TEXT_DELTA,
+                event_id="evt_005",
+                item_id="item_004",
+                response_id="resp_003",
+                output_index=0,
+                content_index=0,
+                delta="Hello ",
+            )
+        )
+
+        assert len(received) == 1
+        assert received[0].delta == "Hello "
+        assert received[0].item_id == "item_004"
+
+    @pytest.mark.asyncio
+    async def test_text_done_dispatches_assistant_completed_event(
+        self, event_bus: EventBus, watchdog: TranscriptionWatchdog
+    ) -> None:
+        received: list[AssistantTranscriptCompletedEvent] = []
+
+        async def capture(e: AssistantTranscriptCompletedEvent) -> None:
+            received.append(e)
+
+        event_bus.subscribe(AssistantTranscriptCompletedEvent, capture)
+        await event_bus.dispatch(
+            ResponseOutputTextDone(
+                type=RealtimeServerEvent.RESPONSE_OUTPUT_TEXT_DONE,
+                event_id="evt_006",
+                item_id="item_005",
+                response_id="resp_004",
+                output_index=1,
+                content_index=0,
+                text="Completed text",
+            )
+        )
+
+        assert len(received) == 1
+        assert received[0].transcript == "Completed text"
+
+    @pytest.mark.asyncio
+    async def test_response_text_delta_dispatches_assistant_delta_event(
+        self, event_bus: EventBus, watchdog: TranscriptionWatchdog
+    ) -> None:
+        received: list[AssistantTranscriptDeltaEvent] = []
+
+        async def capture(e: AssistantTranscriptDeltaEvent) -> None:
+            received.append(e)
+
+        event_bus.subscribe(AssistantTranscriptDeltaEvent, capture)
+        await event_bus.dispatch(
+            ResponseTextDelta(
+                type=RealtimeServerEvent.RESPONSE_TEXT_DELTA,
+                event_id="evt_007",
+                item_id="item_006",
+                response_id="resp_005",
+                output_index=0,
+                content_index=0,
+                delta="world",
+            )
+        )
+
+        assert len(received) == 1
+        assert received[0].delta == "world"

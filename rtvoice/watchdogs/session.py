@@ -24,7 +24,7 @@ from rtvoice.realtime.schemas import (
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
-from rtvoice.views import SemanticVAD, ServerVAD, TurnDetection
+from rtvoice.views import OutputModality, SemanticVAD, ServerVAD, TurnDetection
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +40,13 @@ class SessionWatchdog:
     @timed()
     async def _on_configure_session(self, command: ConfigureSessionCommand) -> None:
         logger.info(
-            "Configuring session [model=%s, voice=%s, speed=%s, turn_detection=%s, transcription=%s]",
+            "Configuring session [model=%s, voice=%s, speed=%s, turn_detection=%s, transcription=%s, output_modalities=%s]",
             command.model,
             command.voice,
             command.speech_speed,
             type(command.turn_detection).__name__,
             command.transcription_model,
+            command.output_modalities,
         )
         config = self._build_session_config(command)
         await self._websocket.send(SessionUpdateEvent(session=config))
@@ -78,6 +79,7 @@ class SessionWatchdog:
         return RealtimeSessionConfig(
             model=command.model,
             instructions=command.instructions,
+            output_modalities=self._build_output_modalities(command.output_modalities),
             tool_choice=ToolChoiceMode.AUTO,
             tools=command.tools.get_tool_schema(),
             audio=AudioConfig(
@@ -85,6 +87,11 @@ class SessionWatchdog:
                 output=self._build_audio_output_config(command),
             ),
         )
+
+    def _build_output_modalities(
+        self, output_modalities: list[OutputModality]
+    ) -> list[OutputModality]:
+        return list(dict.fromkeys(output_modalities))
 
     def _build_audio_output_config(
         self, command: ConfigureSessionCommand

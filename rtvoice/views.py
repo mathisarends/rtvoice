@@ -1,10 +1,17 @@
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel
 
 from rtvoice.conversation.views import ConversationTurn
+
+type OutputModality = Literal["text", "audio"]
+"""Supported assistant response output modalities.
+
+Use one or both values when configuring `RealtimeAgent.output_modalities`.
+"""
 
 
 class RealtimeModel(StrEnum):
@@ -281,6 +288,16 @@ class AgentListener:
 
         Args:
             transcript: The full transcript of the assistant's response.
+        """
+
+    async def on_assistant_transcript_delta(self, delta: str) -> None:
+        """Called when a partial assistant text delta is streamed.
+
+        This is emitted for text output events such as `response.text.delta`
+        and `response.output_text.delta`.
+
+        Args:
+            delta: Incremental transcript text chunk.
         """
 
     async def on_user_started_speaking(self) -> None:

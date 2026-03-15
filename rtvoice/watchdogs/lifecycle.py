@@ -40,6 +40,7 @@ class LifecycleWatchdog:
                 voice=command.voice,
                 speech_speed=command.speech_speed,
                 transcription_model=command.transcription_model,
+                output_modalities=command.output_modalities,
                 noise_reduction=command.noise_reduction,
                 turn_detection=command.turn_detection,
                 tools=command.tools,

@@ -48,6 +48,7 @@ def make_start_command(**overrides) -> StartAgentCommand:
         voice=AssistantVoice.MARIN,
         speech_speed=1.0,
         transcription_model=TranscriptionModel.WHISPER_1,
+        output_modalities=["audio"],
         noise_reduction=NoiseReduction.FAR_FIELD,
         turn_detection=SemanticVAD(),
         tools=tools,

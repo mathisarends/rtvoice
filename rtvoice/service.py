@@ -21,6 +21,7 @@ from rtvoice.events.views import (
     AssistantStartedRespondingEvent,
     AssistantStoppedRespondingEvent,
     AssistantTranscriptCompletedEvent,
+    AssistantTranscriptDeltaEvent,
     StartAgentCommand,
     SubAgentFinishedEvent,
     SubAgentStartedEvent,
@@ -44,6 +45,7 @@ from rtvoice.views import (
     AssistantVoice,
     ClarificationCheckpoint,
     NoiseReduction,
+    OutputModality,
     RealtimeModel,
     SemanticVAD,
     TranscriptionModel,
@@ -119,6 +121,13 @@ class RealtimeAgent[T]:
                 "Pass `None` to disable transcription entirely."
             ),
         ] = TranscriptionModel.WHISPER_1,
+        output_modalities: Annotated[
+            list[OutputModality] | None,
+            Doc(
+                "Assistant response output modalities sent to Realtime API. "
+                'Defaults to `["audio"]`. Include `"text"` to receive streamed text events.'
+            ),
+        ] = None,
         noise_reduction: Annotated[
             NoiseReduction,
             Doc(
@@ -244,7 +253,9 @@ class RealtimeAgent[T]:
             transcription_model = TranscriptionModel.WHISPER_1
 
         self._transcription_model = transcription_model
-        self._transcription_enabled = transcription_model
+        self._transcription_enabled = transcription_model is not None
+        self._output_modalities = self._normalize_output_modalities(output_modalities)
+        self._assistant_text_enabled = "text" in self._output_modalities
         self._noise_reduction = noise_reduction
         self._turn_detection: TurnDetection = turn_detection or SemanticVAD()
         self._mcp_servers = mcp_servers or []
@@ -321,6 +332,12 @@ class RealtimeAgent[T]:
             )
 
         return clipped
+
+    def _normalize_output_modalities(
+        self, output_modalities: list[OutputModality] | None
+    ) -> list[OutputModality]:
+        modalities = output_modalities or ["audio"]
+        return list(dict.fromkeys(modalities))
 
     def _validate_subagent_names(self, subagents: list[SubAgent]) -> None:
         seen_names: set[str] = set()
@@ -420,7 +437,7 @@ class RealtimeAgent[T]:
             websocket=self._websocket,
             audio_session=audio_session,
         )
-        if self._transcription_enabled:
+        if self._transcription_enabled or self._assistant_text_enabled:
             self._transcription_watchdog = TranscriptionWatchdog(
                 event_bus=self._event_bus
             )
@@ -460,6 +477,7 @@ class RealtimeAgent[T]:
 
         self._warn_listener_countdown_mismatch_if_necessary()
         self._warn_listener_subagent_mismatch_if_necessary()
+        self._warn_listener_text_modality_mismatch_if_necessary()
 
         self._event_bus.subscribe(
             UserTranscriptCompletedEvent,
@@ -468,6 +486,10 @@ class RealtimeAgent[T]:
         self._event_bus.subscribe(
             AssistantTranscriptCompletedEvent,
             lambda e: self._listener.on_assistant_transcript(e.transcript),
+        )
+        self._event_bus.subscribe(
+            AssistantTranscriptDeltaEvent,
+            lambda e: self._listener.on_assistant_transcript_delta(e.delta),
         )
         self._event_bus.subscribe(
             AgentStartingEvent,
@@ -545,6 +567,25 @@ class RealtimeAgent[T]:
                 type(self._listener).__name__,
             )
 
+    def _warn_listener_text_modality_mismatch_if_necessary(self) -> None:
+        if (
+            self._listener_overrides_assistant_transcript_delta()
+            and not self._assistant_text_enabled
+        ):
+            logger.warning(
+                "Listener '%s' overrides on_assistant_transcript_delta "
+                "but output_modalities does not include 'text' — callback will never fire.",
+                type(self._listener).__name__,
+            )
+
+    def _listener_overrides_assistant_transcript_delta(self) -> bool:
+        cls = type(self._listener)
+        delta = getattr(cls, "on_assistant_transcript_delta", None)
+        return (
+            delta is not None
+            and delta is not AgentListener.on_assistant_transcript_delta
+        )
+
     def _listener_overrides_subagent_callbacks(self) -> bool:
         cls = type(self._listener)
         started = getattr(cls, "on_subagent_started", None)
@@ -586,6 +627,7 @@ class RealtimeAgent[T]:
                 voice=self._voice,
                 speech_speed=self._speech_speed,
                 transcription_model=self._transcription_model,
+                output_modalities=self._output_modalities,
                 noise_reduction=self._noise_reduction,
                 turn_detection=self._turn_detection,
                 tools=self._tools,

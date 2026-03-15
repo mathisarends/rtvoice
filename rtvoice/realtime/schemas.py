@@ -71,6 +71,8 @@ class RealtimeServerEvent(StrEnum):
     RESPONSE_CONTENT_PART_DONE = "response.content_part.done"
     RESPONSE_OUTPUT_TEXT_DELTA = "response.output_text.delta"
     RESPONSE_OUTPUT_TEXT_DONE = "response.output_text.done"
+    RESPONSE_TEXT_DELTA = "response.text.delta"
+    RESPONSE_TEXT_DONE = "response.text.done"
     RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA = "response.output_audio_transcript.delta"
     RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE = "response.output_audio_transcript.done"
     RESPONSE_OUTPUT_AUDIO_DELTA = "response.output_audio.delta"
@@ -112,9 +114,7 @@ class AudioOutputFormat(StrEnum):
     G711_ALAW = "g711_alaw"
 
 
-class OutputModality(StrEnum):
-    TEXT = "text"
-    AUDIO = "audio"
+type OutputModality = Literal["text", "audio"]
 
 
 class MessageRole(StrEnum):
@@ -381,9 +381,7 @@ class RealtimeSessionConfig(BaseModel):
     audio: AudioConfig = Field(default_factory=AudioConfig)
     include: list[str] | None = None
     max_output_tokens: int | Literal["inf"] = "inf"
-    output_modalities: list[OutputModality] = Field(
-        default_factory=lambda: [OutputModality.AUDIO]
-    )
+    output_modalities: list[OutputModality] = Field(default_factory=lambda: ["audio"])
     tool_choice: ToolChoice | ToolChoiceMode = ToolChoiceMode.AUTO
     tools: list[FunctionTool | MCPTool] | None = None
 
@@ -623,6 +621,46 @@ class ResponseOutputAudioTranscriptDone(BaseModel):
     transcript: str
 
 
+class ResponseOutputTextDelta(BaseModel):
+    type: Literal[RealtimeServerEvent.RESPONSE_OUTPUT_TEXT_DELTA]
+    event_id: str
+    item_id: str
+    response_id: str
+    output_index: int
+    content_index: int
+    delta: str
+
+
+class ResponseOutputTextDone(BaseModel):
+    type: Literal[RealtimeServerEvent.RESPONSE_OUTPUT_TEXT_DONE]
+    event_id: str
+    item_id: str
+    response_id: str
+    output_index: int
+    content_index: int
+    text: str
+
+
+class ResponseTextDelta(BaseModel):
+    type: Literal[RealtimeServerEvent.RESPONSE_TEXT_DELTA]
+    event_id: str
+    response_id: str
+    item_id: str
+    output_index: int
+    content_index: int
+    delta: str
+
+
+class ResponseTextDone(BaseModel):
+    type: Literal[RealtimeServerEvent.RESPONSE_TEXT_DONE]
+    event_id: str
+    response_id: str
+    item_id: str
+    output_index: int
+    content_index: int
+    text: str
+
+
 class ConversationItemTruncatedEvent(BaseModel):
     type: Literal[RealtimeServerEvent.CONVERSATION_ITEM_TRUNCATED] = (
         RealtimeServerEvent.CONVERSATION_ITEM_TRUNCATED
@@ -737,6 +775,10 @@ ServerEvent = Annotated[
     | ResponseOutputAudioDeltaEvent
     | InputAudioTranscriptionDelta
     | InputAudioTranscriptionCompleted
+    | ResponseOutputTextDelta
+    | ResponseOutputTextDone
+    | ResponseTextDelta
+    | ResponseTextDone
     | ResponseOutputAudioTranscriptDelta
     | ResponseOutputAudioTranscriptDone
     | ConversationItemTruncatedEvent

@@ -15,8 +15,9 @@ from typing import (
 
 from rtvoice.mcp.server import MCPServer
 from rtvoice.realtime.schemas import FunctionTool
+from rtvoice.tools.di import ToolContext, _Inject
 from rtvoice.tools.schema_builder import ToolSchemaBuilder
-from rtvoice.tools.views import Tool, ToolContext, _Inject
+from rtvoice.tools.views import Tool
 
 logger = logging.getLogger(__name__)
 

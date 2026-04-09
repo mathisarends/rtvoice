@@ -4,8 +4,8 @@ import pytest
 from pydantic import BaseModel
 
 from rtvoice.events.bus import EventBus
+from rtvoice.tools.di import Inject
 from rtvoice.tools.schema_builder import ToolSchemaBuilder
-from rtvoice.tools.views import Inject
 
 
 @pytest.fixture

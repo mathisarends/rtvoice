@@ -25,7 +25,7 @@ from rtvoice.subagent.views import (
     SubAgentResult,
 )
 from rtvoice.tools import Tools
-from rtvoice.tools.views import ToolContext
+from rtvoice.tools.di import ToolContext
 
 logger = logging.getLogger(__name__)
 

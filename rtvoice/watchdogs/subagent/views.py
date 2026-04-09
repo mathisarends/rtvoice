@@ -2,7 +2,7 @@ import asyncio
 from dataclasses import dataclass
 
 from rtvoice.subagent.channel import SubAgentChannel
-from rtvoice.tools.registry.views import Tool
+from rtvoice.tools.views import Tool
 
 
 @dataclass

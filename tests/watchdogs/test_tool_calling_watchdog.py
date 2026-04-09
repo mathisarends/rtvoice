@@ -8,7 +8,7 @@ from rtvoice.realtime.schemas import (
     ConversationResponseCreateEvent,
     FunctionCallItem,
 )
-from rtvoice.tools.registry.views import Tool
+from rtvoice.tools.views import Tool
 from rtvoice.watchdogs import ToolCallingWatchdog
 
 

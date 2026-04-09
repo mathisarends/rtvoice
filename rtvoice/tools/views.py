@@ -1,39 +1,70 @@
-from typing import TYPE_CHECKING, Annotated, Any
+import inspect
+from collections.abc import Callable
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
-from rtvoice.conversation import ConversationHistory
-from rtvoice.events.bus import EventBus
-
-
-class _Inject:
-    """Marker for parameters that should be injected from ToolContext."""
-
-
-_INJECT_MARKER = _Inject()
-
-
-if TYPE_CHECKING:
-    type Inject[T] = T
-else:
-
-    class Inject:
-        """Marks a parameter for dependency injection from ToolContext.
-
-        Usage: ``event_bus: Inject[EventBus]``
-        """
-
-        def __class_getitem__(cls, item: Any) -> Any:
-            return Annotated[item, _INJECT_MARKER]
-
-
-class ToolContext(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    event_bus: EventBus | None = None
-    context: Any | None = None
-    conversation_history: ConversationHistory | None = None
+from rtvoice.realtime.schemas import FunctionParameters, FunctionTool
 
 
 class VoidResult:
     def __str__(self) -> str:
         return "OK"
+
+
+class Tool:
+    def __init__(
+        self,
+        name: str,
+        description: str,
+        function: Callable,
+        schema: FunctionParameters,
+        result_instruction: str | None = None,
+        holding_instruction: str | None = None,
+        status: str | None = None,
+        suppress_response: bool = False,
+    ):
+        self.name = name
+        self.description = description
+        self.function = function
+        self.schema = schema
+        self.result_instruction = result_instruction
+        self.holding_instruction = holding_instruction
+        self.status = status
+        self.suppress_response = suppress_response
+
+    async def execute(self, arguments: dict[str, Any]) -> Any:
+        if inspect.iscoroutinefunction(self.function):
+            result = await self.function(**arguments)
+        else:
+            result = self.function(**arguments)
+
+        return result if result is not None else VoidResult()
+
+    def to_pydantic(self) -> FunctionTool:
+        return FunctionTool(
+            name=self.name,
+            description=self.description,
+            parameters=self.schema,
+        )
+
+    def format_status(self, args: BaseModel | dict[str, Any]) -> str | None:
+        if self.status is None:
+            return None
+
+        args_dict = (
+            args.model_dump(exclude_none=True) if isinstance(args, BaseModel) else args
+        )
+
+        try:
+            return self.status.format(**args_dict)
+        except KeyError:
+            return self.status
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Tool):
+            return NotImplemented
+        return self.name == other.name
+
+    def __hash__(self) -> int:
+        return hash(self.name)

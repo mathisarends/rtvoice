@@ -7,7 +7,7 @@ from typing import Annotated, Any, ClassVar, Union, get_args, get_origin, get_ty
 from pydantic import BaseModel
 
 from rtvoice.realtime.schemas import FunctionParameterProperty, FunctionParameters
-from rtvoice.tools.views import _INJECT_MARKER
+from rtvoice.tools.di import _INJECT_MARKER
 
 
 class ToolSchemaBuilder:

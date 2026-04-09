@@ -1,11 +1,10 @@
-from .registry import ToolRegistry
-from .tools import SubAgentTools, Tools
-from .views import Inject, ToolContext
+from .di import Inject, ToolContext
+from .tools import Tools
+from .views import Tool
 
 __all__ = [
     "Inject",
-    "SubAgentTools",
+    "Tool",
     "ToolContext",
-    "ToolRegistry",
     "Tools",
 ]

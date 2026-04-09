@@ -145,11 +145,11 @@ plt.tight_layout()
 
 from typing import Annotated
 
-from rtvoice.tools import SubAgentTools
+from rtvoice.tools import Tools
 
 
-def build_mock_tools() -> SubAgentTools:
-    tools = SubAgentTools()
+def build_mock_tools() -> Tools:
+    tools = Tools()
 
     @tools.action(
         "Execute a SQL query against the analytics database and return results as CSV."

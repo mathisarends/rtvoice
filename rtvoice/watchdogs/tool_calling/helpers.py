@@ -9,8 +9,7 @@ from rtvoice.realtime.schemas import (
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.subagent.views import SubAgentResult
-from rtvoice.tools.registry.views import Tool
-from rtvoice.tools.views import VoidResult
+from rtvoice.tools.views import Tool, VoidResult
 
 
 class ToolCallWebSocketHelper:

@@ -17,7 +17,7 @@ from rtvoice.realtime.schemas import (
 )
 from rtvoice.subagent.views import SubAgentResult
 from rtvoice.tools import Tools
-from rtvoice.tools.registry.views import Tool
+from rtvoice.tools.views import Tool
 from rtvoice.watchdogs.subagent.subagent_interaction import SubAgentInteractionWatchdog
 
 

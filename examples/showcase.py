@@ -39,7 +39,7 @@ from typing import Annotated
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from rtvoice import RealtimeAgent, SubAgent, SubAgentTools, Tools
+from rtvoice import RealtimeAgent, SubAgent, Tools
 from rtvoice.llm import ChatOpenAI
 
 load_dotenv(override=True)
@@ -92,8 +92,8 @@ class HueApplyResult(BaseModel):
     action: str
 
 
-def _build_mail_tools() -> SubAgentTools:
-    tools = SubAgentTools()
+def _build_mail_tools() -> Tools:
+    tools = Tools()
 
     _mock_emails = [
         Email(
@@ -203,8 +203,8 @@ def build_mail_assistant() -> SubAgent:
     )
 
 
-def _build_hue_tools() -> SubAgentTools:
-    tools = SubAgentTools()
+def _build_hue_tools() -> Tools:
+    tools = Tools()
 
     _mock_rooms: list[HueRoom] = [
         HueRoom(

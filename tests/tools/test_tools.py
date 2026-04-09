@@ -3,8 +3,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from rtvoice.events.bus import EventBus
-from rtvoice.tools import SubAgentTools, Tools
-from rtvoice.tools.views import Inject, ToolContext
+from rtvoice.tools import Tools
+from rtvoice.tools.di import Inject, ToolContext
 
 
 @pytest.fixture
@@ -223,57 +223,47 @@ class TestRealtimeTools:
 
         assert realtime.get_tool_schema() == []
 
-    def test_action_does_not_accept_status(self) -> None:
-        realtime = Tools()
 
-        with pytest.raises(TypeError, match="status"):
-            realtime.action(description="A tool", status="Working...")
-
-
-class TestSubAgentTools:
+class TestJsonToolSchema:
     def test_get_json_tool_schema_returns_list(self) -> None:
-        agent = SubAgentTools()
+        tools = Tools()
 
-        @agent.action(description="A tool")
+        @tools.action(description="A tool")
         def my_tool(name: str) -> None: ...
 
-        schema = agent.get_json_tool_schema()
+        schema = tools.get_json_tool_schema()
 
         assert len(schema) == 1
 
     def test_get_json_tool_schema_has_function_type(self) -> None:
-        agent = SubAgentTools()
+        tools = Tools()
 
-        @agent.action(description="A tool")
+        @tools.action(description="A tool")
         def my_tool(name: str) -> None: ...
 
-        schema = agent.get_json_tool_schema()
+        schema = tools.get_json_tool_schema()
 
         assert schema[0]["type"] == "function"
 
     def test_get_json_tool_schema_contains_function_key(self) -> None:
-        agent = SubAgentTools()
+        tools = Tools()
 
-        @agent.action(description="A tool")
+        @tools.action(description="A tool")
         def my_tool(name: str) -> None: ...
 
-        schema = agent.get_json_tool_schema()
+        schema = tools.get_json_tool_schema()
 
         assert "function" in schema[0]
 
     def test_get_json_tool_schema_empty_for_no_tools(self) -> None:
-        agent = SubAgentTools()
+        tools = Tools()
 
-        assert agent.get_json_tool_schema() == []
+        assert tools.get_json_tool_schema() == []
 
-    def test_action_does_not_accept_holding_instruction(self) -> None:
-        agent = SubAgentTools()
 
-        with pytest.raises(TypeError, match="holding_instruction"):
-            agent.action(description="A tool", holding_instruction="Please wait")
-
+class TestSubAgentTools:
     def test_tool_format_status_formats_template(self) -> None:
-        agent = SubAgentTools()
+        agent = Tools()
 
         @agent.action(
             description="Search events",
@@ -289,7 +279,7 @@ class TestSubAgentTools:
         assert status == "Suche nach 'Zahnarzt' im Kalender..."
 
     def test_tool_format_status_returns_none_without_status_template(self) -> None:
-        agent = SubAgentTools()
+        agent = Tools()
 
         @agent.action(description="Search events")
         def search_events(query: str) -> list:
@@ -302,7 +292,7 @@ class TestSubAgentTools:
         assert status is None
 
     def test_tool_format_status_falls_back_to_template_on_missing_key(self) -> None:
-        agent = SubAgentTools()
+        agent = Tools()
 
         @agent.action(
             description="Create event",
@@ -318,7 +308,7 @@ class TestSubAgentTools:
         assert status == "Erstelle Termin am {date} mit {attendees}..."
 
     def test_action_stores_suppress_response_flag(self) -> None:
-        agent = SubAgentTools()
+        agent = Tools()
 
         @agent.action(description="Silent op", suppress_response=True)
         def silent_op() -> str:

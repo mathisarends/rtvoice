@@ -24,7 +24,7 @@ from rtvoice.subagent.views import (
     DoneSignal,
     SubAgentResult,
 )
-from rtvoice.tools import SubAgentTools
+from rtvoice.tools import Tools
 from rtvoice.tools.views import ToolContext
 
 logger = logging.getLogger(__name__)
@@ -81,7 +81,7 @@ class SubAgent[T]:
             ),
         ] = None,
         tools: Annotated[
-            SubAgentTools | None,
+            Tools | None,
             Doc("Pre-registered tools available to the agent during its run loop."),
         ] = None,
         mcp_servers: Annotated[
@@ -143,7 +143,7 @@ class SubAgent[T]:
         self.description = description
         self._instructions = instructions
         self._llm = llm
-        self._tools = SubAgentTools()
+        self._tools = Tools()
         if tools:
             self._tools.merge(tools)
 

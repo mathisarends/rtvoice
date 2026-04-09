@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 
 from rtvoice import RealtimeAgent
-from rtvoice.views import AgentListener
+from rtvoice.listener import AgentListener
 
 load_dotenv(override=True)
 

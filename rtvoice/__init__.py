@@ -4,7 +4,7 @@ from .listener import AgentListener
 from .mcp import MCPServerStdio
 from .realtime import AzureOpenAIProvider, OpenAIProvider, RealtimeProvider
 from .subagent import SubAgent
-from .tools import SubAgentTools, Tools
+from .tools import Inject, SubAgentTools, ToolContext, Tools
 from .views import (
     AssistantVoice,
     NoiseReduction,
@@ -21,6 +21,7 @@ __all__ = [
     "AgentListener",
     "AssistantVoice",
     "AzureOpenAIProvider",
+    "Inject",
     "MCPServerStdio",
     "NoiseReduction",
     "OpenAIProvider",
@@ -33,6 +34,7 @@ __all__ = [
     "ServerVAD",
     "SubAgent",
     "SubAgentTools",
+    "ToolContext",
     "Tools",
     "TranscriptionModel",
     "TurnDetection",

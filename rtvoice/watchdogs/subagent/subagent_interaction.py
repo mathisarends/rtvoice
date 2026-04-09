@@ -20,7 +20,7 @@ from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.subagent import SubAgent
 from rtvoice.subagent.channel import SubAgentChannel
 from rtvoice.subagent.views import SubAgentResult
-from rtvoice.tools import Tools
+from rtvoice.tools import Inject, Tools
 from rtvoice.tools.registry.views import RealtimeTool
 from rtvoice.watchdogs.subagent.views import PendingSubAgentCall
 from rtvoice.watchdogs.tool_calling.helpers import ToolCallWebSocketHelper
@@ -79,7 +79,7 @@ class SubAgentInteractionWatchdog:
             name="cancel_agent",
             result_instruction="Tell the user naturally that the task has been cancelled.",
         )
-        async def _cancel_agent(event_bus: EventBus) -> str:
+        async def _cancel_agent(event_bus: Inject[EventBus]) -> str:
             await event_bus.dispatch(CancelSubAgentCommand())
             return "The agent task has been cancelled."
 

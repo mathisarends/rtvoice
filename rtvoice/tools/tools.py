@@ -4,7 +4,15 @@ import abc
 import inspect
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Self
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    Self,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from rtvoice.mcp.server import MCPServer
 from rtvoice.realtime.schemas import FunctionTool
@@ -14,7 +22,7 @@ from rtvoice.tools.registry import (
     ToolRegistry,
 )
 from rtvoice.tools.registry.views import Tool
-from rtvoice.tools.views import SpecialToolParameters
+from rtvoice.tools.views import ToolContext, _Inject
 
 if TYPE_CHECKING:
     from rtvoice.tools.registry.views import RealtimeTool, SubAgentTool
@@ -32,13 +40,13 @@ class BaseTools(abc.ABC):
 
     def __init__(self):
         self._registry = self._create_registry()
-        self._context: SpecialToolParameters = SpecialToolParameters()
+        self._context: ToolContext = ToolContext()
 
     @abc.abstractmethod
     def _create_registry(self) -> ToolRegistry:
         """Return the concrete registry implementation for this tool set."""
 
-    def set_context(self, context: SpecialToolParameters) -> None:
+    def set_context(self, context: ToolContext) -> None:
         self._context = context
 
     def inject_tool(self, tool: Tool) -> None:
@@ -72,18 +80,21 @@ class BaseTools(abc.ABC):
         self,
         tool: Tool,
         llm_arguments: dict[str, Any],
-        context: SpecialToolParameters,
+        context: ToolContext,
     ) -> dict[str, Any]:
         signature = inspect.signature(tool.function)
+        type_hints = get_type_hints(tool.function, include_extras=True)
         arguments = llm_arguments.copy()
-        injectable = self._injectable_from_context(context)
+        injectable_by_type = self._injectable_by_type_from_context(context)
 
         for param_name, param in signature.parameters.items():
             if param_name in arguments or param_name in ("self", "cls"):
                 continue
 
-            if param_name in injectable and injectable[param_name] is not None:
-                arguments[param_name] = injectable[param_name]
+            hint = type_hints.get(param_name)
+            injected = self._resolve_inject(hint, injectable_by_type)
+            if injected is not None:
+                arguments[param_name] = injected
             elif param.default is inspect.Parameter.empty:
                 raise ValueError(
                     f"Missing required parameter '{param_name}' for tool '{tool.name}'"
@@ -91,13 +102,31 @@ class BaseTools(abc.ABC):
 
         return arguments
 
-    def _injectable_from_context(
-        self, context: SpecialToolParameters
-    ) -> dict[str, Any]:
-        return {
-            field: getattr(context, field)
-            for field in SpecialToolParameters.model_fields
-        }
+    def _injectable_by_type_from_context(self, context: ToolContext) -> dict[type, Any]:
+        result: dict[type, Any] = {}
+        for field_name in ToolContext.model_fields:
+            value = getattr(context, field_name)
+            if value is None:
+                continue
+            result[type(value)] = value
+        return result
+
+    def _resolve_inject(
+        self, type_hint: Any, injectable_by_type: dict[type, Any]
+    ) -> Any | None:
+        if type_hint is None or get_origin(type_hint) is not Annotated:
+            return None
+
+        args = get_args(type_hint)
+        if not any(isinstance(arg, _Inject) for arg in args):
+            return None
+
+        requested_type = args[0]
+        for _, value in injectable_by_type.items():
+            if isinstance(value, requested_type):
+                return value
+
+        return None
 
     def clone(self) -> Self:
         """Create a shallow copy of this tool registry."""

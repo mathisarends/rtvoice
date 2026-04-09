@@ -3,7 +3,9 @@ from typing import Annotated
 import pytest
 from pydantic import BaseModel
 
+from rtvoice.events.bus import EventBus
 from rtvoice.tools.registry.schema_builder import ToolSchemaBuilder
+from rtvoice.tools.views import Inject
 
 
 @pytest.fixture
@@ -164,6 +166,14 @@ class TestSkippedParams:
         result = builder.build(MyClass.method)
 
         assert "cls" not in result.properties
+
+    def test_inject_param_is_skipped(self, builder: ToolSchemaBuilder) -> None:
+        def func(name: str, event_bus: Inject[EventBus]) -> None: ...
+
+        result = builder.build(func)
+
+        assert "event_bus" not in result.properties
+        assert "name" in result.properties
 
 
 class TestPydanticModelParams:

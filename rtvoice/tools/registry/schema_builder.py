@@ -7,7 +7,7 @@ from typing import Annotated, Any, ClassVar, Union, get_args, get_origin, get_ty
 from pydantic import BaseModel
 
 from rtvoice.realtime.schemas import FunctionParameterProperty, FunctionParameters
-from rtvoice.tools.views import SpecialToolParameters
+from rtvoice.tools.views import _INJECT_MARKER
 
 
 class ToolSchemaBuilder:
@@ -25,10 +25,6 @@ class ToolSchemaBuilder:
         collections.abc.Iterable,
         collections.abc.Collection,
     )
-
-    def __init__(self):
-        self._special_param_names = set(SpecialToolParameters.model_fields.keys())
-        self._special_param_types = self._build_special_param_types()
 
     def build(self, func: Callable) -> FunctionParameters:
         signature = inspect.signature(func)
@@ -59,35 +55,19 @@ class ToolSchemaBuilder:
         )
 
     def _should_skip_param(self, param_name: str, type_hints: dict[str, Any]) -> bool:
-        if param_name in ("self", "cls", *self._special_param_names):
+        if param_name in ("self", "cls"):
             return True
 
         param_type = type_hints.get(param_name)
-        return param_type and self._is_special_type(param_type)
+        if not param_type:
+            return False
 
-    def _build_special_param_types(self) -> set[type]:
-        special_types: set[type] = set()
+        return self._has_inject_marker(param_type)
 
-        for field in SpecialToolParameters.model_fields.values():
-            resolved_type = self._unwrap_optional(field.annotation)
-            if isinstance(resolved_type, type):
-                special_types.add(resolved_type)
-
-        return special_types
-
-    def _is_special_type(self, type_hint: Any) -> bool:
-        actual_type, _ = self._extract_type_and_description(type_hint)
-        origin = get_origin(actual_type)
-
-        if origin is Union or isinstance(actual_type, types.UnionType):
-            non_none_args = [
-                arg for arg in get_args(actual_type) if arg is not type(None)
-            ]
-            return any(self._is_special_type(arg) for arg in non_none_args)
-
-        return (
-            isinstance(actual_type, type) and actual_type in self._special_param_types
-        )
+    def _has_inject_marker(self, type_hint: Any) -> bool:
+        if get_origin(type_hint) is not Annotated:
+            return False
+        return any(isinstance(arg, type(_INJECT_MARKER)) for arg in get_args(type_hint))
 
     def _extract_type_and_description(self, type_hint: Any) -> tuple[Any, str | None]:
         if get_origin(type_hint) is not Annotated:
@@ -98,16 +78,6 @@ class ToolSchemaBuilder:
         description = next((arg for arg in args[1:] if isinstance(arg, str)), None)
 
         return actual_type, description
-
-    def _unwrap_optional(self, type_hint: Any) -> Any:
-        origin = get_origin(type_hint)
-        if origin is Union or isinstance(type_hint, types.UnionType):
-            non_none_types = [
-                arg for arg in get_args(type_hint) if arg is not type(None)
-            ]
-            if non_none_types:
-                return non_none_types[0]
-        return type_hint
 
     def _convert_to_json_schema(
         self, python_type: Any, description: str | None = None

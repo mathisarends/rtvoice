@@ -26,7 +26,7 @@ from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
 from rtvoice.subagent import SubAgent
 from rtvoice.subagent.views import SubAgentResult
-from rtvoice.tools import SpecialToolParameters, Tools
+from rtvoice.tools import Inject, ToolContext, Tools
 from rtvoice.views import (
     AgentResult,
     AssistantVoice,
@@ -275,7 +275,7 @@ class RealtimeAgent[T]:
             self._tools.merge(tools)
 
         self._tools.set_context(
-            SpecialToolParameters(
+            ToolContext(
                 event_bus=self._event_bus,
                 context=context,
                 conversation_history=self._conversation_history,
@@ -364,7 +364,7 @@ class RealtimeAgent[T]:
                 str,
                 "The task or question to delegate to this agent. Be specific and include enough context for the agent to act without clarification.",
             ],
-            conversation_history: ConversationHistory,
+            conversation_history: Inject[ConversationHistory],
             clarification_answer: Annotated[
                 str | None,
                 "If this is a follow-up call after a clarification request, provide the user's answer here. Leave empty for the initial call.",

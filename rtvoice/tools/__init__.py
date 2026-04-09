@@ -1,10 +1,11 @@
 from .registry import ToolRegistry
 from .tools import SubAgentTools, Tools
-from .views import SpecialToolParameters
+from .views import Inject, ToolContext
 
 __all__ = [
-    "SpecialToolParameters",
+    "Inject",
     "SubAgentTools",
+    "ToolContext",
     "ToolRegistry",
     "Tools",
 ]

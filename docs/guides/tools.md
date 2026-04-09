@@ -50,32 +50,46 @@ await agent.run()
 async def search_knowledge_base(query: str) -> str: ...
 ```
 
-| Parameter | Description |
-|---|---|
-| `description` | Natural-language instruction shown to the model (required). |
-| `name` | Override the tool name. Defaults to the function name. |
-| `result_instruction` | Appended to the tool result to guide how the model presents it. |
-| `is_long_running` | Set `True` for tools that take more than ~1 s. The assistant speaks a holding phrase while waiting. |
-| `holding_instruction` | What the assistant says while the tool is running. Requires `is_long_running=True`. |
+| Parameter             | Description                                                                                         |
+| --------------------- | --------------------------------------------------------------------------------------------------- |
+| `description`         | Natural-language instruction shown to the model (required).                                         |
+| `name`                | Override the tool name. Defaults to the function name.                                              |
+| `result_instruction`  | Appended to the tool result to guide how the model presents it.                                     |
+| `is_long_running`     | Set `True` for tools that take more than ~1 s. The assistant speaks a holding phrase while waiting. |
+| `holding_instruction` | What the assistant says while the tool is running. Requires `is_long_running=True`.                 |
 
 ---
 
 ## Auto-injected parameters
 
-Some parameters are injected automatically by the framework — never include them in the model-facing schema, and annotate them with their exact Python type so the injector recognises them:
+Use `Inject[T]` to mark parameters that should be injected from the `ToolContext` at runtime. These are excluded from the model-facing schema automatically.
 
-| Parameter name | Type | Injected value |
-|---|---|---|
-| `event_bus` | `EventBus` | The session-scoped event bus |
-| `conversation_history` | `ConversationHistory` | Accumulated transcript turns |
-| `context` | your custom type | Whatever you passed as `context=` to `RealtimeAgent` |
+```python
+from rtvoice import Inject, Tools
+from rtvoice.events.bus import EventBus
+
+tools = Tools()
+
+@tools.action("Emit a custom event")
+async def emit(event_bus: Inject[EventBus]) -> str:
+    # event_bus is injected, not exposed to the model
+    return "done"
+```
+
+Available injectable types:
+
+| Type                  | Injected value                                       |
+| --------------------- | ---------------------------------------------------- |
+| `EventBus`            | The session-scoped event bus                         |
+| `ConversationHistory` | Accumulated transcript turns                         |
+| your custom type      | Whatever you passed as `context=` to `RealtimeAgent` |
 
 ### Example: shared context object
 
 ```python
 from dataclasses import dataclass
 from typing import Annotated
-from rtvoice import RealtimeAgent, Tools
+from rtvoice import Inject, RealtimeAgent, Tools
 from rtvoice.conversation import ConversationHistory
 
 @dataclass
@@ -88,17 +102,17 @@ tools = Tools()
 @tools.action("Save the user's preferred language")
 async def save_language(
     language: Annotated[str, "The language code, e.g. 'de'"],
-    context: AppContext,          # injected automatically
+    ctx: Inject[AppContext],
 ) -> str:
-    context.preferences["language"] = language
+    ctx.preferences["language"] = language
     return f"Language set to {language}."
 
-ctx = AppContext(user_id="u-42", preferences={})
+app_ctx = AppContext(user_id="u-42", preferences={})
 
 agent = RealtimeAgent(
     instructions="Help the user configure their preferences.",
     tools=tools,
-    context=ctx,
+    context=app_ctx,
 )
 await agent.run()
 ```
@@ -106,9 +120,12 @@ await agent.run()
 ### Example: reading conversation history
 
 ```python
+from rtvoice import Inject
+from rtvoice.conversation import ConversationHistory
+
 @tools.action("Summarise the conversation so far")
-async def summarise(conversation_history: ConversationHistory) -> str:
-    return conversation_history.format()
+async def summarise(history: Inject[ConversationHistory]) -> str:
+    return history.format()
 ```
 
 ---

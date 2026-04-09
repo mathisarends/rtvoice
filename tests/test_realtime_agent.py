@@ -21,9 +21,9 @@ from rtvoice.events.views import (
     UserStoppedSpeakingEvent,
     UserTranscriptCompletedEvent,
 )
+from rtvoice.listener import AgentListener
 from rtvoice.views import (
     AgentError,
-    AgentListener,
     AssistantVoice,
     NoiseReduction,
     RealtimeModel,

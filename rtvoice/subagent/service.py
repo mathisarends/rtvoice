@@ -25,7 +25,7 @@ from rtvoice.subagent.views import (
     SubAgentResult,
 )
 from rtvoice.tools import SubAgentTools
-from rtvoice.tools.views import SpecialToolParameters
+from rtvoice.tools.views import ToolContext
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +162,7 @@ class SubAgent[T]:
 
         self._dynamic_skills = dynamic_skills
 
-        self._tools.set_context(SpecialToolParameters(context=context))
+        self._tools.set_context(ToolContext(context=context))
 
         if self._skill_registry.skills:
             self._register_skill_tools()

@@ -4,7 +4,7 @@ import pytest
 
 from rtvoice.events.bus import EventBus
 from rtvoice.tools import SubAgentTools, Tools
-from rtvoice.tools.views import SpecialToolParameters
+from rtvoice.tools.views import Inject, ToolContext
 
 
 @pytest.fixture
@@ -96,20 +96,34 @@ class TestExecute:
 
 class TestPrepareArguments:
     @pytest.mark.asyncio
-    async def test_injects_special_params_from_context(self, tools: Tools) -> None:
+    async def test_injects_via_inject_marker(self, tools: Tools) -> None:
         injected_bus = EventBus()
-        context = SpecialToolParameters(event_bus=injected_bus)
+        context = ToolContext(event_bus=injected_bus)
         tools.set_context(context)
 
         received = {}
 
-        @tools.action(description="Uses event bus")
-        async def handler(event_bus) -> None:
-            received["event_bus"] = event_bus
+        @tools.action(description="Uses event bus via Inject")
+        async def handler(bus: Inject[EventBus]) -> None:
+            received["bus"] = bus
 
         await tools.execute("handler", {})
 
-        assert received["event_bus"] is injected_bus
+        assert received["bus"] is injected_bus
+
+    @pytest.mark.asyncio
+    async def test_name_without_inject_marker_is_not_injected(
+        self, tools: Tools
+    ) -> None:
+        injected_bus = EventBus()
+        context = ToolContext(event_bus=injected_bus)
+        tools.set_context(context)
+
+        @tools.action(description="Uses event bus by name only")
+        async def handler(event_bus: EventBus) -> None: ...
+
+        with pytest.raises(ValueError, match="event_bus"):
+            await tools.execute("handler", {})
 
     @pytest.mark.asyncio
     async def test_llm_arguments_take_precedence_over_injected(
@@ -128,7 +142,7 @@ class TestPrepareArguments:
 
 class TestSetContext:
     def test_context_is_updated(self, tools: Tools) -> None:
-        new_context = SpecialToolParameters()
+        new_context = ToolContext()
         tools.set_context(new_context)
 
         assert tools._context is new_context

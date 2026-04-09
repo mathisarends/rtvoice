@@ -1,5 +1,5 @@
 from .registry import ToolRegistry
-from .service import SubAgentTools, Tools
+from .tools import SubAgentTools, Tools
 from .views import SpecialToolParameters
 
 __all__ = [

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from rtvoice.agent import RealtimeAgent
 from rtvoice.events.views import (
     AgentErrorEvent,
     AgentSessionConnectedEvent,
@@ -20,7 +21,6 @@ from rtvoice.events.views import (
     UserStoppedSpeakingEvent,
     UserTranscriptCompletedEvent,
 )
-from rtvoice.service import RealtimeAgent
 from rtvoice.views import (
     AgentError,
     AgentListener,

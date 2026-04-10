@@ -26,7 +26,12 @@ class ToolSchemaBuilder:
         collections.abc.Collection,
     )
 
-    def build(self, func: Callable) -> FunctionParameters:
+    def build(
+        self, func: Callable, param_model: type[BaseModel] | None = None
+    ) -> FunctionParameters:
+        if param_model is not None:
+            return self.build_from_model(param_model)
+
         signature = inspect.signature(func)
         type_hints = get_type_hints(func, include_extras=True)
 
@@ -50,6 +55,29 @@ class ToolSchemaBuilder:
         return FunctionParameters(
             type="object",
             strict=True,
+            properties=properties,
+            required=required_params,
+        )
+
+    def build_from_model(self, model: type[BaseModel]) -> FunctionParameters:
+        properties: dict[str, FunctionParameterProperty] = {}
+        required_params: list[str] = []
+
+        for field_name, field_info in model.model_fields.items():
+            description = field_info.description
+            field_type = field_info.annotation
+            prop = self._convert_to_json_schema(field_type, description)
+
+            if not field_info.is_required() and field_info.default is not None:
+                prop = prop.model_copy(update={"default": field_info.default})
+
+            properties[field_name] = prop
+
+            if field_info.is_required():
+                required_params.append(field_name)
+
+        return FunctionParameters(
+            type="object",
             properties=properties,
             required=required_params,
         )

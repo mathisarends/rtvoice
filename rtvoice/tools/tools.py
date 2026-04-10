@@ -13,6 +13,8 @@ from typing import (
     get_type_hints,
 )
 
+from pydantic import BaseModel
+
 from rtvoice.mcp.server import MCPServer
 from rtvoice.realtime.schemas import FunctionTool
 from rtvoice.tools.di import ToolContext, _Inject
@@ -34,21 +36,23 @@ class Tools:
         self,
         description: str,
         name: str | None = None,
+        param_model: type[BaseModel] | None = None,
         result_instruction: str | None = None,
         holding_instruction: str | None = None,
-        status: str | None = None,
+        status: str | Callable | None = None,
     ) -> Callable:
         def decorator(func: Callable) -> Callable:
-            if status is not None:
-                self._validate_status_template(status, func)
+            if isinstance(status, str):
+                self._validate_status_template(status, func, param_model)
 
             bound_func = getattr(self, func.__name__, func)
-            schema = self._schema_builder.build(func)
+            schema = self._schema_builder.build(func, param_model=param_model)
             tool = Tool(
                 name=name or func.__name__,
                 description=description,
                 function=bound_func,
                 schema=schema,
+                param_model=param_model,
                 result_instruction=result_instruction,
                 holding_instruction=holding_instruction,
                 status=status,
@@ -125,19 +129,27 @@ class Tools:
             raise ValueError(f"Tool '{tool.name}' already registered")
         self.tools[tool.name] = tool
 
-    def _validate_status_template(self, status: str, function: Callable) -> None:
+    def _validate_status_template(
+        self, status: str, function: Callable, param_model: type[BaseModel] | None
+    ) -> None:
         placeholders = {match.group(1) for match in re.finditer(r"\{(\w+)\}", status)}
-        param_names = {
-            name
-            for name in inspect.signature(function).parameters
-            if name not in {"self", "cls"}
-        }
+        if not placeholders:
+            return
 
-        unknown_placeholders = placeholders - param_names
+        if param_model is not None:
+            available_names = set(param_model.model_fields.keys())
+        else:
+            available_names = {
+                name
+                for name in inspect.signature(function).parameters
+                if name not in {"self", "cls"}
+            }
+
+        unknown_placeholders = placeholders - available_names
         if unknown_placeholders:
             raise ValueError(
                 "Status template contains unknown placeholders: "
-                f"{unknown_placeholders}. Available parameters: {param_names}"
+                f"{unknown_placeholders}. Available parameters: {available_names}"
             )
 
     def _prepare_arguments(
@@ -148,9 +160,14 @@ class Tools:
     ) -> dict[str, Any]:
         signature = inspect.signature(tool.function)
         type_hints = get_type_hints(tool.function, include_extras=True)
-        arguments = llm_arguments.copy()
         injectable_by_type = self._injectable_by_type_from_context(context)
 
+        if tool.param_model is not None:
+            return self._prepare_with_param_model(
+                tool, llm_arguments, signature, type_hints, injectable_by_type
+            )
+
+        arguments = llm_arguments.copy()
         for param_name, param in signature.parameters.items():
             if param_name in arguments or param_name in ("self", "cls"):
                 continue
@@ -163,6 +180,40 @@ class Tools:
                 raise ValueError(
                     f"Missing required parameter '{param_name}' for tool '{tool.name}'"
                 )
+
+        return arguments
+
+    def _prepare_with_param_model(
+        self,
+        tool: Tool,
+        llm_arguments: dict[str, Any],
+        signature: inspect.Signature,
+        type_hints: dict[str, Any],
+        injectable_by_type: dict[type, Any],
+    ) -> dict[str, Any]:
+        model_instance = tool.param_model(**llm_arguments)
+        arguments: dict[str, Any] = {}
+
+        for param_name, param in signature.parameters.items():
+            if param_name in ("self", "cls"):
+                continue
+
+            hint = type_hints.get(param_name)
+            unwrapped = get_args(hint)[0] if get_origin(hint) is Annotated else hint
+
+            if unwrapped is tool.param_model:
+                arguments[param_name] = model_instance
+                continue
+
+            injected = self._resolve_inject(hint, injectable_by_type)
+            if injected is not None:
+                arguments[param_name] = injected
+            elif param.default is inspect.Parameter.empty:
+                raise ValueError(
+                    f"Missing required parameter '{param_name}' for tool '{tool.name}'"
+                )
+
+        return arguments
 
         return arguments
 

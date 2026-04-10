@@ -306,14 +306,3 @@ class TestSubAgentTools:
         status = tool.format_status({"date": "Montag"})
 
         assert status == "Erstelle Termin am {date} mit {attendees}..."
-
-    def test_action_stores_suppress_response_flag(self) -> None:
-        agent = Tools()
-
-        @agent.action(description="Silent op", suppress_response=True)
-        def silent_op() -> str:
-            return "ok"
-
-        tool = agent.get("silent_op")
-        assert tool is not None
-        assert tool.suppress_response is True

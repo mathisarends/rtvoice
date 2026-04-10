@@ -37,7 +37,6 @@ class Tools:
         result_instruction: str | None = None,
         holding_instruction: str | None = None,
         status: str | None = None,
-        suppress_response: bool = False,
     ) -> Callable:
         def decorator(func: Callable) -> Callable:
             if status is not None:
@@ -53,7 +52,6 @@ class Tools:
                 result_instruction=result_instruction,
                 holding_instruction=holding_instruction,
                 status=status,
-                suppress_response=suppress_response,
             )
             self._register_tool(tool)
             return func

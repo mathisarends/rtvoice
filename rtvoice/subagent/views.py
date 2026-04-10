@@ -1,6 +1,6 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from rtvoice.llm import Message, ToolCall
+from rtvoice.llm import Message
 
 
 @dataclass
@@ -20,7 +20,6 @@ type ToolSignal = DoneSignal | ClarifySignal
 class SubAgentResult:
     message: str
     success: bool = True
-    tool_calls: list[ToolCall] = field(default_factory=list)
     clarification_needed: str | None = None
     resume_history: list[Message] | None = None
     clarify_call_id: str | None = None
@@ -35,9 +34,5 @@ class SubAgentResult:
         parts.append(
             f"[{status}] {self.message or ('Success' if self.success else 'Failed')}"
         )
-
-        if self.tool_calls:
-            calls = ", ".join(tc.function.name for tc in self.tool_calls)
-            parts.append(f"Tools used: {calls}")
 
         return " | ".join(parts)

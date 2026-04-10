@@ -22,7 +22,6 @@ class Tool:
         result_instruction: str | None = None,
         holding_instruction: str | None = None,
         status: str | None = None,
-        suppress_response: bool = False,
     ):
         self.name = name
         self.description = description
@@ -31,7 +30,6 @@ class Tool:
         self.result_instruction = result_instruction
         self.holding_instruction = holding_instruction
         self.status = status
-        self.suppress_response = suppress_response
 
     async def execute(self, arguments: dict[str, Any]) -> Any:
         if inspect.iscoroutinefunction(self.function):

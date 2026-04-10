@@ -161,4 +161,4 @@ for line in sys.stdin:
 
 ## API reference
 
-See [`MCPServerStdio`](../api/audio.md) and the [Views reference](../api/views.md) for full parameter documentation.
+See [`MCPServerStdio`](../api/audio.md) for full parameter documentation.

@@ -249,6 +249,3 @@ class AgentResult(BaseModel):
 class ClarificationCheckpoint:
     resume_history: list
     clarify_call_id: str
-
-
-# Backward-compatibility: AgentListener moved to rtvoice.listener.

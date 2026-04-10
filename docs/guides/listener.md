@@ -33,32 +33,32 @@ All methods are async no-ops by default — override only the ones you care abou
 
 ### Session lifecycle
 
-| Method | When it fires |
-|---|---|
-| `on_agent_session_connected()` | The WebSocket session is open and ready. |
-| `on_agent_stopped()` | The agent has fully shut down and `run()` is about to return. |
+| Method                         | When it fires                                                 |
+| ------------------------------ | ------------------------------------------------------------- |
+| `on_agent_session_connected()` | The WebSocket session is open and ready.                      |
+| `on_agent_stopped()`           | The agent has fully shut down and `run()` is about to return. |
 
 ### Speaking state
 
-| Method | When it fires |
-|---|---|
-| `on_user_started_speaking()` | VAD detects that the user has started speaking. |
-| `on_user_stopped_speaking()` | VAD detects that the user has stopped speaking. |
-| `on_assistant_started_responding()` | The assistant begins streaming audio. |
-| `on_assistant_stopped_responding()` | The assistant finishes streaming audio. |
-| `on_agent_interrupted()` | The user interrupted the assistant mid-response. |
+| Method                              | When it fires                                    |
+| ----------------------------------- | ------------------------------------------------ |
+| `on_user_started_speaking()`        | VAD detects that the user has started speaking.  |
+| `on_user_stopped_speaking()`        | VAD detects that the user has stopped speaking.  |
+| `on_assistant_started_responding()` | The assistant begins streaming audio.            |
+| `on_assistant_stopped_responding()` | The assistant finishes streaming audio.          |
+| `on_agent_interrupted()`            | The user interrupted the assistant mid-response. |
 
 ### Transcripts
 
-| Method | When it fires |
-|---|---|
-| `on_user_transcript(transcript)` | The user's turn is fully transcribed. Requires a `transcription_model`. |
-| `on_assistant_transcript(transcript)` | The assistant's response transcript is complete. |
+| Method                                | When it fires                                                           |
+| ------------------------------------- | ----------------------------------------------------------------------- |
+| `on_user_transcript(transcript)`      | The user's turn is fully transcribed. Requires a `transcription_model`. |
+| `on_assistant_transcript(transcript)` | The assistant's response transcript is complete.                        |
 
 ### Errors
 
-| Method | When it fires |
-|---|---|
+| Method                  | When it fires                                                       |
+| ----------------------- | ------------------------------------------------------------------- |
 | `on_agent_error(error)` | An error was received from the Realtime API or the agent internals. |
 
 ---
@@ -184,4 +184,4 @@ asyncio.run(main())
 
 ## API reference
 
-See [`AgentListener`](../api/views.md#rtvoice.views.AgentListener) and [`AgentError`](../api/views.md#rtvoice.views.AgentError) for full method signatures.
+See [`AgentListener`](../api/lifecycle_events.md) and [`AgentError`](../api/lifecycle_events.md) for full method signatures.

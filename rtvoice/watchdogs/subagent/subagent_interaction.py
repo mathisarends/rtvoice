@@ -16,11 +16,15 @@ from rtvoice.realtime.schemas import (
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.subagent import SubAgent
-from rtvoice.subagent.views import SubAgentResult
+from rtvoice.subagent.views import AgentClarificationNeeded
 from rtvoice.tools import Inject, Tools
 from rtvoice.tools.views import Tool
 from rtvoice.watchdogs.subagent.views import PendingSubAgentCall
-from rtvoice.watchdogs.tool_calling.helpers import ToolCallWebSocketHelper
+from rtvoice.watchdogs.tool_calling.helpers import (
+    send_function_call_output,
+    send_response_event,
+    serialize_tool_result,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +54,6 @@ class SubAgentInteractionWatchdog:
     ) -> None:
         self._event_bus = event_bus
         self._tools = tools
-        self._ws = ToolCallWebSocketHelper(websocket)
         self._websocket = websocket
         self._progress_ping_delay = progress_ping_delay
         self._cancel_tool = self._register_cancel_tool()
@@ -97,8 +100,8 @@ class SubAgentInteractionWatchdog:
                 "Subagent already running, suppressing duplicate call for '%s'",
                 event.name,
             )
-            await self._ws.send_function_call_output(
-                event.call_id, "Request already in progress."
+            await send_function_call_output(
+                self._websocket, event.call_id, "Request already in progress."
             )
             return
 
@@ -111,7 +114,8 @@ class SubAgentInteractionWatchdog:
                 event.name,
                 self._awaiting_clarification_for,
             )
-            await self._ws.send_function_call_output(
+            await send_function_call_output(
+                self._websocket,
                 event.call_id,
                 f"Cannot start a new task yet. Still waiting for the user's answer "
                 f"to complete the '{self._awaiting_clarification_for}' task.",
@@ -177,20 +181,19 @@ class SubAgentInteractionWatchdog:
                 self._active = None
 
         try:
-            if isinstance(result, SubAgentResult) and result.clarification_needed:
+            if isinstance(result, AgentClarificationNeeded):
                 await self._ask_user_for_clarification(active, result)
                 return
 
             self._awaiting_clarification_for = None
-            serialized = self._ws.serialize(result)
+            serialized = serialize_tool_result(result)
             logger.info(
                 "Subagent result: '%s' [result=%s]",
                 active.subagent_name,
                 serialized,
             )
-            await self._ws.send_function_call_output(active.call_id, serialized)
-            await self._ws.send_response_event(active.handoff_tool)
-
+            await send_function_call_output(self._websocket, active.call_id, serialized)
+            await send_response_event(self._websocket, active.handoff_tool)
             await self._notify_subagent_finished(active.subagent_name)
             await self._eject_cancel_subagent_tool()
         except Exception:
@@ -214,23 +217,24 @@ class SubAgentInteractionWatchdog:
         )
 
     async def _ask_user_for_clarification(
-        self, active: PendingSubAgentCall, result: SubAgentResult
+        self, active: PendingSubAgentCall, result: AgentClarificationNeeded
     ) -> None:
         logger.info(
             "Subagent '%s' needs clarification: %s",
             active.subagent_name,
-            result.clarification_needed,
+            result.question,
         )
 
         self._awaiting_clarification_for = active.subagent_name
 
-        await self._ws.send_function_call_output(
+        await send_function_call_output(
+            self._websocket,
             active.call_id,
             "Clarification needed before completing this task.",
         )
         await self._websocket.send(
             ConversationResponseCreateEvent.from_instructions(
-                f'Ask the user: "{result.clarification_needed}". '
+                f'Ask the user: "{result.question}". '
                 f"Once they answer, call {active.subagent_name} again "
                 f"with their answer in the `clarification_answer` field. "
                 f"Do not make up the answer yourself.",

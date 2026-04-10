@@ -1,4 +1,8 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
+
+from pydantic import BaseModel
 
 from rtvoice.llm import Message
 
@@ -16,23 +20,19 @@ class ClarifySignal:
 type ToolSignal = DoneSignal | ClarifySignal
 
 
-@dataclass
-class SubAgentResult:
+class AgentDone(BaseModel):
+    """The agent completed the task successfully."""
+
     message: str
     success: bool = True
-    clarification_needed: str | None = None
-    resume_history: list[Message] | None = None
-    clarify_call_id: str | None = None
 
-    def to_agent_output(self) -> str:
-        return str(self)
 
-    def __str__(self) -> str:
-        parts: list[str] = []
+class AgentClarificationNeeded(BaseModel):
+    """The agent cannot proceed without an answer from the user."""
 
-        status = "✓" if self.success else "✗"
-        parts.append(
-            f"[{status}] {self.message or ('Success' if self.success else 'Failed')}"
-        )
+    question: str
+    resume_history: list[Message]
+    clarify_call_id: str
 
-        return " | ".join(parts)
+
+type SubAgentResult = AgentDone | AgentClarificationNeeded

@@ -25,7 +25,7 @@ from rtvoice.realtime.providers import OpenAIProvider, RealtimeProvider
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
 from rtvoice.subagent import SubAgent
-from rtvoice.subagent.views import SubAgentResult
+from rtvoice.subagent.views import AgentClarificationNeeded, SubAgentResult
 from rtvoice.tools import Inject, ToolContext, Tools
 from rtvoice.views import (
     AgentResult,
@@ -391,7 +391,7 @@ class RealtimeAgent[T]:
                 )
                 result = await subagent.run(task, context=context)
 
-            if result.clarification_needed:
+            if isinstance(result, AgentClarificationNeeded):
                 # Subagent yielded control back to the realtime agent to collect user input
                 paused_for_clarification = ClarificationCheckpoint(
                     resume_history=result.resume_history,

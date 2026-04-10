@@ -1,5 +1,5 @@
 # Lifecycle Events
 
-::: rtvoice.views.AgentListener
+::: rtvoice.AgentListener
 
 ::: rtvoice.views.AgentError

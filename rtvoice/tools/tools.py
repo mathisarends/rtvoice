@@ -30,7 +30,7 @@ class Tools:
     def __init__(self):
         self.tools: dict[str, Tool] = {}
         self._schema_builder = ToolSchemaBuilder()
-        self._context: ToolContext = ToolContext()
+        self._context: ToolContext | None = None
 
     def action(
         self,
@@ -156,7 +156,7 @@ class Tools:
         self,
         tool: Tool,
         llm_arguments: dict[str, Any],
-        context: ToolContext,
+        context: ToolContext | None,
     ) -> dict[str, Any]:
         signature = inspect.signature(tool.function)
         type_hints = get_type_hints(tool.function, include_extras=True)
@@ -215,10 +215,13 @@ class Tools:
 
         return arguments
 
-        return arguments
-
-    def _injectable_by_type_from_context(self, context: ToolContext) -> dict[type, Any]:
+    def _injectable_by_type_from_context(
+        self, context: ToolContext | None
+    ) -> dict[type, Any]:
         result: dict[type, Any] = {}
+        if context is None:
+            return result
+
         for field_name in ToolContext.model_fields:
             value = getattr(context, field_name)
             if value is None:

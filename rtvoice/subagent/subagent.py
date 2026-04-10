@@ -10,13 +10,14 @@ from rtvoice.llm import (
     BaseChatModel,
     Message,
     SystemMessage,
-    ToolCall,
     ToolResultMessage,
     UserMessage,
 )
 from rtvoice.mcp import MCPServer
 from rtvoice.shared.decorators import timed
 from rtvoice.subagent.views import (
+    AgentClarificationNeeded,
+    AgentDone,
     ClarifySignal,
     DoneSignal,
     SubAgentResult,
@@ -207,9 +208,9 @@ class SubAgent[T]:
     ) -> Annotated[
         SubAgentResult,
         Doc(
-            "Final result including the message, success flag, and executed tool calls. "
-            "If `clarification_needed` is set the caller must re-invoke `resume()` with "
-            "the user's answer and the returned `resume_history` and `clarify_call_id`."
+            "Final result. `AgentDone` on success or max iterations; "
+            "`AgentClarificationNeeded` when the agent needs the user to answer a question — "
+            "re-invoke `resume()` with the answer and the returned history/call-id."
         ),
     ]:
         """Start a fresh tool-calling loop for the given task."""
@@ -242,8 +243,8 @@ class SubAgent[T]:
     ) -> Annotated[
         SubAgentResult,
         Doc(
-            "Final result including the message, success flag, and executed tool calls. "
-            "If `clarification_needed` is set the caller must re-invoke `resume()` again."
+            "Final result. `AgentDone` on success; `AgentClarificationNeeded` if the agent "
+            "needs another answer — re-invoke `resume()` again."
         ),
     ]:
         """Resume a previously interrupted run after the user answered a clarification question."""
@@ -258,16 +259,12 @@ class SubAgent[T]:
 
     async def _loop(self, messages: list[Message]) -> SubAgentResult:
         tool_schema = self._tools.get_json_tool_schema()
-        executed_tool_calls: list[ToolCall] = []
 
         for _ in range(self._max_iterations):
             response = await self._llm.invoke(messages, tools=tool_schema)
 
             if not response.tool_calls:
-                return SubAgentResult(
-                    message=response.completion,
-                    tool_calls=executed_tool_calls,
-                )
+                return AgentDone(message=response.completion)
 
             messages.append(
                 AssistantMessage(
@@ -286,30 +283,22 @@ class SubAgent[T]:
                 match result:
                     case DoneSignal(result=msg):
                         logger.debug("Tool 'done' called with result: %s", msg)
-                        return SubAgentResult(success=True, message=msg)
+                        return AgentDone(message=msg)
                     case ClarifySignal(question=question):
                         logger.debug(
                             "Tool 'clarify' called with question: %s", question
                         )
-                        return SubAgentResult(
-                            message="",
-                            success=False,
-                            tool_calls=executed_tool_calls,
-                            clarification_needed=question,
+                        return AgentClarificationNeeded(
+                            question=question,
                             resume_history=list(messages),
                             clarify_call_id=tool_call.id,
                         )
 
-                executed_tool_calls.append(tool_call)
                 messages.append(
                     ToolResultMessage(tool_call_id=tool_call.id, content=str(result))
                 )
 
-        return SubAgentResult(
-            message="Max iterations reached without a final answer.",
-            success=False,
-            tool_calls=executed_tool_calls,
-        )
+        return AgentDone(message="Max iterations reached.", success=False)
 
     def _build_messages(self, task: str, context: str | None) -> list[Message]:
         messages = [SystemMessage(content=self._instructions)]

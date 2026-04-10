@@ -39,8 +39,8 @@ def make_agent(**kwargs) -> RealtimeAgent:
     audio_input = MagicMock()
     audio_output = MagicMock()
     with (
-        patch("rtvoice.service.RealtimeWebSocket"),
-        patch("rtvoice.service.OpenAIProvider"),
+        patch("rtvoice.agent.RealtimeWebSocket"),
+        patch("rtvoice.agent.OpenAIProvider"),
     ):
         return RealtimeAgent(
             audio_input=audio_input,

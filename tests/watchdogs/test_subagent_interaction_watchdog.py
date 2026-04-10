@@ -15,7 +15,7 @@ from rtvoice.realtime.schemas import (
     ConversationResponseCreateEvent,
     FunctionCallItem,
 )
-from rtvoice.subagent.views import SubAgentResult
+from rtvoice.subagent.views import AgentDone
 from rtvoice.tools import Tools
 from rtvoice.tools.views import Tool
 from rtvoice.watchdogs.subagent.subagent_interaction import SubAgentInteractionWatchdog
@@ -315,10 +315,8 @@ class TestResultDelivery:
         tool = tools.get("slow_job")
         assert tool is not None
 
-        async def silent_done_tool(query: str | None = None) -> SubAgentResult:
-            return SubAgentResult(
-                message="job_done",
-            )
+        async def silent_done_tool(query: str | None = None) -> AgentDone:
+            return AgentDone(message="job_done")
 
         tool.function = silent_done_tool
 

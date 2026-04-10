@@ -283,10 +283,10 @@ class TestStop:
 
 class TestPrepare:
     @pytest.mark.asyncio
-    async def test_returns_self(self) -> None:
+    async def test_returns_none(self) -> None:
         agent = make_agent()
         result = await agent.prewarm()
-        assert result is agent
+        assert result is None
 
     @pytest.mark.asyncio
     async def test_prepare_is_idempotent_for_mcp_servers(self) -> None:

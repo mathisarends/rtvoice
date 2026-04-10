@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-from pathlib import Path
 from typing import Annotated
 
 from typing_extensions import Doc
@@ -17,7 +16,6 @@ from rtvoice.llm import (
 )
 from rtvoice.mcp import MCPServer
 from rtvoice.shared.decorators import timed
-from rtvoice.skills import Skill, SkillRegistry
 from rtvoice.subagent.channel import CancellationToken
 from rtvoice.subagent.views import (
     ClarifySignal,
@@ -121,23 +119,6 @@ class SubAgent[T]:
         context: Annotated[
             T | None, Doc("Shared context object forwarded to all tool handlers.")
         ] = None,
-        skills: Annotated[
-            list[Skill | Path | str] | None,
-            Doc(
-                "Agent skills to make available. Each entry is either a Skill instance "
-                "or a path to a skill directory containing a SKILL.md file. "
-                "Skills are injected into the system prompt; with dynamic_skills=True "
-                "the agent loads them on-demand via a 'load_skill' tool."
-            ),
-        ] = None,
-        dynamic_skills: Annotated[
-            bool,
-            Doc(
-                "If True, only a skill index is injected into the system prompt and the "
-                "agent explicitly calls 'load_skill' to pull in full instructions. "
-                "Reduces token usage for large skill sets."
-            ),
-        ] = False,
     ) -> None:
         self.name = name.replace(" ", "_")
         self.description = description
@@ -155,17 +136,8 @@ class SubAgent[T]:
 
         self._cancellation: CancellationToken | None = None
         self._mcp_ready = asyncio.Event()
-        self._skill_registry = SkillRegistry()
-
-        if skills:
-            self._skill_registry.add(*skills)
-
-        self._dynamic_skills = dynamic_skills
 
         self._tools.set_context(ToolContext(context=context))
-
-        if self._skill_registry.skills:
-            self._register_skill_tools()
 
         self._register_done_tool()
         self._register_clarify_tool()
@@ -194,29 +166,6 @@ class SubAgent[T]:
             question: Annotated[str, "The question to ask the user."],
         ) -> ClarifySignal:
             return ClarifySignal(question)
-
-    def _register_skill_tools(self) -> None:
-        registry = self._skill_registry
-
-        @self._tools.action(
-            "Load the full instructions for a specific agent skill. "
-            "Call this before attempting tasks that require specialized knowledge. "
-            f"Available skills: {registry.available_names()}"
-        )
-        def load_skill(
-            skill_name: Annotated[str, "Name of the skill to load."],
-        ) -> str:
-            skill = registry.get(skill_name)
-            if skill is None:
-                available = ", ".join(registry.available_names())
-                return f"Skill '{skill_name}' not found. Available: {available}"
-            return f"<skill name='{skill.name}'>\n{skill.instructions}\n</skill>"
-
-        @self._tools.action("List all available agent skills with their descriptions.")
-        def list_skills() -> str:
-            if not registry.skills:
-                return "No skills available."
-            return registry.format_index()
 
     @timed()
     async def prewarm(
@@ -399,21 +348,7 @@ class SubAgent[T]:
         return messages
 
     def _build_system_prompt(self) -> str:
-        parts = [self._instructions]
-
-        if self._skill_registry.skills:
-            if self._dynamic_skills:
-                parts.append(
-                    "\n\nYou have access to agent skills that provide specialized "
-                    "instructions and capabilities. Use 'list_skills' to see what's "
-                    "available and 'load_skill' to load instructions before tackling "
-                    "a task that requires that expertise.\n"
-                )
-                parts.append(self._skill_registry.format_index())
-            else:
-                parts.append(self._skill_registry.format_all_instructions())
-
-        return "\n".join(parts)
+        return self._instructions
 
     def _should_suppress_realtime_response(
         self, executed_tool_calls: list[ToolCall]

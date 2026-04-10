@@ -3,7 +3,8 @@
     "allow": [
       "Bash(cd:*)",
       "Bash(python -m pytest tests/test_realtime_agent.py -x)",
-      "Bash(python -m pytest tests/test_realtime_agent.py::TestPrepare::test_returns_self -x)"
+      "Bash(python -m pytest tests/test_realtime_agent.py::TestPrepare::test_returns_self -x)",
+      "Bash(python -m pytest tests/test_realtime_agent.py tests/watchdogs/test_subagent_interaction_watchdog.py -q)"
     ]
   }
 }

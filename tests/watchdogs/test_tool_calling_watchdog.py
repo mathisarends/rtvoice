@@ -30,6 +30,7 @@ def tools() -> MagicMock:
     t = MagicMock()
     t.get = MagicMock(return_value=None)
     t.execute = AsyncMock(return_value="tool_result")
+    t.get_steering = MagicMock(return_value=None)
     return t
 
 

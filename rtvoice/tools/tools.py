@@ -40,6 +40,7 @@ class Tools:
         result_instruction: str | None = None,
         holding_instruction: str | None = None,
         status: str | Callable | None = None,
+        steering: str | None = None,
     ) -> Callable:
         def decorator(func: Callable) -> Callable:
             if isinstance(status, str):
@@ -56,6 +57,7 @@ class Tools:
                 result_instruction=result_instruction,
                 holding_instruction=holding_instruction,
                 status=status,
+                steering=steering,
             )
             self._register_tool(tool)
             return func
@@ -88,6 +90,12 @@ class Tools:
 
     def get(self, name: str) -> Tool | None:
         return self.tools.get(name)
+
+    def get_steering(self, name: str) -> str | None:
+        tool = self.tools.get(name)
+        if tool is None:
+            return None
+        return tool.steering
 
     def get_tool_schema(self) -> list[FunctionTool]:
         return [tool.to_pydantic() for tool in self.tools.values()]

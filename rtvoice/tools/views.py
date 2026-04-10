@@ -40,6 +40,7 @@ class Tool:
         result_instruction: str | None = None,
         holding_instruction: str | None = None,
         status: str | Callable | None = None,
+        steering: str | None = None,
     ):
         self.name = name
         self.description = description
@@ -49,6 +50,7 @@ class Tool:
         self.result_instruction = result_instruction
         self.holding_instruction = holding_instruction
         self.status = status
+        self.steering = steering
         self._validate_status()
 
     def _validate_status(self) -> None:

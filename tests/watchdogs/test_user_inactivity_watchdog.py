@@ -3,7 +3,13 @@ import asyncio
 import pytest
 
 from rtvoice.events.bus import EventBus
-from rtvoice.events.views import AudioPlaybackCompletedEvent, UserInactivityTimeoutEvent
+from rtvoice.events.views import (
+    AudioPlaybackCompletedEvent,
+    SubAgentFinishedEvent,
+    SubAgentStartedEvent,
+    UserInactivityCountdownEvent,
+    UserInactivityTimeoutEvent,
+)
 from rtvoice.realtime.schemas import (
     InputAudioBufferSpeechStartedEvent,
     InputAudioBufferSpeechStoppedEvent,
@@ -101,6 +107,17 @@ class TestMonitoringStateTransitions:
         await event_bus.dispatch(make_response_created())
         assert wt._is_monitoring is False
 
+    @pytest.mark.asyncio
+    async def test_monitoring_does_not_start_while_agent_is_busy(
+        self, event_bus: EventBus
+    ) -> None:
+        wt = UserInactivityTimeoutWatchdog(event_bus, timeout_seconds=10.0)
+
+        await event_bus.dispatch(SubAgentStartedEvent(agent_name="planner"))
+        await event_bus.dispatch(make_speech_stopped())
+
+        assert wt._is_monitoring is False
+
 
 class TestTimeoutFiring:
     @pytest.mark.asyncio
@@ -165,3 +182,66 @@ class TestTimeoutFiring:
         await asyncio.sleep(1.0)
 
         assert len(received) == 1
+
+
+class TestCountdownDispatch:
+    @pytest.mark.asyncio
+    async def test_countdown_dispatches_each_second_only_once(
+        self, event_bus: EventBus
+    ) -> None:
+        wt = UserInactivityTimeoutWatchdog(event_bus, timeout_seconds=10.0)
+        received: list[int] = []
+
+        async def capture(event: UserInactivityCountdownEvent) -> None:
+            received.append(event.remaining_seconds)
+
+        event_bus.subscribe(UserInactivityCountdownEvent, capture)
+
+        class FakeTimer:
+            def __init__(self) -> None:
+                self._remaining_values = iter([5, 5, 4, 4, 3])
+                self._timed_out_values = iter([False, False, False, False, False, True])
+                self._timeout_seconds = 10.0
+
+            def has_timed_out(self) -> bool:
+                return next(self._timed_out_values)
+
+            def remaining(self) -> int:
+                return next(self._remaining_values)
+
+        wt._timer = FakeTimer()
+        wt._is_monitoring = True
+
+        await wt._monitor_timeout()
+
+        assert received == [5, 4, 3]
+
+
+class TestBusyStateTransitions:
+    @pytest.mark.asyncio
+    async def test_supervisor_finished_starts_monitoring_when_idle(
+        self, event_bus: EventBus
+    ) -> None:
+        wt = UserInactivityTimeoutWatchdog(event_bus, timeout_seconds=10.0)
+        wt._agent_is_busy = True
+        wt._assistant_is_speaking = False
+        wt._user_has_stopped_speaking = True
+
+        await event_bus.dispatch(SubAgentFinishedEvent(agent_name="planner"))
+
+        assert wt._agent_is_busy is False
+        assert wt._is_monitoring is True
+
+    @pytest.mark.asyncio
+    async def test_supervisor_finished_does_not_start_monitoring_if_assistant_speaking(
+        self, event_bus: EventBus
+    ) -> None:
+        wt = UserInactivityTimeoutWatchdog(event_bus, timeout_seconds=10.0)
+        wt._agent_is_busy = True
+        wt._assistant_is_speaking = True
+        wt._user_has_stopped_speaking = True
+
+        await event_bus.dispatch(SubAgentFinishedEvent(agent_name="planner"))
+
+        assert wt._agent_is_busy is False
+        assert wt._is_monitoring is False

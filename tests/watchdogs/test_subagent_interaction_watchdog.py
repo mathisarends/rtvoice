@@ -14,8 +14,9 @@ from rtvoice.realtime.schemas import (
     ConversationItemCreateEvent,
     ConversationResponseCreateEvent,
     FunctionCallItem,
+    ToolChoiceMode,
 )
-from rtvoice.subagent.views import AgentDone
+from rtvoice.subagent.views import AgentClarificationNeeded, AgentDone
 from rtvoice.tools import Tools
 from rtvoice.tools.views import Tool
 from rtvoice.watchdogs.subagent.subagent_interaction import SubAgentInteractionWatchdog
@@ -549,3 +550,208 @@ class TestCancelTool:
 
         assert tools.get("cancel_agent") is None
         assert len(received) >= 1
+
+
+class TestClarificationFlow:
+    @pytest.fixture(autouse=True)
+    def setup_supervisor(self, watchdog: SubAgentInteractionWatchdog) -> None:
+        watchdog.register_subagent("slow_job", make_subagent())
+
+    @pytest.mark.asyncio
+    async def test_clarification_result_sets_awaiting_flag_and_sends_prompt(
+        self,
+        event_bus: EventBus,
+        watchdog: SubAgentInteractionWatchdog,
+        websocket: AsyncMock,
+        tools: Tools,
+    ) -> None:
+        register_tool(tools)
+        tool = tools.get("slow_job")
+        assert tool is not None
+
+        async def clarify_tool(query: str | None = None) -> AgentClarificationNeeded:
+            return AgentClarificationNeeded(
+                question="Which date should I use?",
+                resume_history=[],
+                clarify_call_id="clarify_1",
+            )
+
+        tool.function = clarify_tool
+
+        await event_bus.dispatch(make_function_call_item(call_id="call_clarify"))
+        await asyncio.sleep(0.05)
+
+        assert watchdog._awaiting_clarification_for == "slow_job"
+
+        sent_payloads = [c.args[0] for c in websocket.send.call_args_list]
+        output_events = [
+            event
+            for event in sent_payloads
+            if isinstance(event, ConversationItemCreateEvent)
+        ]
+        response_events = [
+            event
+            for event in sent_payloads
+            if isinstance(event, ConversationResponseCreateEvent)
+        ]
+
+        assert any(
+            "Clarification needed" in event.item.output for event in output_events
+        )
+        assert any(
+            event.response is not None
+            and "Which date should I use?" in event.response.instructions
+            and event.response.tool_choice == ToolChoiceMode.AUTO
+            for event in response_events
+        )
+
+    @pytest.mark.asyncio
+    async def test_different_tool_call_is_rejected_while_waiting_for_clarification(
+        self,
+        event_bus: EventBus,
+        watchdog: SubAgentInteractionWatchdog,
+        websocket: AsyncMock,
+        tools: Tools,
+    ) -> None:
+        register_tool(tools, name="slow_job")
+        register_tool(tools, name="other_job")
+        watchdog.register_subagent("other_job", make_subagent())
+        watchdog._awaiting_clarification_for = "slow_job"
+
+        await event_bus.dispatch(
+            make_function_call_item(name="other_job", call_id="call_reject")
+        )
+
+        sent_payloads = [c.args[0] for c in websocket.send.call_args_list]
+        output_events = [
+            event
+            for event in sent_payloads
+            if isinstance(event, ConversationItemCreateEvent)
+        ]
+
+        assert any(
+            "Cannot start a new task yet" in event.item.output
+            for event in output_events
+        )
+
+    @pytest.mark.asyncio
+    async def test_same_tool_call_is_allowed_while_waiting_for_clarification(
+        self,
+        event_bus: EventBus,
+        watchdog: SubAgentInteractionWatchdog,
+        tools: Tools,
+    ) -> None:
+        _, calls = register_tool_with_calls(tools, name="slow_job")
+        watchdog._awaiting_clarification_for = "slow_job"
+
+        await event_bus.dispatch(
+            make_function_call_item(
+                name="slow_job",
+                call_id="call_resume",
+                arguments={"query": "resume answer"},
+            )
+        )
+        await asyncio.sleep(0.05)
+
+        assert calls == [{"query": "resume answer"}]
+        assert watchdog._awaiting_clarification_for is None
+
+
+class TestProgressPing:
+    @pytest.fixture(autouse=True)
+    def setup_supervisor(self, watchdog: SubAgentInteractionWatchdog) -> None:
+        watchdog.register_subagent("slow_job", make_subagent())
+
+    @pytest.mark.asyncio
+    async def test_progress_ping_sent_for_slow_task(
+        self,
+        event_bus: EventBus,
+        watchdog: SubAgentInteractionWatchdog,
+        websocket: AsyncMock,
+        tools: Tools,
+    ) -> None:
+        watchdog._progress_ping_delay = 0.01
+        register_tool(tools)
+
+        gate = asyncio.Event()
+        tool = tools.get("slow_job")
+        assert tool is not None
+
+        async def slow_tool(query: str | None = None) -> str:
+            await gate.wait()
+            return "done"
+
+        tool.function = slow_tool
+
+        await event_bus.dispatch(make_function_call_item(call_id="call_slow"))
+        await asyncio.sleep(0.04)
+
+        sent_payloads = [c.args[0] for c in websocket.send.call_args_list]
+        response_events = [
+            event
+            for event in sent_payloads
+            if isinstance(event, ConversationResponseCreateEvent)
+        ]
+
+        assert any(
+            event.response is not None
+            and "taking a bit longer" in event.response.instructions
+            for event in response_events
+        )
+
+        gate.set()
+        await asyncio.sleep(0.02)
+
+    @pytest.mark.asyncio
+    async def test_progress_ping_not_sent_for_fast_task(
+        self,
+        event_bus: EventBus,
+        watchdog: SubAgentInteractionWatchdog,
+        websocket: AsyncMock,
+        tools: Tools,
+    ) -> None:
+        watchdog._progress_ping_delay = 0.2
+        register_tool(tools)
+
+        await event_bus.dispatch(make_function_call_item(call_id="call_fast"))
+        await asyncio.sleep(0.05)
+
+        sent_payloads = [c.args[0] for c in websocket.send.call_args_list]
+        response_events = [
+            event
+            for event in sent_payloads
+            if isinstance(event, ConversationResponseCreateEvent)
+        ]
+
+        assert not any(
+            event.response is not None
+            and "taking a bit longer" in event.response.instructions
+            for event in response_events
+        )
+
+
+class TestSessionToolsSyncing:
+    @pytest.fixture(autouse=True)
+    def setup_supervisor(self, watchdog: SubAgentInteractionWatchdog) -> None:
+        watchdog.register_subagent("slow_job", make_subagent())
+
+    @pytest.mark.asyncio
+    async def test_successful_subagent_run_syncs_tools_on_inject_and_eject(
+        self,
+        event_bus: EventBus,
+        watchdog: SubAgentInteractionWatchdog,
+        tools: Tools,
+    ) -> None:
+        register_tool(tools)
+        received: list[UpdateSessionToolsCommand] = []
+
+        async def capture(event: UpdateSessionToolsCommand) -> None:
+            received.append(event)
+
+        event_bus.subscribe(UpdateSessionToolsCommand, capture)
+
+        await event_bus.dispatch(make_function_call_item(call_id="call_sync"))
+        await asyncio.sleep(0.05)
+
+        assert len(received) == 1
+        assert all(tool.name != "cancel_agent" for tool in received[0].tools)

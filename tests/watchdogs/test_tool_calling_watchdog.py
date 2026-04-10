@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from pydantic import BaseModel
 
 from rtvoice.events.bus import EventBus
 from rtvoice.realtime.schemas import (
@@ -107,6 +108,59 @@ class TestImmediateTool:
         await event_bus.dispatch(call)
 
         tools.execute.assert_called_once_with("get_weather", {"city": "Berlin"})
+
+    @pytest.mark.asyncio
+    async def test_response_create_uses_result_instruction_when_present(
+        self,
+        event_bus: EventBus,
+        watchdog: ToolCallingWatchdog,
+        websocket: AsyncMock,
+        tools: MagicMock,
+    ) -> None:
+        tool = make_immediate_tool()
+        tool.result_instruction = "Present this naturally to the user"
+        tools.get.return_value = tool
+
+        await event_bus.dispatch(make_function_call_item())
+
+        response_events = [
+            call.args[0]
+            for call in websocket.send.call_args_list
+            if isinstance(call.args[0], ConversationResponseCreateEvent)
+        ]
+
+        assert len(response_events) == 1
+        assert response_events[0].response is not None
+        assert (
+            response_events[0].response.instructions
+            == "Present this naturally to the user"
+        )
+
+    @pytest.mark.asyncio
+    async def test_non_string_result_is_serialized_to_function_output(
+        self,
+        event_bus: EventBus,
+        watchdog: ToolCallingWatchdog,
+        websocket: AsyncMock,
+        tools: MagicMock,
+    ) -> None:
+        class WeatherPayload(BaseModel):
+            city: str
+            temperature: int
+
+        tools.get.return_value = make_immediate_tool()
+        tools.execute.return_value = WeatherPayload(city="Berlin", temperature=18)
+
+        await event_bus.dispatch(make_function_call_item())
+
+        item_events = [
+            call.args[0]
+            for call in websocket.send.call_args_list
+            if isinstance(call.args[0], ConversationItemCreateEvent)
+        ]
+
+        assert len(item_events) == 1
+        assert item_events[0].item.output == '{"city":"Berlin","temperature":18}'
 
 
 class TestUnknownTool:

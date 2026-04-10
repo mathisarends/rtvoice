@@ -139,6 +139,29 @@ class TestPrepareArguments:
 
         assert received["name"] == "explicit"
 
+    @pytest.mark.asyncio
+    async def test_execute_works_without_context_for_regular_parameters(
+        self, tools: Tools
+    ) -> None:
+        @tools.action(description="Uppercase text")
+        async def uppercase(text: str) -> str:
+            return text.upper()
+
+        result = await tools.execute("uppercase", {"text": "hello"})
+
+        assert result == "HELLO"
+
+    @pytest.mark.asyncio
+    async def test_missing_context_with_injected_param_raises_value_error(
+        self, tools: Tools
+    ) -> None:
+        @tools.action(description="Needs injected event bus")
+        async def handler(bus: Inject[EventBus]) -> None:
+            _ = bus
+
+        with pytest.raises(ValueError, match="bus"):
+            await tools.execute("handler", {})
+
 
 class TestSetContext:
     def test_context_is_updated(self, tools: Tools) -> None:

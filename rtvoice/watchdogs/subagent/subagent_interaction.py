@@ -37,12 +37,6 @@ _DEFAULT_HOLDING_INSTRUCTION = (
     "Always respond in the same language the user is speaking."
 )
 
-_PROGRESS_PING_INSTRUCTION = (
-    "The task is taking a bit longer. "
-    "Say ONE short sentence reassuring the user you're still working on it. "
-    "Always respond in the same language the user is speaking."
-)
-
 
 class SubAgentInteractionWatchdog:
     def __init__(
@@ -50,12 +44,10 @@ class SubAgentInteractionWatchdog:
         event_bus: EventBus,
         tools: Tools,
         websocket: RealtimeWebSocket,
-        progress_ping_delay: float = 8.0,
     ) -> None:
         self._event_bus = event_bus
         self._tools = tools
         self._websocket = websocket
-        self._progress_ping_delay = progress_ping_delay
         self._cancel_tool = self._register_cancel_tool()
         self._active: PendingSubAgentCall | None = None
         self._subagents_by_tool_name: dict[str, SubAgent] = {}
@@ -130,6 +122,8 @@ class SubAgentInteractionWatchdog:
 
         await self._inject_cancel_subagent_tool()
 
+        subagent.on_progress = self._send_progress_update
+
         result_task = asyncio.create_task(
             self._tools.execute(event.name, event.arguments or {})
         )
@@ -145,6 +139,15 @@ class SubAgentInteractionWatchdog:
         await self._event_bus.dispatch(SubAgentStartedEvent(agent_name=event.name))
         await self._send_holding_message(tool)
         asyncio.create_task(self._wait_for_result_and_respond(active))
+
+    async def _send_progress_update(self, message: str) -> None:
+        logger.debug("Sending subagent progress update: %s", message)
+        await self._websocket.send(
+            ConversationResponseCreateEvent.from_instructions(
+                f'Tell the user briefly: "{message}". One sentence, same language.',
+                tool_choice=ToolChoiceMode.NONE,
+            )
+        )
 
     async def _send_holding_message(self, tool: Tool) -> None:
         await self._websocket.send(
@@ -168,15 +171,12 @@ class SubAgentInteractionWatchdog:
         await self._eject_cancel_subagent_tool()
 
     async def _wait_for_result_and_respond(self, active: PendingSubAgentCall) -> None:
-        progress_task = asyncio.create_task(self._send_progress_ping_if_slow(active))
-
         try:
             result = await active.execution_task
         except asyncio.CancelledError:
             logger.info("Subagent '%s' was cancelled", active.subagent_name)
             return
         finally:
-            progress_task.cancel()
             if self._active is active:
                 self._active = None
 
@@ -198,23 +198,6 @@ class SubAgentInteractionWatchdog:
             await self._eject_cancel_subagent_tool()
         except Exception:
             logger.exception("Failed to deliver result for '%s'", active.subagent_name)
-
-    async def _send_progress_ping_if_slow(self, active: PendingSubAgentCall) -> None:
-        try:
-            await asyncio.sleep(self._progress_ping_delay)
-        except asyncio.CancelledError:
-            return
-
-        if active.execution_task.done():
-            return
-
-        logger.debug("Sending progress ping for '%s'", active.subagent_name)
-        await self._websocket.send(
-            ConversationResponseCreateEvent.from_instructions(
-                _PROGRESS_PING_INSTRUCTION,
-                tool_choice=ToolChoiceMode.NONE,
-            )
-        )
 
     async def _ask_user_for_clarification(
         self, active: PendingSubAgentCall, result: AgentClarificationNeeded

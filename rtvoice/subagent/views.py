@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from pydantic import BaseModel
@@ -17,7 +18,14 @@ class ClarifySignal:
     question: str
 
 
-type ToolSignal = DoneSignal | ClarifySignal
+@dataclass
+class ProgressSignal:
+    message: str
+
+
+type ToolSignal = DoneSignal | ClarifySignal | ProgressSignal
+
+type ProgressCallback = Callable[[str], Awaitable[None]]
 
 
 class AgentDone(BaseModel):

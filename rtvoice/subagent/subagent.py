@@ -20,6 +20,8 @@ from rtvoice.subagent.views import (
     AgentDone,
     ClarifySignal,
     DoneSignal,
+    ProgressCallback,
+    ProgressSignal,
     SubAgentResult,
 )
 from rtvoice.tools import Tools
@@ -39,6 +41,7 @@ class SubAgent[T]:
 
     - **done** — signals task completion and returns the final result.
     - **clarify** — asks the user a question and blocks until they answer.
+    - **report_progress** — sends an intermediate status update to the user without interrupting the loop.
 
     ```python
     agent = SubAgent(
@@ -138,8 +141,11 @@ class SubAgent[T]:
 
         self._tools.set_context(ToolContext(context=context))
 
+        self.on_progress: ProgressCallback | None = None
+
         self._register_done_tool()
         self._register_clarify_tool()
+        self._register_progress_tool()
 
     def _register_done_tool(self) -> None:
         @self._tools.action(
@@ -162,6 +168,16 @@ class SubAgent[T]:
             question: Annotated[str, "The question to ask the user."],
         ) -> ClarifySignal:
             return ClarifySignal(question)
+
+    def _register_progress_tool(self) -> None:
+        @self._tools.action(
+            "Report an intermediate progress update to the user while working on a long-running task. "
+            "Use this to keep the user informed without blocking \u2014 the loop continues immediately after."
+        )
+        def report_progress(
+            message: Annotated[str, "A short status update for the user."],
+        ) -> ProgressSignal:
+            return ProgressSignal(message)
 
     @timed()
     async def prewarm(
@@ -205,15 +221,24 @@ class SubAgent[T]:
                 "full context without re-asking the user."
             ),
         ] = None,
+        on_progress: Annotated[
+            ProgressCallback | None,
+            Doc(
+                "Async callback invoked when the agent calls `report_progress`. "
+                "Receives the progress message. Must be directly awaited (not spawned as a task) "
+                "so cancellation propagates cleanly."
+            ),
+        ] = None,
     ) -> Annotated[
         SubAgentResult,
         Doc(
             "Final result. `AgentDone` on success or max iterations; "
-            "`AgentClarificationNeeded` when the agent needs the user to answer a question — "
+            "`AgentClarificationNeeded` when the agent needs the user to answer a question \u2014 "
             "re-invoke `resume()` with the answer and the returned history/call-id."
         ),
     ]:
         """Start a fresh tool-calling loop for the given task."""
+        self._on_progress = on_progress or self.on_progress
         await self.prewarm()
         messages = self._build_messages(task=task, context=context)
         return await self._loop(messages)
@@ -240,14 +265,22 @@ class SubAgent[T]:
                 "correct message history on resume."
             ),
         ],
+        on_progress: Annotated[
+            ProgressCallback | None,
+            Doc(
+                "Async callback invoked when the agent calls `report_progress`. "
+                "Receives the progress message."
+            ),
+        ] = None,
     ) -> Annotated[
         SubAgentResult,
         Doc(
             "Final result. `AgentDone` on success; `AgentClarificationNeeded` if the agent "
-            "needs another answer — re-invoke `resume()` again."
+            "needs another answer \u2014 re-invoke `resume()` again."
         ),
     ]:
         """Resume a previously interrupted run after the user answered a clarification question."""
+        self._on_progress = on_progress or self.on_progress
         messages = list(resume_history)
         messages.append(
             ToolResultMessage(
@@ -293,6 +326,17 @@ class SubAgent[T]:
                             resume_history=list(messages),
                             clarify_call_id=tool_call.id,
                         )
+                    case ProgressSignal(message=msg):
+                        logger.debug("Progress update: %s", msg)
+                        if self._on_progress:
+                            await self._on_progress(msg)
+                        messages.append(
+                            ToolResultMessage(
+                                tool_call_id=tool_call.id,
+                                content="Progress noted, continue.",
+                            )
+                        )
+                        continue
 
                 messages.append(
                     ToolResultMessage(tool_call_id=tool_call.id, content=str(result))

@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Annotated, Self
+from typing import Annotated
 
 from typing_extensions import Doc
 
@@ -18,7 +18,7 @@ from rtvoice.llm import (
 from rtvoice.mcp import MCPServer
 from rtvoice.shared.decorators import timed
 from rtvoice.skills import Skill, SkillRegistry
-from rtvoice.subagent.channel import SubAgentChannel
+from rtvoice.subagent.channel import CancellationToken
 from rtvoice.subagent.views import (
     ClarifySignal,
     DoneSignal,
@@ -153,7 +153,7 @@ class SubAgent[T]:
         self.result_instructions = result_instructions
         self.holding_instruction = holding_instruction
 
-        self._channel: SubAgentChannel | None = None
+        self._cancellation: CancellationToken | None = None
         self._mcp_ready = asyncio.Event()
         self._skill_registry = SkillRegistry()
 
@@ -170,12 +170,8 @@ class SubAgent[T]:
         self._register_done_tool()
         self._register_clarify_tool()
 
-    def _attach_channel(self, channel: SubAgentChannel) -> None:
-        """Called by ToolCallingWatchdog at the start of each run."""
-        self._channel = channel
-
-    def attach_channel(self, channel: SubAgentChannel) -> None:
-        self._attach_channel(channel)
+    def attach_cancellation(self, token: CancellationToken) -> None:
+        self._cancellation = token
 
     def _register_done_tool(self) -> None:
         @self._tools.action(
@@ -225,14 +221,9 @@ class SubAgent[T]:
     @timed()
     async def prewarm(
         self,
-    ) -> Annotated[Self, Doc("Returns `self` for optional chaining.")]:
-        """Prewarm MCP connections before `run()`.
-
-        Safe to call multiple times — a no-op if servers are already connected.
-        """
+    ) -> None:
         if not self._mcp_ready.is_set():
             await self._connect_mcp_servers()
-        return self
 
     async def _connect_mcp_servers(self) -> None:
         if not self._mcp_servers:
@@ -269,63 +260,69 @@ class SubAgent[T]:
                 "full context without re-asking the user."
             ),
         ] = None,
+    ) -> Annotated[
+        SubAgentResult,
+        Doc(
+            "Final result including the message, success flag, and executed tool calls. "
+            "If `clarification_needed` is set the caller must re-invoke `resume()` with "
+            "the user's answer and the returned `resume_history` and `clarify_call_id`."
+        ),
+    ]:
+        """Start a fresh tool-calling loop for the given task."""
+        await self.prewarm()
+        messages = self._build_messages(task=task, context=context)
+        return await self._loop(messages)
+
+    @timed()
+    async def resume(
+        self,
         clarification_answer: Annotated[
-            str | None,
+            str,
+            Doc("The user's answer to the previous clarification question."),
+        ],
+        resume_history: Annotated[
+            list[Message],
             Doc(
-                "Answer to a previous clarification question. "
-                "Must be provided together with `resume_history` and `clarify_call_id`."
+                "Message history from a previous run that was interrupted by a "
+                "clarification request."
             ),
-        ] = None,
+        ],
         clarify_call_id: Annotated[
-            str | None,
+            str,
             Doc(
                 "Tool call ID of the previous `clarify` invocation. "
                 "Used to construct a valid tool-result message so the LLM sees a "
                 "correct message history on resume."
             ),
-        ] = None,
-        resume_history: Annotated[
-            list | None,
-            Doc(
-                "Message history from a previous run that was interrupted by a "
-                "clarification request. When provided, the loop resumes from this "
-                "state rather than starting fresh."
-            ),
-        ] = None,
+        ],
     ) -> Annotated[
         SubAgentResult,
         Doc(
             "Final result including the message, success flag, and executed tool calls. "
-            "If `clarification_needed` is set the caller must re-invoke `run()` with "
-            "the user's answer and the returned `resume_history` and `clarify_call_id`."
+            "If `clarification_needed` is set the caller must re-invoke `resume()` again."
         ),
     ]:
-        """Run the tool-calling loop until the task is complete or `max_iterations` is reached."""
-        await self.prewarm()
-
-        if resume_history is not None and clarification_answer is not None:
-            messages = resume_history
-            messages.append(
-                ToolResultMessage(
-                    tool_call_id=clarify_call_id or "",
-                    content=clarification_answer,
-                )
+        """Resume a previously interrupted run after the user answered a clarification question."""
+        messages = list(resume_history)
+        messages.append(
+            ToolResultMessage(
+                tool_call_id=clarify_call_id,
+                content=clarification_answer,
             )
-        else:
-            messages = self._build_messages(task=task, context=context)
+        )
+        return await self._loop(messages)
 
+    async def _loop(self, messages: list[Message]) -> SubAgentResult:
         tool_schema = self._tools.get_json_tool_schema()
         executed_tool_calls: list[ToolCall] = []
-        tool_statuses: list[str] = []
 
         try:
             for _ in range(self._max_iterations):
-                if self._channel and self._channel.is_cancelled:
+                if self._cancellation and self._cancellation.is_cancelled:
                     return SubAgentResult(
                         message="Task was cancelled by the user.",
                         success=False,
                         tool_calls=executed_tool_calls,
-                        tool_statuses=tool_statuses,
                     )
 
                 response = await self._llm.invoke(messages, tools=tool_schema)
@@ -334,7 +331,6 @@ class SubAgent[T]:
                     return SubAgentResult(
                         message=response.completion,
                         tool_calls=executed_tool_calls,
-                        tool_statuses=tool_statuses,
                     )
 
                 messages.append(
@@ -349,11 +345,6 @@ class SubAgent[T]:
                     tool_args = json.loads(tool_call.function.arguments)
 
                     logger.debug("Executing tool call: '%s'", tool_name)
-
-                    status = await self._send_tool_status(tool_call)
-                    if status is not None:
-                        tool_statuses.append(status)
-
                     result = await self._tools.execute(tool_name, tool_args)
 
                     match result:
@@ -363,7 +354,6 @@ class SubAgent[T]:
                                 success=True,
                                 message=msg,
                                 tool_calls=executed_tool_calls,
-                                tool_statuses=tool_statuses,
                                 suppress_realtime_response=self._should_suppress_realtime_response(
                                     executed_tool_calls
                                 ),
@@ -376,7 +366,6 @@ class SubAgent[T]:
                                 message="",
                                 success=False,
                                 tool_calls=executed_tool_calls,
-                                tool_statuses=tool_statuses,
                                 clarification_needed=question,
                                 resume_history=list(messages),
                                 clarify_call_id=tool_call.id,
@@ -393,12 +382,9 @@ class SubAgent[T]:
                 message="Max iterations reached without a final answer.",
                 success=False,
                 tool_calls=executed_tool_calls,
-                tool_statuses=tool_statuses,
             )
         finally:
-            if self._channel:
-                self._channel.close()
-                self._channel = None
+            self._cancellation = None
 
     def _build_messages(self, task: str, context: str | None) -> list[Message]:
         system_content = self._build_system_prompt()
@@ -439,26 +425,3 @@ class SubAgent[T]:
         last_tool = self._tools.get(last_call.function.name)
 
         return bool(last_tool and getattr(last_tool, "suppress_response", False))
-
-    async def _send_tool_status(self, tool_call: ToolCall) -> str | None:
-        tool_name = tool_call.function.name
-        if self._is_default_registered_tool(tool_name):
-            return None
-
-        tool = self._tools.get(tool_name)
-        if tool is None:
-            return None
-
-        tool_args = json.loads(tool_call.function.arguments)
-        status = tool.format_status(tool_args)
-        if status is None:
-            return None
-
-        logger.debug("Sending status update via channel: %s", status)
-        if self._channel:
-            self._channel.buffer_status(status)
-
-        return status
-
-    def _is_default_registered_tool(self, tool_name: str) -> bool:
-        return tool_name in ("done", "clarify")

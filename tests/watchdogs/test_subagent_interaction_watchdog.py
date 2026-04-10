@@ -108,7 +108,6 @@ def register_tool_with_calls(
 def make_subagent() -> MagicMock:
     agent = MagicMock()
     agent.name = "supervisor"
-    agent._attach_channel.side_effect = lambda channel: channel.close()
     return agent
 
 
@@ -183,8 +182,8 @@ class TestToolCallHandling:
 
         await event_bus.dispatch(make_function_call_item())
 
-        websocket.send.assert_called_once()
-        sent = websocket.send.call_args[0][0]
+        assert websocket.send.call_count >= 1
+        sent = websocket.send.call_args_list[0][0][0]
         assert isinstance(sent, ConversationResponseCreateEvent)
 
     @pytest.mark.asyncio

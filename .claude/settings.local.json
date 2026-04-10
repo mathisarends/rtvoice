@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(python -m pytest tests/test_realtime_agent.py -x)",
+      "Bash(python -m pytest tests/test_realtime_agent.py::TestPrepare::test_returns_self -x)"
     ]
   }
 }

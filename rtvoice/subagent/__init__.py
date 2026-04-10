@@ -1,3 +1,3 @@
-from .service import SubAgent
+from .subagent import SubAgent
 
 __all__ = ["SubAgent"]

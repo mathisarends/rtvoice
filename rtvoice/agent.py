@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from pathlib import Path
-from typing import Annotated, Self
+from typing import Annotated
 
 from typing_extensions import Doc
 
@@ -380,11 +380,10 @@ class RealtimeAgent[T]:
             if is_resuming:
                 checkpoint = paused_for_clarification
                 paused_for_clarification = None
-                result = await subagent.run(
-                    task,
+                result = await subagent.resume(
+                    clarification_answer=clarification_answer,
                     resume_history=checkpoint.resume_history,
                     clarify_call_id=checkpoint.clarify_call_id,
-                    clarification_answer=clarification_answer,
                 )
             else:
                 context = (
@@ -522,9 +521,7 @@ class RealtimeAgent[T]:
         )
 
     @timed()
-    async def prewarm(
-        self,
-    ) -> Annotated[Self, Doc("Returns `self` for optional chaining with `run()`.")]:
+    async def prewarm(self) -> None:
         """Prewarm MCP and subagent connections before `run()`.
 
         Calling this explicitly avoids a cold-start delay when the session begins.
@@ -535,7 +532,6 @@ class RealtimeAgent[T]:
         tasks.extend(subagent.prewarm() for subagent in self._subagents)
 
         await asyncio.gather(*tasks, return_exceptions=True)
-        return self
 
     async def _connect_mcp_servers(self) -> None:
         if self._mcp_ready.is_set() or not self._mcp_servers:

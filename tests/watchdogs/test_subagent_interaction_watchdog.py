@@ -304,7 +304,7 @@ class TestResultDelivery:
         assert ConversationResponseCreateEvent in sent_types
 
     @pytest.mark.asyncio
-    async def test_skips_response_create_when_subagent_result_is_silent(
+    async def test_sends_response_create_when_subagent_result_returned(
         self,
         event_bus: EventBus,
         watchdog: SubAgentInteractionWatchdog,
@@ -318,7 +318,6 @@ class TestResultDelivery:
         async def silent_done_tool(query: str | None = None) -> SubAgentResult:
             return SubAgentResult(
                 message="job_done",
-                suppress_realtime_response=True,
             )
 
         tool.function = silent_done_tool
@@ -338,7 +337,7 @@ class TestResultDelivery:
             if isinstance(event, ConversationItemCreateEvent)
         ]
 
-        assert len(response_events) == 1
+        assert len(response_events) == 2
         assert len(item_events) == 1
 
     @pytest.mark.asyncio

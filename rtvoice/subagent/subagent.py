@@ -16,7 +16,6 @@ from rtvoice.llm import (
 )
 from rtvoice.mcp import MCPServer
 from rtvoice.shared.decorators import timed
-from rtvoice.subagent.channel import CancellationToken
 from rtvoice.subagent.views import (
     ClarifySignal,
     DoneSignal,
@@ -134,16 +133,12 @@ class SubAgent[T]:
         self.result_instructions = result_instructions
         self.holding_instruction = holding_instruction
 
-        self._cancellation: CancellationToken | None = None
         self._mcp_ready = asyncio.Event()
 
         self._tools.set_context(ToolContext(context=context))
 
         self._register_done_tool()
         self._register_clarify_tool()
-
-    def attach_cancellation(self, token: CancellationToken) -> None:
-        self._cancellation = token
 
     def _register_done_tool(self) -> None:
         @self._tools.action(
@@ -265,79 +260,59 @@ class SubAgent[T]:
         tool_schema = self._tools.get_json_tool_schema()
         executed_tool_calls: list[ToolCall] = []
 
-        try:
-            for _ in range(self._max_iterations):
-                if self._cancellation and self._cancellation.is_cancelled:
-                    return SubAgentResult(
-                        message="Task was cancelled by the user.",
-                        success=False,
-                        tool_calls=executed_tool_calls,
-                    )
+        for _ in range(self._max_iterations):
+            response = await self._llm.invoke(messages, tools=tool_schema)
 
-                response = await self._llm.invoke(messages, tools=tool_schema)
-
-                if not response.tool_calls:
-                    return SubAgentResult(
-                        message=response.completion,
-                        tool_calls=executed_tool_calls,
-                    )
-
-                messages.append(
-                    AssistantMessage(
-                        content=response.completion,
-                        tool_calls=response.tool_calls,
-                    )
+            if not response.tool_calls:
+                return SubAgentResult(
+                    message=response.completion,
+                    tool_calls=executed_tool_calls,
                 )
 
-                for tool_call in response.tool_calls:
-                    tool_name = tool_call.function.name
-                    tool_args = json.loads(tool_call.function.arguments)
-
-                    logger.debug("Executing tool call: '%s'", tool_name)
-                    result = await self._tools.execute(tool_name, tool_args)
-
-                    match result:
-                        case DoneSignal(result=msg):
-                            logger.debug("Tool 'done' called with result: %s", msg)
-                            return SubAgentResult(
-                                success=True,
-                                message=msg,
-                                tool_calls=executed_tool_calls,
-                                suppress_realtime_response=self._should_suppress_realtime_response(
-                                    executed_tool_calls
-                                ),
-                            )
-                        case ClarifySignal(question=question):
-                            logger.debug(
-                                "Tool 'clarify' called with question: %s", question
-                            )
-                            return SubAgentResult(
-                                message="",
-                                success=False,
-                                tool_calls=executed_tool_calls,
-                                clarification_needed=question,
-                                resume_history=list(messages),
-                                clarify_call_id=tool_call.id,
-                            )
-
-                    executed_tool_calls.append(tool_call)
-                    messages.append(
-                        ToolResultMessage(
-                            tool_call_id=tool_call.id, content=str(result)
-                        )
-                    )
-
-            return SubAgentResult(
-                message="Max iterations reached without a final answer.",
-                success=False,
-                tool_calls=executed_tool_calls,
+            messages.append(
+                AssistantMessage(
+                    content=response.completion,
+                    tool_calls=response.tool_calls,
+                )
             )
-        finally:
-            self._cancellation = None
+
+            for tool_call in response.tool_calls:
+                tool_name = tool_call.function.name
+                tool_args = json.loads(tool_call.function.arguments)
+
+                logger.debug("Executing tool call: '%s'", tool_name)
+                result = await self._tools.execute(tool_name, tool_args)
+
+                match result:
+                    case DoneSignal(result=msg):
+                        logger.debug("Tool 'done' called with result: %s", msg)
+                        return SubAgentResult(success=True, message=msg)
+                    case ClarifySignal(question=question):
+                        logger.debug(
+                            "Tool 'clarify' called with question: %s", question
+                        )
+                        return SubAgentResult(
+                            message="",
+                            success=False,
+                            tool_calls=executed_tool_calls,
+                            clarification_needed=question,
+                            resume_history=list(messages),
+                            clarify_call_id=tool_call.id,
+                        )
+
+                executed_tool_calls.append(tool_call)
+                messages.append(
+                    ToolResultMessage(tool_call_id=tool_call.id, content=str(result))
+                )
+
+        return SubAgentResult(
+            message="Max iterations reached without a final answer.",
+            success=False,
+            tool_calls=executed_tool_calls,
+        )
 
     def _build_messages(self, task: str, context: str | None) -> list[Message]:
-        system_content = self._build_system_prompt()
-        messages = [SystemMessage(content=system_content)]
+        messages = [SystemMessage(content=self._instructions)]
         if context:
             messages.append(
                 UserMessage(
@@ -346,17 +321,3 @@ class SubAgent[T]:
             )
         messages.append(UserMessage(content=f"<task>\n{task}\n</task>"))
         return messages
-
-    def _build_system_prompt(self) -> str:
-        return self._instructions
-
-    def _should_suppress_realtime_response(
-        self, executed_tool_calls: list[ToolCall]
-    ) -> bool:
-        if not executed_tool_calls:
-            return False
-
-        last_call = executed_tool_calls[-1]
-        last_tool = self._tools.get(last_call.function.name)
-
-        return bool(last_tool and getattr(last_tool, "suppress_response", False))

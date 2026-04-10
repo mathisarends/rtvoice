@@ -1,7 +1,6 @@
 import asyncio
 from dataclasses import dataclass
 
-from rtvoice.subagent.channel import CancellationToken
 from rtvoice.tools.views import Tool
 
 
@@ -11,4 +10,3 @@ class PendingSubAgentCall:
     subagent_name: str
     execution_task: asyncio.Task
     handoff_tool: Tool
-    cancellation: CancellationToken

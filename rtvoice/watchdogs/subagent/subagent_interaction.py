@@ -16,7 +16,6 @@ from rtvoice.realtime.schemas import (
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.subagent import SubAgent
-from rtvoice.subagent.channel import CancellationToken
 from rtvoice.subagent.views import SubAgentResult
 from rtvoice.tools import Inject, Tools
 from rtvoice.tools.views import Tool
@@ -125,8 +124,6 @@ class SubAgentInteractionWatchdog:
             json.dumps(event.arguments or {}, ensure_ascii=False),
         )
 
-        cancellation = CancellationToken()
-        subagent.attach_cancellation(cancellation)
         await self._inject_cancel_subagent_tool()
 
         result_task = asyncio.create_task(
@@ -138,7 +135,6 @@ class SubAgentInteractionWatchdog:
             subagent_name=event.name,
             execution_task=result_task,
             handoff_tool=tool,
-            cancellation=cancellation,
         )
         self._active = active
 
@@ -193,17 +189,7 @@ class SubAgentInteractionWatchdog:
                 serialized,
             )
             await self._ws.send_function_call_output(active.call_id, serialized)
-            should_suppress_response = isinstance(result, SubAgentResult) and bool(
-                result.suppress_realtime_response
-            )
-
-            if should_suppress_response:
-                logger.info(
-                    "Skipping realtime response inference for '%s' due to suppress_realtime_response",
-                    active.subagent_name,
-                )
-            else:
-                await self._ws.send_response_event(active.handoff_tool)
+            await self._ws.send_response_event(active.handoff_tool)
 
             await self._notify_subagent_finished(active.subagent_name)
             await self._eject_cancel_subagent_tool()
@@ -255,7 +241,6 @@ class SubAgentInteractionWatchdog:
         await self._eject_cancel_subagent_tool()
 
     def _abort_pending_call(self, active: PendingSubAgentCall) -> None:
-        active.cancellation.cancel()
         active.execution_task.cancel()
 
     async def _notify_subagent_finished(self, agent_name: str) -> None:

@@ -44,7 +44,6 @@ def make_start_command(**overrides) -> StartAgentCommand:
     tools.get_tool_schema.return_value = []
     return StartAgentCommand(
         model=RealtimeModel.GPT_REALTIME_MINI,
-        instructions="",
         voice=AssistantVoice.MARIN,
         speech_speed=1.0,
         transcription_model=TranscriptionModel.WHISPER_1,

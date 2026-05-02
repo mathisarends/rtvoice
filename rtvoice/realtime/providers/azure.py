@@ -1,7 +1,4 @@
 import os
-from typing import Annotated
-
-from typing_extensions import Doc
 
 from rtvoice.realtime.providers.base import RealtimeProvider
 
@@ -38,31 +35,10 @@ class AzureOpenAIProvider(RealtimeProvider):
 
     def __init__(
         self,
-        resource: Annotated[
-            str | None,
-            Doc(
-                "Azure OpenAI resource name (the subdomain of ``openai.azure.com``). "
-                "Falls back to the ``AZURE_OPENAI_RESOURCE`` environment variable."
-            ),
-        ] = None,
-        deployment: Annotated[
-            str | None,
-            Doc(
-                "Deployment name that maps to a specific model. "
-                "Falls back to the ``AZURE_OPENAI_DEPLOYMENT`` environment variable."
-            ),
-        ] = None,
-        api_key: Annotated[
-            str | None,
-            Doc(
-                "Azure OpenAI API key. "
-                "Falls back to the ``AZURE_OPENAI_API_KEY`` environment variable."
-            ),
-        ] = None,
-        api_version: Annotated[
-            str | None,
-            Doc("API version string. Defaults to ``2025-04-01-preview``."),
-        ] = None,
+        resource: str | None = None,
+        deployment: str | None = None,
+        api_key: str | None = None,
+        api_version: str | None = None,
     ):
         self._resource = resource or os.environ.get("AZURE_OPENAI_RESOURCE")
         self._deployment = deployment or os.environ.get("AZURE_OPENAI_DEPLOYMENT")

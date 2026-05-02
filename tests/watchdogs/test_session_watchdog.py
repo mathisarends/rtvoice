@@ -45,7 +45,6 @@ def make_configure_command(**overrides) -> ConfigureSessionCommand:
     tools.get_tool_schema.return_value = []
     defaults: dict = dict(
         model=RealtimeModel.GPT_REALTIME_MINI,
-        instructions="You are helpful.",
         voice=AssistantVoice.MARIN,
         speech_speed=1.0,
         transcription_model=TranscriptionModel.WHISPER_1,
@@ -84,18 +83,6 @@ class TestConfigureSession:
 
         sent: SessionUpdateEvent = websocket.send.call_args[0][0]
         assert sent.session.model == RealtimeModel.GPT_REALTIME
-
-    @pytest.mark.asyncio
-    async def test_session_config_contains_instructions(
-        self,
-        event_bus: EventBus,
-        watchdog: SessionWatchdog,
-        websocket: MagicMock,
-    ) -> None:
-        await event_bus.dispatch(make_configure_command(instructions="Be concise."))
-
-        sent: SessionUpdateEvent = websocket.send.call_args[0][0]
-        assert sent.session.instructions == "Be concise."
 
     @pytest.mark.asyncio
     async def test_session_config_contains_voice(

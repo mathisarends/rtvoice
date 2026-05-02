@@ -1,9 +1,6 @@
 import asyncio
 import threading
 from collections.abc import AsyncIterator
-from typing import Annotated
-
-from typing_extensions import Doc
 
 from rtvoice.audio.devices import AudioInputDevice
 
@@ -24,18 +21,9 @@ class MicrophoneInput(AudioInputDevice):
 
     def __init__(
         self,
-        device_index: Annotated[
-            int | None,
-            Doc("PyAudio device index. Defaults to the system default input device."),
-        ] = None,
-        sample_rate: Annotated[
-            int,
-            Doc("Sample rate in Hz. Must match the model's expected rate (24 000 Hz)."),
-        ] = 24000,
-        chunk_size: Annotated[
-            int,
-            Doc("Number of frames per read. Smaller values reduce latency."),
-        ] = 4800,
+        device_index: int | None = None,
+        sample_rate: int = 24000,
+        chunk_size: int = 4800,
     ):
         self._device_index = device_index
         self._sample_rate = sample_rate

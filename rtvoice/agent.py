@@ -3,8 +3,6 @@ import logging
 from pathlib import Path
 from typing import Annotated
 
-from typing_extensions import Doc
-
 from rtvoice.audio import (
     AudioInputDevice,
     AudioOutputDevice,
@@ -57,162 +55,30 @@ logger = logging.getLogger(__name__)
 
 
 class RealtimeAgent[T]:
-    """Event-driven voice agent using the OpenAI Realtime API.
-
-    Manages the full lifecycle of a real-time voice session: audio I/O,
-    WebSocket connection, tool calling, optional subagent handoffs,
-    MCP server integration, and inactivity timeouts.
-
-    Call [prewarm()][rtvoice.service.RealtimeAgent.prewarm] before
-    [run()][rtvoice.service.RealtimeAgent.run] to prewarm connections
-    and avoid startup delays.
-
-    Example:
-        ```python
-        agent = RealtimeAgent(
-            instructions="You are Jarvis, a helpful home assistant.",
-            voice=AssistantVoice.MARIN,
-            inactivity_timeout_seconds=30,
-            inactivity_timeout_enabled=True,
-        )
-        result = await agent.run()
-        ```
-    """
-
     def __init__(
         self,
         *,
-        instructions: Annotated[
-            str,
-            Doc("System prompt defining the assistant's personality and behavior."),
-        ] = "",
-        model: Annotated[
-            RealtimeModel,
-            Doc("Realtime model variant to use. Defaults to `GPT_REALTIME_MINI`."),
-        ] = RealtimeModel.GPT_REALTIME_MINI,
-        voice: Annotated[
-            AssistantVoice,
-            Doc("TTS voice used for assistant responses."),
-        ] = AssistantVoice.MARIN,
-        speech_speed: Annotated[
-            float,
-            Doc(
-                "Playback speed of the assistant's voice. "
-                "Automatically clamped to `[0.5, 1.5]`."
-            ),
-        ] = 1.0,
-        transcription_model: Annotated[
-            TranscriptionModel | None,
-            Doc(
-                "STT model used to produce `UserTranscriptCompletedEvent` transcripts. "
-                "Pass `None` to disable transcription entirely."
-            ),
-        ] = TranscriptionModel.WHISPER_1,
-        output_modalities: Annotated[
-            list[OutputModality] | None,
-            Doc(
-                "Assistant response output modalities sent to Realtime API. "
-                'Defaults to `["audio"]`. Include `"text"` to receive streamed text events.'
-            ),
-        ] = None,
-        noise_reduction: Annotated[
-            NoiseReduction,
-            Doc(
-                "Microphone noise reduction profile. Use `FAR_FIELD` for desktop mics."
-            ),
-        ] = NoiseReduction.FAR_FIELD,
-        turn_detection: Annotated[
-            TurnDetection | None,
-            Doc(
-                "Voice activity detection strategy. "
-                "Defaults to `SemanticVAD` when `None`."
-            ),
-        ] = None,
-        tools: Annotated[
-            Tools | None,
-            Doc(
-                "Pre-registered tool set exposed to the model. "
-                "Tools receive the shared `context` and `event_bus` automatically."
-            ),
-        ] = None,
-        subagents: Annotated[
-            list[SubAgent] | None,
-            Doc(
-                "Optional sub-agents reachable via auto-registered handoff tools. "
-                "Prefer attaching MCP servers to subagents rather than the agent."
-            ),
-        ] = None,
-        mcp_servers: Annotated[
-            list[MCPServer] | None,
-            Doc(
-                "MCP servers connected during `prewarm()`. "
-                "Their tools are registered and forwarded to the model."
-            ),
-        ] = None,
-        audio_input: Annotated[
-            AudioInputDevice | None,
-            Doc("Audio input device. Defaults to `MicrophoneInput`."),
-        ] = None,
-        audio_output: Annotated[
-            AudioOutputDevice | None,
-            Doc("Audio output device. Defaults to `SpeakerOutput`."),
-        ] = None,
-        context: Annotated[
-            T | None,
-            Doc(
-                "Shared context object forwarded to all tool handlers "
-                "and all subagents."
-            ),
-        ] = None,
-        event_bus: Annotated[
-            EventBus | None,
-            Doc(
-                "Event bus for session event dispatch. "
-                "If omitted, a new bus is created automatically."
-            ),
-        ] = None,
-        listener: Annotated[
-            AgentListener | None,
-            Doc(
-                "Callback interface for session lifecycle events "
-                "(transcripts, speaking state, errors, …)."
-            ),
-        ] = None,
-        inactivity_timeout_seconds: Annotated[
-            float | None,
-            Doc(
-                "Seconds of user silence before the agent stops automatically. "
-                "Has no effect unless `inactivity_timeout_enabled=True`."
-            ),
-        ] = None,
-        inactivity_timeout_enabled: Annotated[
-            bool,
-            Doc(
-                "Activates the inactivity timeout watchdog. "
-                "Requires `inactivity_timeout_seconds` to be set."
-            ),
-        ] = False,
-        recording_path: Annotated[
-            str | Path | None,
-            Doc(
-                "If provided, the full session audio is recorded to this path "
-                "via `AudioRecordingWatchdog`."
-            ),
-        ] = None,
-        provider: Annotated[
-            RealtimeProvider | None,
-            Doc(
-                "Realtime API provider. Defaults to `OpenAIProvider`. "
-                "Pass an `AzureOpenAIProvider` instance to use Azure OpenAI."
-            ),
-        ] = None,
-        api_key: Annotated[
-            str | None,
-            Doc(
-                "OpenAI API key. Shortcut for `OpenAIProvider(api_key=...)`. "
-                "Deprecated — prefer passing `provider=OpenAIProvider(api_key=...)` explicitly."
-            ),
-        ] = None,
+        instructions: str = "",
+        model: RealtimeModel = RealtimeModel.GPT_REALTIME_MINI,
+        voice: AssistantVoice = AssistantVoice.MARIN,
+        speech_speed: float = 1.0,
+        transcription_model: TranscriptionModel | None = TranscriptionModel.WHISPER_1,
+        output_modalities: list[OutputModality] | None = None,
+        noise_reduction: NoiseReduction = NoiseReduction.FAR_FIELD,
+        turn_detection: TurnDetection | None = None,
+        tools: Tools | None = None,
+        subagents: list[SubAgent] | None = None,
+        mcp_servers: list[MCPServer] | None = None,
+        audio_input: AudioInputDevice | None = None,
+        audio_output: AudioOutputDevice | None = None,
+        context: T | None = None,
+        event_bus: EventBus | None = None,
+        listener: AgentListener | None = None,
+        inactivity_timeout_seconds: float | None = None,
+        inactivity_timeout_enabled: bool = False,
+        recording_path: str | Path | None = None,
+        provider: RealtimeProvider | None = None,
+        api_key: str | None = None,
     ):
         self._subagents = list(subagents or [])
         self._validate_subagent_names(self._subagents)
@@ -480,10 +346,7 @@ class RealtimeAgent[T]:
 
     async def run(
         self,
-    ) -> Annotated[
-        AgentResult,
-        Doc("Conversation history and recording path after the session ends."),
-    ]:
+    ) -> AgentResult:
         """Start the agent and block until the session ends.
 
         Dispatches a `StartAgentCommand` to kick off audio I/O and the WebSocket
@@ -558,10 +421,7 @@ class RealtimeAgent[T]:
 
     async def set_speech_speed(
         self,
-        speed: Annotated[
-            float,
-            Doc("Target playback speed. Automatically clamped to ``[0.25, 1.5]``."),
-        ],
+        speed: float,
     ) -> None:
         """Update the assistant's speech speed mid-session.
 

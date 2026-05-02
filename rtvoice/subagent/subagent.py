@@ -3,8 +3,6 @@ import json
 import logging
 from typing import Annotated
 
-from typing_extensions import Doc
-
 from rtvoice.llm import (
     AssistantMessage,
     BaseChatModel,
@@ -56,72 +54,17 @@ class SubAgent[T]:
 
     def __init__(
         self,
-        name: Annotated[
-            str,
-            Doc(
-                "Unique identifier for this agent. Used as the tool name when "
-                "registered as a handoff target in a `RealtimeAgent` "
-                "(spaces are replaced with underscores)."
-            ),
-        ],
-        description: Annotated[
-            str,
-            Doc(
-                "Short description shown to the parent LLM so it knows when "
-                "to delegate tasks to this agent."
-            ),
-        ],
-        instructions: Annotated[
-            str,
-            Doc("System prompt defining this agent's capabilities and behavior."),
-        ],
-        llm: Annotated[
-            BaseChatModel | None,
-            Doc(
-                "LLM backend for the tool-calling loop. Must support tool/function calling."
-            ),
-        ] = None,
-        tools: Annotated[
-            Tools | None,
-            Doc("Pre-registered tools available to the agent during its run loop."),
-        ] = None,
-        mcp_servers: Annotated[
-            list[MCPServer] | None,
-            Doc(
-                "MCP servers connected during `prewarm()`. Their tools are registered automatically."
-            ),
-        ] = None,
-        max_iterations: Annotated[
-            int,
-            Doc(
-                "Maximum number of LLM invocations before the loop aborts. "
-                "Guards against infinite tool-calling cycles."
-            ),
-        ] = 10,
-        handoff_instructions: Annotated[
-            str | None,
-            Doc(
-                "Extra instructions appended to the handoff tool description "
-                "shown to the parent `RealtimeAgent`'s LLM."
-            ),
-        ] = None,
-        result_instructions: Annotated[
-            str | None,
-            Doc(
-                "Instructions for how the parent agent should present the result "
-                "returned by this agent to the user."
-            ),
-        ] = None,
-        holding_instruction: Annotated[
-            str | None,
-            Doc(
-                "Message the parent agent says to the user while this agent is "
-                "working (e.g. *'One moment, checking your calendar…'*)."
-            ),
-        ] = None,
-        context: Annotated[
-            T | None, Doc("Shared context object forwarded to all tool handlers.")
-        ] = None,
+        name: str,
+        description: str,
+        instructions: str,
+        llm: BaseChatModel | None = None,
+        tools: Tools | None = None,
+        mcp_servers: list[MCPServer] | None = None,
+        max_iterations: int = 10,
+        handoff_instructions: str | None = None,
+        result_instructions: str | None = None,
+        holding_instruction: str | None = None,
+        context: T | None = None,
     ) -> None:
         self.name = name.replace(" ", "_")
         self.description = description
@@ -160,7 +103,7 @@ class SubAgent[T]:
     def _register_clarify_tool(self) -> None:
         @self._tools.action(
             "Ask the user a clarifying question when essential information is missing. "
-            "Use sparingly – only when you cannot proceed without the answer. "
+            "Use sparingly - only when you cannot proceed without the answer. "
             "Calling this tool immediately returns control to the user; "
             "you will be called again once they answer."
         )
@@ -172,7 +115,7 @@ class SubAgent[T]:
     def _register_progress_tool(self) -> None:
         @self._tools.action(
             "Report an intermediate progress update to the user while working on a long-running task. "
-            "Use this to keep the user informed without blocking \u2014 the loop continues immediately after."
+            "Use this to keep the user informed without blocking - the loop continues immediately after."
         )
         def report_progress(
             message: Annotated[str, "A short status update for the user."],
@@ -212,31 +155,10 @@ class SubAgent[T]:
     @timed()
     async def run(
         self,
-        task: Annotated[str, Doc("The task or question to complete.")],
-        context: Annotated[
-            str | None,
-            Doc(
-                "Optional conversation history from the parent voice session, "
-                "injected as a `<conversation_history>` block so the agent has "
-                "full context without re-asking the user."
-            ),
-        ] = None,
-        on_progress: Annotated[
-            ProgressCallback | None,
-            Doc(
-                "Async callback invoked when the agent calls `report_progress`. "
-                "Receives the progress message. Must be directly awaited (not spawned as a task) "
-                "so cancellation propagates cleanly."
-            ),
-        ] = None,
-    ) -> Annotated[
-        SubAgentResult,
-        Doc(
-            "Final result. `AgentDone` on success or max iterations; "
-            "`AgentClarificationNeeded` when the agent needs the user to answer a question \u2014 "
-            "re-invoke `resume()` with the answer and the returned history/call-id."
-        ),
-    ]:
+        task: str,
+        context: str | None = None,
+        on_progress: ProgressCallback | None = None,
+    ) -> SubAgentResult:
         """Start a fresh tool-calling loop for the given task."""
         self._on_progress = on_progress or self.on_progress
         await self.prewarm()
@@ -246,39 +168,11 @@ class SubAgent[T]:
     @timed()
     async def resume(
         self,
-        clarification_answer: Annotated[
-            str,
-            Doc("The user's answer to the previous clarification question."),
-        ],
-        resume_history: Annotated[
-            list[Message],
-            Doc(
-                "Message history from a previous run that was interrupted by a "
-                "clarification request."
-            ),
-        ],
-        clarify_call_id: Annotated[
-            str,
-            Doc(
-                "Tool call ID of the previous `clarify` invocation. "
-                "Used to construct a valid tool-result message so the LLM sees a "
-                "correct message history on resume."
-            ),
-        ],
-        on_progress: Annotated[
-            ProgressCallback | None,
-            Doc(
-                "Async callback invoked when the agent calls `report_progress`. "
-                "Receives the progress message."
-            ),
-        ] = None,
-    ) -> Annotated[
-        SubAgentResult,
-        Doc(
-            "Final result. `AgentDone` on success; `AgentClarificationNeeded` if the agent "
-            "needs another answer \u2014 re-invoke `resume()` again."
-        ),
-    ]:
+        clarification_answer: str,
+        resume_history: list[Message],
+        clarify_call_id: str,
+        on_progress: ProgressCallback | None = None,
+    ) -> SubAgentResult:
         """Resume a previously interrupted run after the user answered a clarification question."""
         self._on_progress = on_progress or self.on_progress
         messages = list(resume_history)

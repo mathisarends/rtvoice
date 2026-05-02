@@ -58,10 +58,6 @@ class TestInitDefaults:
         agent = make_agent()
         assert agent._voice == AssistantVoice.MARIN
 
-    def test_default_instructions_are_empty(self) -> None:
-        agent = make_agent()
-        assert agent._instructions == ""
-
     def test_default_noise_reduction_is_far_field(self) -> None:
         agent = make_agent()
         assert agent._noise_reduction == NoiseReduction.FAR_FIELD

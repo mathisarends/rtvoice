@@ -22,7 +22,6 @@ if TYPE_CHECKING:
 @dataclass
 class StartAgentCommand:
     model: RealtimeModel
-    instructions: str
     voice: AssistantVoice
     speech_speed: float
     transcription_model: TranscriptionModel | None
@@ -30,12 +29,12 @@ class StartAgentCommand:
     noise_reduction: NoiseReduction
     turn_detection: TurnDetection
     tools: Tools
+    instructions: str = ""
 
 
 @dataclass
 class ConfigureSessionCommand:
     model: RealtimeModel
-    instructions: str
     voice: AssistantVoice
     speech_speed: float
     transcription_model: TranscriptionModel | None
@@ -43,6 +42,7 @@ class ConfigureSessionCommand:
     noise_reduction: NoiseReduction
     turn_detection: TurnDetection
     tools: Tools
+    instructions: str = ""
 
 
 @dataclass

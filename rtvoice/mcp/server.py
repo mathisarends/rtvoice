@@ -2,10 +2,9 @@ import abc
 import asyncio
 import json
 import logging
-from typing import Annotated, Any
+from typing import Any
 
 from pydantic import BaseModel
-from typing_extensions import Doc
 
 from rtvoice.mcp.views import (
     ClientInfo,
@@ -68,27 +67,11 @@ class MCPServerStdio(MCPServer):
 
     def __init__(
         self,
-        command: Annotated[str, Doc("Executable to spawn as the MCP server process.")],
-        args: Annotated[
-            list[str] | None,
-            Doc("Arguments passed to the command."),
-        ] = None,
-        env: Annotated[
-            dict[str, str] | None,
-            Doc(
-                "Environment variables for the subprocess. Inherits the current environment when `None`."
-            ),
-        ] = None,
-        cache_tools_list: Annotated[
-            bool,
-            Doc("Cache the tools list after the first call to `list_tools()`."),
-        ] = True,
-        allowed_tools: Annotated[
-            list[str] | None,
-            Doc(
-                "Whitelist of tool names to expose. All tools are exposed when `None`."
-            ),
-        ] = None,
+        command: str,
+        args: list[str] | None = None,
+        env: dict[str, str] | None = None,
+        cache_tools_list: bool = True,
+        allowed_tools: list[str] | None = None,
     ):
         self._command = command
         self._args = args or []
@@ -148,12 +131,9 @@ class MCPServerStdio(MCPServer):
 
     async def call_tool(
         self,
-        tool_name: Annotated[str, Doc("Name of the tool to invoke.")],
-        arguments: Annotated[
-            dict[str, Any] | None,
-            Doc("Arguments passed to the tool. Defaults to an empty dict if `None`."),
-        ] = None,
-    ) -> Annotated[dict, Doc("Raw result returned by the MCP server.")]:
+        tool_name: str,
+        arguments: dict[str, Any] | None = None,
+    ) -> dict:
         """Invoke a named tool on the server and return its result."""
         return await self._request(
             "tools/call",

@@ -1,7 +1,4 @@
 import os
-from typing import Annotated
-
-from typing_extensions import Doc
 
 from rtvoice.realtime.providers.base import RealtimeProvider
 
@@ -32,13 +29,7 @@ class OpenAIProvider(RealtimeProvider):
 
     def __init__(
         self,
-        api_key: Annotated[
-            str | None,
-            Doc(
-                "OpenAI API key. Falls back to the ``OPENAI_API_KEY`` "
-                "environment variable when omitted."
-            ),
-        ] = None,
+        api_key: str | None = None,
     ):
         self._api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self._api_key:

@@ -6,7 +6,12 @@
       "Bash(python -m pytest tests/test_realtime_agent.py::TestPrepare::test_returns_self -x)",
       "Bash(python -m pytest tests/test_realtime_agent.py tests/watchdogs/test_subagent_interaction_watchdog.py -q)",
       "Bash(del:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Read(//c/code/Jarvis/**)",
+      "Bash(cat backend/pyproject.toml)",
+      "Bash(cat backend/requirements.txt)",
+      "Bash(cat backend/setup.py)",
+      "Bash(uv sync *)"
     ]
   }
 }

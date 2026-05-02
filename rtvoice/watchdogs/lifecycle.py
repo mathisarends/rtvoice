@@ -21,8 +21,8 @@ class LifecycleWatchdog:
         self._websocket = websocket
         self._forward_task: asyncio.Task | None = None
 
-        event_bus.subscribe(StartAgentCommand, self._on_start_agent_command)
-        event_bus.subscribe(AgentStoppedEvent, self._on_agent_stopped)
+        self._event_bus.subscribe(StartAgentCommand, self._on_start_agent_command)
+        self._event_bus.subscribe(AgentStoppedEvent, self._on_agent_stopped)
 
     @timed()
     async def _on_start_agent_command(self, command: StartAgentCommand) -> None:
@@ -36,7 +36,6 @@ class LifecycleWatchdog:
         await self._event_bus.dispatch(
             ConfigureSessionCommand(
                 model=command.model,
-                instructions=command.instructions,
                 voice=command.voice,
                 speech_speed=command.speech_speed,
                 transcription_model=command.transcription_model,
@@ -44,6 +43,7 @@ class LifecycleWatchdog:
                 noise_reduction=command.noise_reduction,
                 turn_detection=command.turn_detection,
                 tools=command.tools,
+                instructions=command.instructions,
             )
         )
         await self._event_bus.dispatch(AgentSessionConnectedEvent())

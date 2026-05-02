@@ -3,46 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ConfigDict
-
 if TYPE_CHECKING:
     from rtvoice.realtime.schemas import FunctionTool, ToolChoiceMode
-    from rtvoice.tools import Tools
     from rtvoice.views import (
         AgentError,
-        AssistantVoice,
-        NoiseReduction,
-        OutputModality,
-        RealtimeModel,
-        TranscriptionModel,
-        TurnDetection,
     )
-
-
-@dataclass
-class StartAgentCommand:
-    model: RealtimeModel
-    voice: AssistantVoice
-    speech_speed: float
-    transcription_model: TranscriptionModel | None
-    output_modalities: list[OutputModality]
-    noise_reduction: NoiseReduction
-    turn_detection: TurnDetection
-    tools: Tools
-    instructions: str = ""
-
-
-@dataclass
-class ConfigureSessionCommand:
-    model: RealtimeModel
-    voice: AssistantVoice
-    speech_speed: float
-    transcription_model: TranscriptionModel | None
-    output_modalities: list[OutputModality]
-    noise_reduction: NoiseReduction
-    turn_detection: TurnDetection
-    tools: Tools
-    instructions: str = ""
 
 
 @dataclass
@@ -65,87 +30,104 @@ class UpdateSessionToolsCommand:
     tools: list[FunctionTool]
 
 
-class AgentSessionConnectedEvent(BaseModel):
+@dataclass
+class AgentSessionConnectedEvent:
     pass
 
 
-class AgentStartingEvent(BaseModel):
+@dataclass
+class AgentStartingEvent:
     pass
 
 
-class AgentStoppedEvent(BaseModel):
+@dataclass
+class AgentStoppedEvent:
     pass
 
 
-class UserTranscriptChunkReceivedEvent(BaseModel):
+@dataclass
+class UserTranscriptChunkReceivedEvent:
     chunk: str
 
 
-class UserTranscriptCompletedEvent(BaseModel):
+@dataclass
+class UserTranscriptCompletedEvent:
     transcript: str
     item_id: str
 
 
-class AssistantTranscriptChunkReceivedEvent(BaseModel):
+@dataclass
+class AssistantTranscriptChunkReceivedEvent:
     chunk: str
 
 
-class AssistantTranscriptDeltaEvent(BaseModel):
+@dataclass
+class AssistantTranscriptDeltaEvent:
     delta: str
     item_id: str
     output_index: int
     content_index: int
 
 
-class AssistantTranscriptCompletedEvent(BaseModel):
+@dataclass
+class AssistantTranscriptCompletedEvent:
     transcript: str
     item_id: str
     output_index: int
     content_index: int
 
 
-class UserInactivityCountdownEvent(BaseModel):
+@dataclass
+class UserInactivityCountdownEvent:
     remaining_seconds: int
 
 
-class UserInactivityTimeoutEvent(BaseModel):
+@dataclass
+class UserInactivityTimeoutEvent:
     timeout_seconds: float
 
 
-class SubAgentStartedEvent(BaseModel):
+@dataclass
+class SubAgentStartedEvent:
     agent_name: str
 
 
-class SubAgentFinishedEvent(BaseModel):
+@dataclass
+class SubAgentFinishedEvent:
     agent_name: str
 
 
-class AssistantInterruptedEvent(BaseModel):
+@dataclass
+class AssistantInterruptedEvent:
     pass
 
 
-class AudioPlaybackCompletedEvent(BaseModel):
+@dataclass
+class AudioPlaybackCompletedEvent:
     pass
 
 
-class AgentErrorEvent(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
+@dataclass
+class AgentErrorEvent:
     error: AgentError
     event_id: str | None = None
 
 
-class UserStartedSpeakingEvent(BaseModel):
+@dataclass
+class UserStartedSpeakingEvent:
     pass
 
 
-class UserStoppedSpeakingEvent(BaseModel):
+@dataclass
+class UserStoppedSpeakingEvent:
     pass
 
 
-class AssistantStartedRespondingEvent(BaseModel):
+@dataclass
+class AssistantStartedRespondingEvent:
     pass
 
 
-class AssistantStoppedRespondingEvent(BaseModel):
+@dataclass
+class AssistantStoppedRespondingEvent:
     pass

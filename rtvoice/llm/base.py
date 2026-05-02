@@ -8,7 +8,7 @@ from rtvoice.llm.messages import Message
 from rtvoice.llm.views import ChatInvokeCompletion
 
 
-class BaseChatModel(ABC):
+class ChatModel(ABC):
     def __init__(
         self,
         max_tokens: int | None = None,

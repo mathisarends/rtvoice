@@ -11,11 +11,11 @@ from .messages import (
     UserMessage,
 )
 from .providers import (
-    BaseChatModel,
     BaseOpenAICompatible,
     ChatAzureOpenAI,
     ChatInvokeCompletion,
     ChatInvokeUsage,
+    ChatModel,
     ChatOpenAI,
 )
 from .tools import (
@@ -27,11 +27,11 @@ from .tools import (
 
 __all__ = [
     "AssistantMessage",
-    "BaseChatModel",
     "BaseOpenAICompatible",
     "ChatAzureOpenAI",
     "ChatInvokeCompletion",
     "ChatInvokeUsage",
+    "ChatModel",
     "ChatOpenAI",
     "ContentPartImageParam",
     "ContentPartTextParam",

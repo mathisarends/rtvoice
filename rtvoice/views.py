@@ -1,28 +1,18 @@
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
 from pydantic import BaseModel
+from pydantic import Field as PydanticField
 
 from rtvoice.conversation.views import ConversationTurn
 
 type OutputModality = Literal["text", "audio"]
-"""Supported assistant response output modalities.
-
-Use one or both values when configuring `RealtimeAgent.output_modalities`.
-"""
 
 
 class RealtimeModel(StrEnum):
-    """Available OpenAI Realtime API model variants.
-
-    Attributes:
-        GPT_REALTIME: Full-sized model with higher capability.
-        GPT_REALTIME_MINI: Smaller, faster, and cheaper variant.
-            Recommended default for most use-cases.
-    """
-
     GPT_REALTIME = "gpt-realtime"
     GPT_REALTIME_MINI = "gpt-realtime-mini"
     GPT_REALTIME_1_5 = "gpt-realtime-1.5"
@@ -71,51 +61,16 @@ class AssistantVoice(StrEnum):
 
 
 class TranscriptionModel(StrEnum):
-    """STT models used to produce user transcript events.
-
-    Attributes:
-        WHISPER_1: OpenAI Whisper v1. Currently the only supported model.
-
-    Note:
-        Pass `transcription_model=None` to `RealtimeAgent` to disable
-        transcription entirely. Note that subagents require
-        transcription to be enabled.
-    """
-
     WHISPER_1 = "whisper-1"
 
 
 class NoiseReduction(StrEnum):
-    """Microphone noise reduction profile applied to audio input.
-
-    Attributes:
-        NEAR_FIELD: Optimised for close-range audio, e.g. a headset microphone.
-        FAR_FIELD: Optimised for distant audio sources, e.g. a desktop or room mic.
-
-    Example:
-        ```python
-        agent = RealtimeAgent(
-            noise_reduction=NoiseReduction.NEAR_FIELD,
-        )
-        ```
-    """
-
     NEAR_FIELD = "near_field"
     FAR_FIELD = "far_field"
 
 
 class SemanticEagerness(StrEnum):
-    """Controls how quickly semantic VAD decides the user has finished speaking.
-
-    Higher eagerness means the model cuts off sooner; lower eagerness waits
-    longer to ensure the user has truly finished their thought.
-
-    Attributes:
-        LOW: Waits longest before committing to end-of-turn.
-        MEDIUM: Balanced cut-off timing.
-        HIGH: Cuts off quickly; may interrupt longer pauses mid-thought.
-        AUTO: Let the model decide based on context. Recommended default.
-    """
+    """Controls how quickly semantic VAD decides the user has finished speaking."""
 
     LOW = "low"
     MEDIUM = "medium"
@@ -124,83 +79,28 @@ class SemanticEagerness(StrEnum):
 
 
 class SemanticVAD(BaseModel):
-    """Semantic voice-activity detection strategy.
-
-    The model waits until it understands the speaker has finished a thought,
-    producing more natural turn-taking with fewer false cut-offs compared to
-    energy-based detection.
-
-    Attributes:
-        eagerness: How aggressively the model cuts off the user.
-            Defaults to `SemanticEagerness.AUTO`.
-
-    Example:
-        ```python
-        agent = RealtimeAgent(
-            turn_detection=SemanticVAD(eagerness=SemanticEagerness.LOW),
-        )
-        ```
-    """
+    """Semantic VAD: waits for a complete thought before committing end-of-turn."""
 
     eagerness: SemanticEagerness = SemanticEagerness.AUTO
-    """How quickly the model decides the user has stopped speaking."""
 
 
 class ServerVAD(BaseModel):
-    """Energy- and silence-based voice-activity detection strategy.
-
-    Triggers end-of-turn based on audio energy thresholds and silence duration
-    rather than semantic understanding. Useful when latency is critical or
-    semantic VAD produces undesirable behaviour.
-
-    Attributes:
-        threshold: Energy threshold in the range `[0, 1]` above which audio
-            is considered speech. Defaults to `0.5`.
-        prefix_padding_ms: Milliseconds of audio to include before the detected
-            speech onset. Defaults to `300`.
-        silence_duration_ms: Milliseconds of silence required to commit an
-            end-of-turn. Defaults to `500`.
-
-    Example:
-        ```python
-        agent = RealtimeAgent(
-            turn_detection=ServerVAD(silence_duration_ms=800),
-        )
-        ```
-    """
+    """Energy-based VAD: triggers end-of-turn on silence duration and audio threshold."""
 
     threshold: float = 0.5
-    """Energy threshold above which audio is considered speech."""
-
     prefix_padding_ms: int = 300
-    """Milliseconds of audio prepended before the detected speech onset."""
-
     silence_duration_ms: int = 500
-    """Milliseconds of silence required to commit an end-of-turn."""
 
 
 type TurnDetection = SemanticVAD | ServerVAD
-"""Union type for voice-activity detection strategies.
-
-Either a [`SemanticVAD`][rtvoice.views.SemanticVAD] or a
-[`ServerVAD`][rtvoice.views.ServerVAD] instance. Passed directly to
-`RealtimeAgent` via the `turn_detection` parameter.
-"""
 
 
 @dataclass
 class SeedMessage:
-    """Pre-filled conversation message injected before live user input begins.
-
-    Use this to provide the realtime model with known context or example turns
-    without adding them to the live [`ConversationHistory`][rtvoice.conversation.ConversationHistory].
-    """
+    """Pre-filled conversation message injected before live user input begins."""
 
     role: Literal["user", "assistant"]
-    """Role used when creating the seed conversation item."""
-
     text: str
-    """Message text to inject into the realtime conversation."""
 
     @classmethod
     def user(cls, text: str) -> Self:
@@ -213,14 +113,9 @@ class SeedMessage:
 
 @dataclass
 class ConversationSeed:
-    """Initial conversation items sent to the realtime session during startup.
-
-    Seed messages are sent after `session.update` and before microphone audio is
-    started, making them useful for context injection and short few-shot examples.
-    """
+    """Conversation items sent after session.update but before mic audio starts."""
 
     messages: list[SeedMessage]
-    """Ordered seed messages to inject into the realtime conversation."""
 
     @classmethod
     def from_pairs(cls, *pairs: tuple[str, str]) -> "ConversationSeed":
@@ -233,59 +128,213 @@ class ConversationSeed:
 
 @dataclass
 class AgentError:
-    """Error information received in `AgentListener.on_agent_error`.
-
-    This object is created internally and passed to your listener —
-    you do not construct it yourself.
-
-    Attributes:
-        type: OpenAI error type identifier (e.g. `invalid_request_error`).
-        message: Human-readable description of the error.
-
-    Example:
-        ```python
-        class MyListener(AgentListener):
-            async def on_agent_error(self, error: AgentError) -> None:
-                if error.type == "invalid_request_error":
-                    print(f"Bad request: {error.message}")
-        ```
-    """
-
     type: str
-    """OpenAI error type identifier (e.g. `invalid_request_error`)."""
-
     message: str
-    """Human-readable description of the error."""
 
     def __str__(self) -> str:
         return f"[{self.type}] {self.message}"
 
 
+@dataclass(frozen=True)
+class ModelPricing:
+    input_text: float
+    input_audio: float
+    input_cached_text: float
+    input_cached_audio: float
+    output_text: float
+    output_audio: float
+
+
+REALTIME_PRICING: dict[str, ModelPricing] = {
+    "gpt-realtime": ModelPricing(
+        input_text=4.00,
+        input_audio=32.00,
+        input_cached_text=0.40,
+        input_cached_audio=0.40,
+        output_text=16.00,
+        output_audio=64.00,
+    ),
+    "gpt-realtime-mini": ModelPricing(
+        input_text=0.60,
+        input_audio=10.00,
+        input_cached_text=0.30,
+        input_cached_audio=0.30,
+        output_text=2.40,
+        output_audio=20.00,
+    ),
+    "gpt-realtime-1.5": ModelPricing(
+        input_text=4.00,
+        input_audio=32.00,
+        input_cached_text=0.40,
+        input_cached_audio=0.40,
+        output_text=16.00,
+        output_audio=64.00,
+    ),
+    "gpt-4o-realtime-preview": ModelPricing(
+        input_text=5.00,
+        input_audio=100.00,
+        input_cached_text=2.50,
+        input_cached_audio=2.50,
+        output_text=20.00,
+        output_audio=200.00,
+    ),
+    "gpt-4o-mini-realtime-preview": ModelPricing(
+        input_text=0.60,
+        input_audio=10.00,
+        input_cached_text=0.30,
+        input_cached_audio=0.30,
+        output_text=2.40,
+        output_audio=20.00,
+    ),
+}
+
+
+@dataclass
+class TurnUsage:
+    input_text_tokens: int = 0
+    input_audio_tokens: int = 0
+    input_cached_text_tokens: int = 0
+    input_cached_audio_tokens: int = 0
+    output_text_tokens: int = 0
+    output_audio_tokens: int = 0
+
+    @property
+    def input_cached_tokens(self) -> int:
+        return self.input_cached_text_tokens + self.input_cached_audio_tokens
+
+    @property
+    def input_tokens(self) -> int:
+        return self.input_text_tokens + self.input_audio_tokens
+
+    @property
+    def output_tokens(self) -> int:
+        return self.output_text_tokens + self.output_audio_tokens
+
+    @property
+    def total_tokens(self) -> int:
+        return self.input_tokens + self.output_tokens
+
+    @classmethod
+    def from_response_done(cls, usage: Mapping[str, Any]) -> Self:
+        input_details = cls._mapping(usage.get("input_token_details"))
+        output_details = cls._mapping(usage.get("output_token_details"))
+        cached_details = cls._mapping(input_details.get("cached_tokens_details"))
+        cached_tokens = cls._int(input_details.get("cached_tokens"))
+        cached_text_tokens = cls._int(cached_details.get("text_tokens"))
+        cached_audio_tokens = cls._int(cached_details.get("audio_tokens"))
+
+        if cached_tokens and not cached_text_tokens and not cached_audio_tokens:
+            cached_text_tokens = cached_tokens
+
+        return cls(
+            input_text_tokens=cls._int(input_details.get("text_tokens")),
+            input_audio_tokens=cls._int(input_details.get("audio_tokens")),
+            input_cached_text_tokens=cached_text_tokens,
+            input_cached_audio_tokens=cached_audio_tokens,
+            output_text_tokens=cls._int(output_details.get("text_tokens")),
+            output_audio_tokens=cls._int(output_details.get("audio_tokens")),
+        )
+
+    @staticmethod
+    def _mapping(value: Any) -> Mapping[str, Any]:
+        if isinstance(value, Mapping):
+            return value
+        return {}
+
+    @staticmethod
+    def _int(value: Any) -> int:
+        if value is None:
+            return 0
+        return int(value)
+
+
+@dataclass
+class TokenUsageSummary:
+    turns: list[TurnUsage] = field(default_factory=list)
+    model: str = RealtimeModel.GPT_REALTIME_MINI.value
+
+    def add(self, turn: TurnUsage) -> None:
+        self.turns.append(turn)
+
+    @property
+    def total_input_text_tokens(self) -> int:
+        return sum(turn.input_text_tokens for turn in self.turns)
+
+    @property
+    def total_input_audio_tokens(self) -> int:
+        return sum(turn.input_audio_tokens for turn in self.turns)
+
+    @property
+    def total_input_cached_text_tokens(self) -> int:
+        return sum(turn.input_cached_text_tokens for turn in self.turns)
+
+    @property
+    def total_input_cached_audio_tokens(self) -> int:
+        return sum(turn.input_cached_audio_tokens for turn in self.turns)
+
+    @property
+    def total_input_cached_tokens(self) -> int:
+        return (
+            self.total_input_cached_text_tokens + self.total_input_cached_audio_tokens
+        )
+
+    @property
+    def total_output_text_tokens(self) -> int:
+        return sum(turn.output_text_tokens for turn in self.turns)
+
+    @property
+    def total_output_audio_tokens(self) -> int:
+        return sum(turn.output_audio_tokens for turn in self.turns)
+
+    @property
+    def total_tokens(self) -> int:
+        return sum(turn.total_tokens for turn in self.turns)
+
+    def estimate_cost_usd(self, model: str | None = None) -> float:
+        pricing_model = model or self.model
+        pricing = REALTIME_PRICING.get(pricing_model)
+        if not pricing:
+            raise ValueError(f"No pricing data for model '{pricing_model}'")
+
+        uncached_text_tokens = max(
+            self.total_input_text_tokens - self.total_input_cached_text_tokens,
+            0,
+        )
+        uncached_audio_tokens = max(
+            self.total_input_audio_tokens - self.total_input_cached_audio_tokens,
+            0,
+        )
+        cost = (
+            (uncached_text_tokens / 1_000_000) * pricing.input_text
+            + (uncached_audio_tokens / 1_000_000) * pricing.input_audio
+            + (self.total_input_cached_text_tokens / 1_000_000)
+            * pricing.input_cached_text
+            + (self.total_input_cached_audio_tokens / 1_000_000)
+            * pricing.input_cached_audio
+            + (self.total_output_text_tokens / 1_000_000) * pricing.output_text
+            + (self.total_output_audio_tokens / 1_000_000) * pricing.output_audio
+        )
+        return round(cost, 6)
+
+    def estimate_costs_all_models(self) -> dict[str, float]:
+        return {model: self.estimate_cost_usd(model) for model in REALTIME_PRICING}
+
+    def __repr__(self) -> str:
+        costs = self.estimate_costs_all_models()
+        lines = [
+            f"TokenUsageSummary ({len(self.turns)} turns, {self.total_tokens:,} tokens)",
+            f"  input  text={self.total_input_text_tokens:,}  audio={self.total_input_audio_tokens:,}  cached={self.total_input_cached_tokens:,}",
+            f"  output text={self.total_output_text_tokens:,}  audio={self.total_output_audio_tokens:,}",
+            "  cost estimates:",
+            *[f"    {model}: ${cost:.4f}" for model, cost in costs.items()],
+        ]
+        return "\n".join(lines)
+
+
 class AgentResult(BaseModel):
-    """Return value of `RealtimeAgent.run()` after the session ends.
-
-    Attributes:
-        turns: Ordered list of conversation turns recorded during the session.
-        recording_path: Path to the recorded session audio file, or `None`
-            if recording was not enabled.
-
-    Example:
-        ```python
-        result = await agent.run()
-
-        for turn in result.turns:
-            print(turn)
-
-        if result.recording_path:
-            print(f"Recording saved to: {result.recording_path}")
-        ```
-    """
-
     turns: list[ConversationTurn]
-    """Ordered list of conversation turns recorded during the session."""
-
     recording_path: Path | None = None
-    """Path to the recorded session audio, or `None` if recording was disabled."""
+    usage: TokenUsageSummary = PydanticField(default_factory=TokenUsageSummary)
 
 
 @dataclass

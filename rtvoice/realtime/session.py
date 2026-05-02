@@ -167,6 +167,10 @@ class RealtimeSession:
                 output_path=self._recording_path,
             )
 
+    @property
+    def recording_path(self) -> Path | None:
+        return self._recording_path
+
     @timed()
     async def start(self) -> None:
         logger.info("Starting realtime session")

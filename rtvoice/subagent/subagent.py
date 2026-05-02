@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Annotated
 
 from rtvoice.llm import (
     AssistantMessage,
-    BaseChatModel,
+    ChatModel,
     Message,
     SystemMessage,
     ToolResultMessage,
@@ -38,7 +38,7 @@ class SubAgent[T]:
         name: str,
         description: str,
         instructions: str,
-        llm: BaseChatModel | None = None,
+        llm: ChatModel | None = None,
         tools: Tools | None = None,
         mcp_servers: list[MCPServer] | None = None,
         max_iterations: int = 10,

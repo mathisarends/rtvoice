@@ -9,7 +9,7 @@ from openai.types.chat.chat_completion_message_tool_call import (
 )
 from pydantic import BaseModel
 
-from rtvoice.llm.base import BaseChatModel
+from rtvoice.llm.base import ChatModel
 from rtvoice.llm.messages import (
     AssistantMessage,
     ContentPartImageParam,
@@ -27,7 +27,7 @@ from rtvoice.llm.views import ChatInvokeCompletion, ChatInvokeUsage
 T = TypeVar("T", bound=BaseModel)
 
 
-class BaseOpenAICompatible(BaseChatModel):
+class BaseOpenAICompatible(ChatModel):
     _client: AsyncOpenAI | AsyncAzureOpenAI
     _model: str
 

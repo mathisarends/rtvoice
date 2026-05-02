@@ -17,7 +17,7 @@ from rtvoice.realtime.websocket import RealtimeWebSocket
 logger = logging.getLogger(__name__)
 
 
-class InterruptionWatchdog:
+class InterruptionHandler:
     """Handles barge-in: cancels the running response, clears the audio buffer,
     and truncates the conversation item to what was actually played."""
 

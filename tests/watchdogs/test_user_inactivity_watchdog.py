@@ -10,6 +10,7 @@ from rtvoice.events.views import (
     UserInactivityCountdownEvent,
     UserInactivityTimeoutEvent,
 )
+from rtvoice.handler import UserInactivityTimeoutHandler
 from rtvoice.realtime.schemas import (
     InputAudioBufferSpeechStartedEvent,
     InputAudioBufferSpeechStoppedEvent,
@@ -17,7 +18,6 @@ from rtvoice.realtime.schemas import (
     RealtimeServerEvent,
     ResponseCreatedEvent,
 )
-from rtvoice.watchdogs import UserInactivityTimeoutWatchdog
 
 
 @pytest.fixture
@@ -54,7 +54,7 @@ class TestMonitoringStateTransitions:
     async def test_monitoring_starts_after_user_stops_speaking(
         self, event_bus: EventBus
     ) -> None:
-        wt = UserInactivityTimeoutWatchdog(event_bus, timeout_seconds=10.0)
+        wt = UserInactivityTimeoutHandler(event_bus, timeout_seconds=10.0)
 
         await event_bus.dispatch(make_speech_stopped())
 
@@ -64,7 +64,7 @@ class TestMonitoringStateTransitions:
     async def test_monitoring_does_not_start_while_assistant_speaking(
         self, event_bus: EventBus
     ) -> None:
-        wt = UserInactivityTimeoutWatchdog(event_bus, timeout_seconds=10.0)
+        wt = UserInactivityTimeoutHandler(event_bus, timeout_seconds=10.0)
 
         await event_bus.dispatch(make_response_created())
         await event_bus.dispatch(make_speech_stopped())
@@ -75,7 +75,7 @@ class TestMonitoringStateTransitions:
     async def test_monitoring_starts_after_both_user_and_assistant_finish(
         self, event_bus: EventBus
     ) -> None:
-        wt = UserInactivityTimeoutWatchdog(event_bus, timeout_seconds=10.0)
+        wt = UserInactivityTimeoutHandler(event_bus, timeout_seconds=10.0)
 
         await event_bus.dispatch(make_speech_stopped())
         await event_bus.dispatch(make_response_created())
@@ -87,7 +87,7 @@ class TestMonitoringStateTransitions:
     async def test_user_starts_speaking_stops_monitoring(
         self, event_bus: EventBus
     ) -> None:
-        wt = UserInactivityTimeoutWatchdog(event_bus, timeout_seconds=10.0)
+        wt = UserInactivityTimeoutHandler(event_bus, timeout_seconds=10.0)
 
         await event_bus.dispatch(make_speech_stopped())
         assert wt._is_monitoring is True
@@ -99,7 +99,7 @@ class TestMonitoringStateTransitions:
     async def test_assistant_started_stops_monitoring(
         self, event_bus: EventBus
     ) -> None:
-        wt = UserInactivityTimeoutWatchdog(event_bus, timeout_seconds=10.0)
+        wt = UserInactivityTimeoutHandler(event_bus, timeout_seconds=10.0)
 
         await event_bus.dispatch(make_speech_stopped())
         assert wt._is_monitoring is True
@@ -111,7 +111,7 @@ class TestMonitoringStateTransitions:
     async def test_monitoring_does_not_start_while_agent_is_busy(
         self, event_bus: EventBus
     ) -> None:
-        wt = UserInactivityTimeoutWatchdog(event_bus, timeout_seconds=10.0)
+        wt = UserInactivityTimeoutHandler(event_bus, timeout_seconds=10.0)
 
         await event_bus.dispatch(SubAgentStartedEvent(agent_name="planner"))
         await event_bus.dispatch(make_speech_stopped())
@@ -130,7 +130,7 @@ class TestTimeoutFiring:
             received.append(e)
 
         event_bus.subscribe(UserInactivityTimeoutEvent, capture)
-        UserInactivityTimeoutWatchdog(event_bus, timeout_seconds=0.01)
+        UserInactivityTimeoutHandler(event_bus, timeout_seconds=0.01)
 
         await event_bus.dispatch(make_speech_stopped())
         await asyncio.sleep(0.6)
@@ -142,7 +142,7 @@ class TestTimeoutFiring:
     async def test_timeout_stops_monitoring_after_firing(
         self, event_bus: EventBus
     ) -> None:
-        wt = UserInactivityTimeoutWatchdog(event_bus, timeout_seconds=0.01)
+        wt = UserInactivityTimeoutHandler(event_bus, timeout_seconds=0.01)
 
         await event_bus.dispatch(make_speech_stopped())
         await asyncio.sleep(0.6)
@@ -159,7 +159,7 @@ class TestTimeoutFiring:
             received.append(e)
 
         event_bus.subscribe(UserInactivityTimeoutEvent, capture)
-        UserInactivityTimeoutWatchdog(event_bus, timeout_seconds=0.5)
+        UserInactivityTimeoutHandler(event_bus, timeout_seconds=0.5)
 
         await event_bus.dispatch(make_speech_stopped())
         await asyncio.sleep(0.05)
@@ -176,7 +176,7 @@ class TestTimeoutFiring:
             received.append(e)
 
         event_bus.subscribe(UserInactivityTimeoutEvent, capture)
-        UserInactivityTimeoutWatchdog(event_bus, timeout_seconds=0.01)
+        UserInactivityTimeoutHandler(event_bus, timeout_seconds=0.01)
 
         await event_bus.dispatch(make_speech_stopped())
         await asyncio.sleep(1.0)
@@ -189,7 +189,7 @@ class TestCountdownDispatch:
     async def test_countdown_dispatches_each_second_only_once(
         self, event_bus: EventBus
     ) -> None:
-        wt = UserInactivityTimeoutWatchdog(event_bus, timeout_seconds=10.0)
+        wt = UserInactivityTimeoutHandler(event_bus, timeout_seconds=10.0)
         received: list[int] = []
 
         async def capture(event: UserInactivityCountdownEvent) -> None:
@@ -222,7 +222,7 @@ class TestBusyStateTransitions:
     async def test_supervisor_finished_starts_monitoring_when_idle(
         self, event_bus: EventBus
     ) -> None:
-        wt = UserInactivityTimeoutWatchdog(event_bus, timeout_seconds=10.0)
+        wt = UserInactivityTimeoutHandler(event_bus, timeout_seconds=10.0)
         wt._agent_is_busy = True
         wt._assistant_is_speaking = False
         wt._user_has_stopped_speaking = True
@@ -236,7 +236,7 @@ class TestBusyStateTransitions:
     async def test_supervisor_finished_does_not_start_monitoring_if_assistant_speaking(
         self, event_bus: EventBus
     ) -> None:
-        wt = UserInactivityTimeoutWatchdog(event_bus, timeout_seconds=10.0)
+        wt = UserInactivityTimeoutHandler(event_bus, timeout_seconds=10.0)
         wt._agent_is_busy = True
         wt._assistant_is_speaking = True
         wt._user_has_stopped_speaking = True

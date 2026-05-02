@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 _COUNTDOWN_SECONDS = frozenset({5, 4, 3, 2, 1})
 
 
-class UserInactivityTimeoutWatchdog:
+class UserInactivityTimeoutHandler:
     def __init__(self, event_bus: EventBus, timeout_seconds: float = 10.0):
         self.event_bus = event_bus
         self._timer = ConversationInactivityTimer(timeout_seconds)

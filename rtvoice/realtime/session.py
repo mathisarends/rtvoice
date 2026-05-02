@@ -16,10 +16,12 @@ from rtvoice.events.views import (
 from rtvoice.handler import (
     AudioHandler,
     AudioRecorder,
+    InterruptionHandler,
     SpeechStateTracker,
     SubAgentCoordinator,
     ToolCallHandler,
     TranscriptionAccumulator,
+    UserInactivityTimeoutHandler,
 )
 from rtvoice.realtime.port import RealtimeProvider
 from rtvoice.realtime.schemas import (
@@ -54,8 +56,6 @@ from rtvoice.views import (
     TurnDetection,
 )
 from rtvoice.watchdogs.error import ErrorWatchdog
-from rtvoice.watchdogs.interruption import InterruptionWatchdog
-from rtvoice.watchdogs.user_inactivity_timeout import UserInactivityTimeoutWatchdog
 
 if TYPE_CHECKING:
     from rtvoice.subagent import SubAgent
@@ -121,7 +121,7 @@ class RealtimeSession:
             audio_session=self._audio_session,
             websocket=self._websocket,
         )
-        self._interruption_watchdog = InterruptionWatchdog(
+        self._interruption_handler = InterruptionHandler(
             event_bus=self._event_bus,
             websocket=self._websocket,
             audio_session=self._audio_session,
@@ -156,7 +156,7 @@ class RealtimeSession:
             self._inactivity_timeout_enabled
             and self._inactivity_timeout_seconds is not None
         ):
-            self._user_inactivity_timeout_watchdog = UserInactivityTimeoutWatchdog(
+            self._user_inactivity_timeout_handler = UserInactivityTimeoutHandler(
                 event_bus=self._event_bus,
                 timeout_seconds=self._inactivity_timeout_seconds,
             )

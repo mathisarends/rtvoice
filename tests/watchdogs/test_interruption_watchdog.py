@@ -4,6 +4,7 @@ import pytest
 
 from rtvoice.events.bus import EventBus
 from rtvoice.events.views import AssistantInterruptedEvent
+from rtvoice.handler import InterruptionHandler
 from rtvoice.realtime.schemas import (
     ConversationItemTruncateEvent,
     InputAudioBufferSpeechStartedEvent,
@@ -14,7 +15,6 @@ from rtvoice.realtime.schemas import (
     ResponseDoneEvent,
     ResponseOutputAudioDeltaEvent,
 )
-from rtvoice.watchdogs import InterruptionWatchdog
 
 
 @pytest.fixture
@@ -40,8 +40,8 @@ def audio_session() -> MagicMock:
 @pytest.fixture
 def watchdog(
     event_bus: EventBus, websocket: AsyncMock, audio_session: MagicMock
-) -> InterruptionWatchdog:
-    return InterruptionWatchdog(event_bus, websocket, audio_session)
+) -> InterruptionHandler:
+    return InterruptionHandler(event_bus, websocket, audio_session)
 
 
 def make_response_created(response_id: str = "resp_001") -> ResponseCreatedEvent:
@@ -84,7 +84,7 @@ def make_speech_started() -> InputAudioBufferSpeechStartedEvent:
 class TestStateTracking:
     @pytest.mark.asyncio
     async def test_response_created_sets_response_id(
-        self, event_bus: EventBus, watchdog: InterruptionWatchdog
+        self, event_bus: EventBus, watchdog: InterruptionHandler
     ) -> None:
         await event_bus.dispatch(make_response_created("resp_abc"))
 
@@ -92,7 +92,7 @@ class TestStateTracking:
 
     @pytest.mark.asyncio
     async def test_response_created_sets_assistant_speaking(
-        self, event_bus: EventBus, watchdog: InterruptionWatchdog
+        self, event_bus: EventBus, watchdog: InterruptionHandler
     ) -> None:
         await event_bus.dispatch(make_response_created())
 
@@ -100,7 +100,7 @@ class TestStateTracking:
 
     @pytest.mark.asyncio
     async def test_audio_delta_tracks_item_id_for_matching_response(
-        self, event_bus: EventBus, watchdog: InterruptionWatchdog
+        self, event_bus: EventBus, watchdog: InterruptionHandler
     ) -> None:
         await event_bus.dispatch(make_response_created("resp_001"))
         await event_bus.dispatch(
@@ -111,7 +111,7 @@ class TestStateTracking:
 
     @pytest.mark.asyncio
     async def test_audio_delta_does_not_track_item_id_for_different_response(
-        self, event_bus: EventBus, watchdog: InterruptionWatchdog
+        self, event_bus: EventBus, watchdog: InterruptionHandler
     ) -> None:
         await event_bus.dispatch(make_response_created("resp_001"))
         await event_bus.dispatch(
@@ -122,7 +122,7 @@ class TestStateTracking:
 
     @pytest.mark.asyncio
     async def test_response_done_resets_state(
-        self, event_bus: EventBus, watchdog: InterruptionWatchdog
+        self, event_bus: EventBus, watchdog: InterruptionHandler
     ) -> None:
         await event_bus.dispatch(make_response_created())
         await event_bus.dispatch(make_audio_delta())
@@ -134,7 +134,7 @@ class TestStateTracking:
 
     @pytest.mark.asyncio
     async def test_response_done_for_different_response_does_not_reset(
-        self, event_bus: EventBus, watchdog: InterruptionWatchdog
+        self, event_bus: EventBus, watchdog: InterruptionHandler
     ) -> None:
         await event_bus.dispatch(make_response_created("resp_001"))
         await event_bus.dispatch(make_response_done("resp_other"))
@@ -148,7 +148,7 @@ class TestBargeIn:
     async def test_barge_in_sends_response_cancel_when_assistant_speaking(
         self,
         event_bus: EventBus,
-        watchdog: InterruptionWatchdog,
+        watchdog: InterruptionHandler,
         websocket: AsyncMock,
     ) -> None:
         await event_bus.dispatch(make_response_created())
@@ -161,7 +161,7 @@ class TestBargeIn:
     async def test_barge_in_sends_truncate_when_item_tracked(
         self,
         event_bus: EventBus,
-        watchdog: InterruptionWatchdog,
+        watchdog: InterruptionHandler,
         websocket: AsyncMock,
     ) -> None:
         await event_bus.dispatch(make_response_created())
@@ -175,7 +175,7 @@ class TestBargeIn:
     async def test_barge_in_dispatches_assistant_interrupted_event(
         self,
         event_bus: EventBus,
-        watchdog: InterruptionWatchdog,
+        watchdog: InterruptionHandler,
     ) -> None:
         received: list[AssistantInterruptedEvent] = []
 
@@ -190,7 +190,7 @@ class TestBargeIn:
 
     @pytest.mark.asyncio
     async def test_barge_in_resets_state(
-        self, event_bus: EventBus, watchdog: InterruptionWatchdog
+        self, event_bus: EventBus, watchdog: InterruptionHandler
     ) -> None:
         await event_bus.dispatch(make_response_created())
         await event_bus.dispatch(make_audio_delta())
@@ -204,7 +204,7 @@ class TestBargeIn:
     async def test_no_barge_in_when_assistant_not_speaking_and_not_playing(
         self,
         event_bus: EventBus,
-        watchdog: InterruptionWatchdog,
+        watchdog: InterruptionHandler,
         websocket: AsyncMock,
         audio_session: MagicMock,
     ) -> None:
@@ -218,7 +218,7 @@ class TestBargeIn:
     async def test_barge_in_dispatches_interrupted_event_when_audio_still_playing(
         self,
         event_bus: EventBus,
-        watchdog: InterruptionWatchdog,
+        watchdog: InterruptionHandler,
         audio_session: MagicMock,
     ) -> None:
         received: list[AssistantInterruptedEvent] = []

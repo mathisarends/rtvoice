@@ -352,6 +352,9 @@ class RealtimeAgent[T]:
         clipped = self._clip_speech_speed(speed)
         await self._realtime_session.update_speech_speed(clipped)
 
+    async def send_image(self, image_data_url: str, text: str = "") -> None:
+        await self._realtime_session.send_image(image_data_url, text)
+
     @timed()
     async def stop(self) -> None:
         if self._stop_called:

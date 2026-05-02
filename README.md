@@ -53,6 +53,7 @@ Run it, speak into your microphone, and the agent responds through your speakers
 - [Turn detection](#turn-detection)
 - [Voice and model](#voice-and-model)
 - [Recording](#recording)
+- [Token tracking](#token-tracking)
 - [Inactivity timeout](#inactivity-timeout)
 - [Azure OpenAI](#azure-openai)
 
@@ -547,6 +548,49 @@ print(result.recording_path)   # Path to the saved file
 ```
 
 The returned `AgentResult` also contains `result.turns` — a list of `ConversationTurn` objects with role and text for every exchange.
+
+---
+
+## Token tracking
+
+`AgentResult.token_usage` is populated automatically after every `agent.run()` call. It covers all LLM activity in the session: realtime turns, transcription, and any subagent LLM calls.
+
+```python
+result = await agent.run()
+usage = result.token_usage
+
+print(f"Total cost: ${usage.cost.total_usd:.4f}")
+print(f"Input tokens: {usage.usage.input_tokens}")
+print(f"Output tokens: {usage.usage.output_tokens}")
+print(f"Cached input tokens: {usage.usage.cached_input_tokens}")
+```
+
+### Per-model breakdown
+
+```python
+for model_summary in result.token_usage.by_model:
+    print(f"{model_summary.model}: ${model_summary.cost.total_usd:.4f}")
+    print(f"  audio in/out: {model_summary.usage.input_audio_tokens} / {model_summary.usage.output_audio_tokens}")
+    print(f"  text  in/out: {model_summary.usage.input_text_tokens} / {model_summary.usage.output_text_tokens}")
+```
+
+### `TokenUsageSummary` fields
+
+| Field               | Type                           | Description                                             |
+| ------------------- | ------------------------------ | ------------------------------------------------------- |
+| `usage`             | `TokenUsageBreakdown`          | Aggregated token counts across all calls                |
+| `cost`              | `TokenUsageCost`               | Aggregated cost in USD                                  |
+| `by_model`          | `list[TokenUsageModelSummary]` | Per-model breakdown with the same `usage` and `cost`    |
+| `records`           | `list[TokenUsageRecord]`       | Raw per-call records (`source`, `model`, `usage`, `cost`) |
+| `has_unpriced_usage`| `bool`                         | `True` if any call used a model not in the pricing catalog |
+
+**`TokenUsageBreakdown`** fields: `input_tokens`, `cached_input_tokens`, `output_tokens`, `total_tokens`, `input_text_tokens`, `cached_input_text_tokens`, `output_text_tokens`, `input_audio_tokens`, `cached_input_audio_tokens`, `output_audio_tokens`, `input_image_tokens`, `cached_input_image_tokens`, `duration_seconds`.
+
+**`TokenUsageCost`** fields: `input_usd`, `cached_input_usd`, `output_usd`, `duration_usd`, `total_usd`.
+
+### Pricing catalog
+
+Built-in prices are included for: `gpt-realtime`, `gpt-realtime-mini`, `gpt-realtime-1.5`, `gpt-4o`, `gpt-4o-mini`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.5`, `gpt-4o-transcribe`, `gpt-4o-mini-transcribe`, `whisper-1`. If a model is not in the catalog, its tokens are still counted but costs show as `0.0` and `has_unpriced_usage` is set to `True`.
 
 ---
 

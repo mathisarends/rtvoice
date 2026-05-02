@@ -41,6 +41,7 @@ from rtvoice.realtime.schemas import (
     AudioInputConfig,
     AudioOutputConfig,
     ConversationItemCreateEvent,
+    ConversationResponseCreateEvent,
     InputAudioNoiseReductionConfig,
     InputAudioTranscriptionCompleted,
     InputAudioTranscriptionConfig,
@@ -234,6 +235,17 @@ class RealtimeSession:
 
         logger.info("Updating speech speed [speed=%s]", speed)
         await self._websocket.send(SpeedUpdateEvent.from_speed(speed))
+
+    async def send_image(self, image_data_url: str, text: str = "") -> None:
+        if not self._websocket.is_connected:
+            logger.warning("Cannot send image - WebSocket not connected")
+            return
+
+        logger.info("Sending image input [text=%r]", text)
+        await self._websocket.send(
+            ConversationItemCreateEvent.user_message_with_image(text, image_data_url)
+        )
+        await self._websocket.send(ConversationResponseCreateEvent())
 
     async def _on_update_session_tools(
         self, command: UpdateSessionToolsCommand

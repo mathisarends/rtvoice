@@ -350,10 +350,17 @@ class InputConversationContent(BaseModel):
     text: str
 
 
+class InputImageConversationContent(BaseModel):
+    type: Literal["input_image"] = "input_image"
+    image_url: str
+
+
 class MessageConversationItem(BaseModel):
     type: Literal["message"] = "message"
     role: MessageRole
-    content: list[ConversationContent | InputConversationContent]
+    content: list[
+        ConversationContent | InputConversationContent | InputImageConversationContent
+    ]
 
 
 class FunctionCallOutputConversationItem(BaseModel):
@@ -420,6 +427,18 @@ class ConversationItemCreateEvent(BaseModel):
             item=MessageConversationItem(
                 role=MessageRole.USER,
                 content=[InputConversationContent(text=text)],
+            ),
+        )
+
+    @classmethod
+    def user_message_with_image(cls, text: str, image_data_url: str) -> Self:
+        return cls(
+            item=MessageConversationItem(
+                role=MessageRole.USER,
+                content=[
+                    InputConversationContent(text=text),
+                    InputImageConversationContent(image_url=image_data_url),
+                ],
             ),
         )
 

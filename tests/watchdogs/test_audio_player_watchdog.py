@@ -43,8 +43,18 @@ def audio_session() -> MagicMock:
 
 
 @pytest.fixture
-def player(event_bus: EventBus, audio_session: MagicMock) -> AudioHandler:
-    return AudioHandler(event_bus, audio_session)
+def websocket() -> MagicMock:
+    ws = MagicMock()
+    ws.send = AsyncMock()
+    ws.is_connected = False
+    return ws
+
+
+@pytest.fixture
+def player(
+    event_bus: EventBus, audio_session: MagicMock, websocket: MagicMock
+) -> AudioHandler:
+    return AudioHandler(event_bus, audio_session, websocket)
 
 
 class TestSessionLifecycle:

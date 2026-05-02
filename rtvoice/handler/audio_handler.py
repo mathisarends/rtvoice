@@ -22,9 +22,15 @@ logger = logging.getLogger(__name__)
 
 
 class AudioHandler:
-    def __init__(self, event_bus: EventBus, audio_session: AudioSession):
+    def __init__(
+        self,
+        event_bus: EventBus,
+        audio_session: AudioSession,
+        websocket: RealtimeWebSocket,
+    ):
         self._event_bus = event_bus
         self._audio_session = audio_session
+        self._websocket = websocket
         self._streaming_task: asyncio.Task | None = None
 
         self._event_bus.subscribe(
@@ -36,6 +42,9 @@ class AudioHandler:
             InputAudioBufferSpeechStartedEvent, self._on_user_started_speaking
         )
         self._event_bus.subscribe(ResponseDoneEvent, self._on_response_done)
+        self._event_bus.subscribe(
+            InputAudioBufferAppendEvent, self._on_input_audio_buffer_append
+        )
 
     async def _audio_session_connected(self, _: AgentSessionConnectedEvent) -> None:
         await self._audio_session.start()
@@ -78,14 +87,6 @@ class AudioHandler:
         while self._audio_session.is_playing:
             await asyncio.sleep(0.05)
         await self._event_bus.dispatch(AudioPlaybackCompletedEvent())
-
-
-class AudioForwarder:
-    def __init__(self, event_bus: EventBus, websocket: RealtimeWebSocket):
-        self._websocket = websocket
-        event_bus.subscribe(
-            InputAudioBufferAppendEvent, self._on_input_audio_buffer_append
-        )
 
     async def _on_input_audio_buffer_append(
         self, event: InputAudioBufferAppendEvent

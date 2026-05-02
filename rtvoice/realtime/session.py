@@ -4,7 +4,7 @@ import asyncio
 import logging
 from contextlib import suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING
 
 from rtvoice.audio import AudioSession
 from rtvoice.events import EventBus
@@ -14,7 +14,6 @@ from rtvoice.events.views import (
     UpdateSessionToolsCommand,
 )
 from rtvoice.handler import (
-    AudioForwarder,
     AudioHandler,
     AudioRecorder,
     SpeechStateTracker,
@@ -115,9 +114,6 @@ class RealtimeSession:
         self._audio_handler = AudioHandler(
             event_bus=self._event_bus,
             audio_session=self._audio_session,
-        )
-        self._audio_forwarder = AudioForwarder(
-            event_bus=self._event_bus,
             websocket=self._websocket,
         )
         self._interruption_watchdog = InterruptionWatchdog(
@@ -165,17 +161,6 @@ class RealtimeSession:
                 event_bus=self._event_bus,
                 output_path=self._recording_path,
             )
-
-    @property
-    def websocket(self) -> RealtimeWebSocket:
-        return self._websocket
-
-    async def __aenter__(self) -> Self:
-        self._stopped = False
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb) -> None:
-        await self._stop()
 
     @timed()
     async def start(self) -> None:
@@ -231,9 +216,9 @@ class RealtimeSession:
             await self._event_bus.dispatch(event)
 
     async def _on_agent_stopped(self, _: AgentStoppedEvent) -> None:
-        await self._stop()
+        await self.stop()
 
-    async def _stop(self) -> None:
+    async def stop(self) -> None:
         if self._stopped:
             return
         self._stopped = True

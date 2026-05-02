@@ -294,14 +294,13 @@ class RealtimeAgent[T]:
         await self._event_bus.dispatch(AgentStartingEvent())
         await self.prewarm()
 
-        async with self._realtime_session:
+        try:
             await self._realtime_session.start()
             logger.info("Agent started successfully")
 
-            try:
-                await self._stopped.wait()
-            finally:
-                await self.stop()
+            await self._stopped.wait()
+        finally:
+            await self.stop()
 
         return AgentResult(
             turns=self._conversation_history.turns,

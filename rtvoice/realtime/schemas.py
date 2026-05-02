@@ -307,19 +307,28 @@ class LogProbEntry(BaseModel):
 
 class TokenInputTokenDetails(BaseModel):
     audio_tokens: int | None = None
+    cached_tokens: int | None = None
+    cached_tokens_details: Self | None = None
+    image_tokens: int | None = None
+    text_tokens: int | None = None
+
+
+class TokenOutputTokenDetails(BaseModel):
+    audio_tokens: int | None = None
     text_tokens: int | None = None
 
 
 class TokenUsage(BaseModel):
-    type: Literal["tokens"]
+    type: Literal["tokens"] = "tokens"
     input_tokens: int | None = None
     output_tokens: int | None = None
     total_tokens: int | None = None
     input_token_details: TokenInputTokenDetails | None = None
+    output_token_details: TokenOutputTokenDetails | None = None
 
 
 class DurationUsage(BaseModel):
-    type: Literal["duration"]
+    type: Literal["duration"] = "duration"
     seconds: float
 
 
@@ -701,6 +710,7 @@ class InputAudioBufferSpeechStoppedEvent(BaseModel):
 class RealtimeResponseObject(BaseModel):
     id: str
     status: str | None = None
+    usage: TokenUsage | None = None
 
 
 class ResponseCreatedEvent(BaseModel):

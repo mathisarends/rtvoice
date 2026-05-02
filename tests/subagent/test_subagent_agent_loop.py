@@ -7,6 +7,7 @@ import pytest
 from rtvoice.llm import (
     AssistantMessage,
     ChatInvokeCompletion,
+    ChatInvokeUsage,
     Function,
     SystemMessage,
     ToolCall,
@@ -22,8 +23,18 @@ class TestSubAgentRunAndLoop:
     @pytest.mark.asyncio
     async def test_run_returns_completion_when_no_tool_calls(self) -> None:
         llm = MagicMock()
+        llm._model = "gpt-5.4-mini"
         llm.invoke = AsyncMock(
-            return_value=ChatInvokeCompletion(completion="Final answer", tool_calls=[])
+            return_value=ChatInvokeCompletion(
+                completion="Final answer",
+                tool_calls=[],
+                usage=ChatInvokeUsage(
+                    prompt_tokens=100,
+                    prompt_cached_tokens=25,
+                    completion_tokens=10,
+                    total_tokens=110,
+                ),
+            )
         )
 
         agent = SubAgent(
@@ -37,6 +48,9 @@ class TestSubAgentRunAndLoop:
 
         assert isinstance(result, AgentDone)
         assert result.message == "Final answer"
+        assert result.token_usage.usage.input_text_tokens == 75
+        assert result.token_usage.usage.cached_input_text_tokens == 25
+        assert result.token_usage.usage.output_text_tokens == 10
         assert llm.invoke.await_count == 1
 
     @pytest.mark.asyncio

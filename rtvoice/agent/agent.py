@@ -33,6 +33,7 @@ from rtvoice.realtime import OpenAIProvider, RealtimeProvider, RealtimeSession
 from rtvoice.shared.decorators import timed
 from rtvoice.subagent import SubAgent
 from rtvoice.subagent.views import AgentClarificationNeeded, SubAgentResult
+from rtvoice.token import TokenTracker
 from rtvoice.tools import Inject, ToolContext, Tools
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,6 @@ class RealtimeAgent[T]:
         audio_input: AudioInputDevice | None = None,
         audio_output: AudioOutputDevice | None = None,
         context: T | None = None,
-        event_bus: EventBus | None = None,
         listener: AgentListener | None = None,
         conversation_seed: ConversationSeed | None = None,
         inactivity_timeout_seconds: float | None = None,
@@ -96,9 +96,9 @@ class RealtimeAgent[T]:
         self._mcp_servers = mcp_servers or []
 
         if inactivity_timeout_seconds is not None and not inactivity_timeout_enabled:
-            logger.warning(
+            raise ValueError(
                 "inactivity_timeout_seconds is set but inactivity_timeout_enabled is False. "
-                "The timeout will not be active."
+                "Set inactivity_timeout_enabled=True or remove inactivity_timeout_seconds."
             )
 
         should_enable_inactivity_timeout = (
@@ -113,8 +113,9 @@ class RealtimeAgent[T]:
         self._stop_called = False
         self._mcp_ready = asyncio.Event()
 
-        self._event_bus = event_bus or EventBus()
+        self._event_bus = EventBus()
         self._conversation_history = ConversationHistory(self._event_bus)
+        self._token_tracker = TokenTracker()
 
         self._tools = Tools()
         if tools:
@@ -128,6 +129,7 @@ class RealtimeAgent[T]:
             )
         )
         for subagent in self._subagents:
+            subagent.use_token_tracker(self._token_tracker)
             self._register_subagent(subagent)
 
         audio_session = AudioSession(
@@ -159,6 +161,7 @@ class RealtimeAgent[T]:
             inactivity_timeout_seconds=inactivity_timeout_seconds,
             recording_path=recording_path_obj,
             provider=provider or OpenAIProvider(api_key=api_key),
+            token_tracker=self._token_tracker,
         )
 
         self._setup_shutdown_handlers()
@@ -309,6 +312,7 @@ class RealtimeAgent[T]:
         return AgentResult(
             turns=self._conversation_history.turns,
             recording_path=self._realtime_session.recording_path,
+            token_usage=self._token_tracker.summary(),
         )
 
     @timed()

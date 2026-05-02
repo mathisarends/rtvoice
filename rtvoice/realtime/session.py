@@ -42,9 +42,11 @@ from rtvoice.realtime.schemas import (
     AudioOutputConfig,
     ConversationItemCreateEvent,
     InputAudioNoiseReductionConfig,
+    InputAudioTranscriptionCompleted,
     InputAudioTranscriptionConfig,
     NoiseReductionType,
     RealtimeSessionConfig,
+    ResponseDoneEvent,
     SemanticVADConfig,
     ServerVADConfig,
     SessionUpdateEvent,
@@ -55,6 +57,7 @@ from rtvoice.realtime.schemas import (
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
+from rtvoice.token import TokenTracker
 from rtvoice.watchdogs.error import ErrorWatchdog
 
 if TYPE_CHECKING:
@@ -85,6 +88,7 @@ class RealtimeSession:
         inactivity_timeout_seconds: float | None,
         recording_path: Path | None,
         provider: RealtimeProvider,
+        token_tracker: TokenTracker,
     ):
         self._event_bus = event_bus
         self._model = model
@@ -104,6 +108,7 @@ class RealtimeSession:
         self._inactivity_timeout_enabled = inactivity_timeout_enabled
         self._inactivity_timeout_seconds = inactivity_timeout_seconds
         self._recording_path = recording_path
+        self._token_tracker = token_tracker
 
         self._websocket = RealtimeWebSocket(model=model, provider=provider)
         self._forward_task: asyncio.Task | None = None
@@ -114,6 +119,10 @@ class RealtimeSession:
             UpdateSessionToolsCommand, self._on_update_session_tools
         )
         self._event_bus.subscribe(AgentStoppedEvent, self._on_agent_stopped)
+        self._event_bus.subscribe(ResponseDoneEvent, self._on_response_done)
+        self._event_bus.subscribe(
+            InputAudioTranscriptionCompleted, self._on_transcription_completed
+        )
 
     def _setup_handlers(self) -> None:
         self._audio_handler = AudioHandler(
@@ -243,6 +252,22 @@ class RealtimeSession:
 
     async def _on_agent_stopped(self, _: AgentStoppedEvent) -> None:
         await self.stop()
+
+    async def _on_response_done(self, event: ResponseDoneEvent) -> None:
+        self._token_tracker.track_realtime_response_usage(
+            model=self._model.value,
+            usage=event.response.usage,
+        )
+
+    async def _on_transcription_completed(
+        self, event: InputAudioTranscriptionCompleted
+    ) -> None:
+        if self._transcription_model is None:
+            return
+        self._token_tracker.track_transcription_usage(
+            model=self._transcription_model.value,
+            usage=event.usage,
+        )
 
     async def stop(self) -> None:
         if self._stopped:

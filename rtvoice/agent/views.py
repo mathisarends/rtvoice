@@ -3,9 +3,10 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from rtvoice.conversation.views import ConversationTurn
+from rtvoice.token.views import TokenUsageSummary
 
 type OutputModality = Literal["text", "audio"]
 
@@ -17,30 +18,21 @@ class RealtimeModel(StrEnum):
 
 
 class AssistantVoice(StrEnum):
-    """TTS voices available for the OpenAI Realtime API.
-
-    Attributes:
-        ALLOY: Neutral and balanced; clean output suitable for general use.
-        ASH: Clear and precise; described as a male baritone with a slightly
-            scratchy yet upbeat quality. May have limited performance with accents.
-        BALLAD: Melodic and gentle; community notes suggest a male-sounding voice.
-        CORAL: Warm and friendly; good for approachable or empathetic tones.
-        ECHO: Resonant and deep; strong presence in delivery.
-        FABLE: Narrative-like and expressive; fitting for storytelling contexts.
-        ONYX: Darker, strong, and confident in tone.
-        NOVA: Bright, youthful, and energetic.
-        SAGE: Calm and thoughtful; measured pacing with a reflective quality.
-        SHIMMER: Bright and energetic; dynamic expression with high clarity.
-        VERSE: Versatile and expressive; adapts well across different contexts.
-        CEDAR: Realtime-only voice. No official description available.
-        MARIN: Realtime-only voice. No official description available.
-
-    Example:
-        ```python
-        agent = RealtimeAgent(
-            voice=AssistantVoice.CORAL,
-        )
-        ```
+    """
+    ALLOY: Neutral and balanced; clean output suitable for general use.
+    ASH: Clear and precise; described as a male baritone with a slightly
+        scratchy yet upbeat quality. May have limited performance with accents.
+    BALLAD: Melodic and gentle; community notes suggest a male-sounding voice.
+    CORAL: Warm and friendly; good for approachable or empathetic tones.
+    ECHO: Resonant and deep; strong presence in delivery.
+    FABLE: Narrative-like and expressive; fitting for storytelling contexts.
+    ONYX: Darker, strong, and confident in tone.
+    NOVA: Bright, youthful, and energetic.
+    SAGE: Calm and thoughtful; measured pacing with a reflective quality.
+    SHIMMER: Bright and energetic; dynamic expression with high clarity.
+    VERSE: Versatile and expressive; adapts well across different contexts.
+    CEDAR: Realtime-only voice. No official description available.
+    MARIN: Realtime-only voice. No official description available.
     """
 
     ALLOY = "alloy"
@@ -136,6 +128,7 @@ class AgentError:
 class AgentResult(BaseModel):
     turns: list[ConversationTurn]
     recording_path: Path | None = None
+    token_usage: TokenUsageSummary = Field(default_factory=TokenUsageSummary)
 
 
 @dataclass

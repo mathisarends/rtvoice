@@ -23,6 +23,7 @@ from rtvoice.subagent.views import (
     ProgressSignal,
     SubAgentResult,
 )
+from rtvoice.token import TokenTracker
 from rtvoice.tools import Tools
 from rtvoice.tools.di import ToolContext
 
@@ -57,6 +58,7 @@ class SubAgent[T]:
 
         self._mcp_servers = mcp_servers or []
         self._max_iterations = max_iterations
+        self._token_tracker = TokenTracker()
         self.handoff_instructions = handoff_instructions
         self.result_instructions = result_instructions
         self.holding_instruction = holding_instruction
@@ -70,6 +72,9 @@ class SubAgent[T]:
         self._register_done_tool()
         self._register_clarify_tool()
         self._register_progress_tool()
+
+    def use_token_tracker(self, token_tracker: TokenTracker) -> None:
+        self._token_tracker = token_tracker
 
     def _register_done_tool(self) -> None:
         @self._tools.action(
@@ -160,9 +165,15 @@ class SubAgent[T]:
 
         for _ in range(self._max_iterations):
             response = await self._llm.invoke(messages, tools=tool_schema)
+            self._token_tracker.track_chat_usage(
+                model=self._model_name(), usage=response.usage, source=self.name
+            )
 
             if not response.tool_calls:
-                return AgentDone(message=response.completion)
+                return AgentDone(
+                    message=response.completion,
+                    token_usage=self._token_tracker.summary(),
+                )
 
             messages.append(
                 AssistantMessage(
@@ -181,7 +192,10 @@ class SubAgent[T]:
                 match result:
                     case DoneSignal(result=msg):
                         logger.debug("Tool 'done' called with result: %s", msg)
-                        return AgentDone(message=msg)
+                        return AgentDone(
+                            message=msg,
+                            token_usage=self._token_tracker.summary(),
+                        )
                     case ClarifySignal(question=question):
                         logger.debug(
                             "Tool 'clarify' called with question: %s", question
@@ -190,6 +204,7 @@ class SubAgent[T]:
                             question=question,
                             resume_history=list(messages),
                             clarify_call_id=tool_call.id,
+                            token_usage=self._token_tracker.summary(),
                         )
                     case ProgressSignal(message=msg):
                         logger.debug("Progress update: %s", msg)
@@ -209,7 +224,14 @@ class SubAgent[T]:
                     ToolResultMessage(tool_call_id=tool_call.id, content=content)
                 )
 
-        return AgentDone(message="Max iterations reached.", success=False)
+        return AgentDone(
+            message="Max iterations reached.",
+            success=False,
+            token_usage=self._token_tracker.summary(),
+        )
+
+    def _model_name(self) -> str:
+        return str(getattr(self._llm, "_model", type(self._llm).__name__))
 
     def _build_messages(self, task: str, context: str | None) -> list[Message]:
         messages = [SystemMessage(content=self._instructions)]

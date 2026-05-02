@@ -33,6 +33,7 @@ from rtvoice.events.views import (
     UserStoppedSpeakingEvent,
     UserTranscriptCompletedEvent,
 )
+from rtvoice.subagent import SubAgent
 
 
 def make_agent(**kwargs) -> RealtimeAgent:
@@ -90,6 +91,18 @@ class TestInitDefaults:
     def test_custom_model_is_stored(self) -> None:
         agent = make_agent(model=RealtimeModel.GPT_REALTIME)
         assert agent._realtime_session._model == RealtimeModel.GPT_REALTIME
+
+    def test_subagent_uses_agent_token_tracker(self) -> None:
+        subagent = SubAgent(
+            name="planner",
+            description="Planning helper",
+            instructions="You are a planner.",
+            llm=MagicMock(),
+        )
+
+        agent = make_agent(subagents=[subagent])
+
+        assert subagent._token_tracker is agent._token_tracker
 
     def test_recording_path_is_converted_to_path_object(self, tmp_path) -> None:
         agent = make_agent(recording_path=str(tmp_path / "rec.wav"))
@@ -168,16 +181,11 @@ class TestSpeechSpeedClipping:
 
 
 class TestInitWarnings:
-    def test_inactivity_seconds_without_enabled_logs_warning(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        with caplog.at_level(logging.WARNING, logger="rtvoice.service"):
+    def test_inactivity_seconds_without_enabled_raises(self) -> None:
+        with pytest.raises(ValueError, match="inactivity_timeout_enabled"):
             make_agent(
                 inactivity_timeout_seconds=30.0, inactivity_timeout_enabled=False
             )
-        assert any(
-            "inactivity_timeout_enabled is False" in r.message for r in caplog.records
-        )
 
     def test_no_warning_when_inactivity_fully_disabled(
         self, caplog: pytest.LogCaptureFixture
@@ -239,9 +247,9 @@ class TestInactivityTimeoutFlag:
         agent = make_agent(inactivity_timeout_enabled=True)
         assert agent._realtime_session._inactivity_timeout_enabled is False
 
-    def test_disabled_when_only_seconds_is_set_without_flag(self) -> None:
-        agent = make_agent(inactivity_timeout_seconds=30.0)
-        assert agent._realtime_session._inactivity_timeout_enabled is False
+    def test_raises_when_only_seconds_is_set_without_flag(self) -> None:
+        with pytest.raises(ValueError, match="inactivity_timeout_enabled"):
+            make_agent(inactivity_timeout_seconds=30.0)
 
 
 class TestStop:

@@ -28,7 +28,7 @@ from rtvoice.handler import (
 )
 from rtvoice.listener import AgentListener, AgentListenerBridge
 from rtvoice.mcp import MCPServer
-from rtvoice.realtime.providers import OpenAIProvider, RealtimeProvider
+from rtvoice.realtime import OpenAIProvider, RealtimeProvider
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
 from rtvoice.subagent import SubAgent

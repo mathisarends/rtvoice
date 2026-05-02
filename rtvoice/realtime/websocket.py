@@ -8,7 +8,7 @@ from pydantic import BaseModel, ValidationError
 from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import ConnectionClosed
 
-from rtvoice.realtime.providers import RealtimeProvider
+from rtvoice.realtime.port import RealtimeProvider
 from rtvoice.realtime.schemas import ServerEventAdapter
 from rtvoice.views import RealtimeModel
 

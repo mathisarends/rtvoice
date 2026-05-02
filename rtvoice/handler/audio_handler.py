@@ -21,7 +21,7 @@ from rtvoice.realtime.websocket import RealtimeWebSocket
 logger = logging.getLogger(__name__)
 
 
-class AudioPlayer:
+class AudioHandler:
     def __init__(self, event_bus: EventBus, audio_session: AudioSession):
         self._event_bus = event_bus
         self._audio_session = audio_session

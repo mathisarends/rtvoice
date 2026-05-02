@@ -2,19 +2,19 @@ import json
 import logging
 
 from rtvoice.events import EventBus
-from rtvoice.realtime.schemas import FunctionCallItem
-from rtvoice.realtime.websocket import RealtimeWebSocket
-from rtvoice.tools import Tools
-from rtvoice.watchdogs.tool_calling.helpers import (
+from rtvoice.handler.tool_call_helpers import (
     send_function_call_output,
     send_response_event,
     serialize_tool_result,
 )
+from rtvoice.realtime.schemas import FunctionCallItem
+from rtvoice.realtime.websocket import RealtimeWebSocket
+from rtvoice.tools import Tools
 
 logger = logging.getLogger(__name__)
 
 
-class ToolCallingWatchdog:
+class ToolCallHandler:
     def __init__(
         self,
         event_bus: EventBus,
@@ -27,7 +27,7 @@ class ToolCallingWatchdog:
         self._subagent_tool_names: set[str] = subagent_tool_names or set()
 
         event_bus.subscribe(FunctionCallItem, self._handle_tool_call)
-        logger.debug("ToolCallingWatchdog initialized")
+        logger.debug("ToolCallHandler initialized")
 
     async def _handle_tool_call(self, event: FunctionCallItem) -> None:
         if self._is_subagent_tool(event.name):

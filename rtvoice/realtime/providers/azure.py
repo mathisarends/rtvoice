@@ -1,36 +1,9 @@
 import os
 
-from rtvoice.realtime.providers.base import RealtimeProvider
+from rtvoice.realtime.port import RealtimeProvider
 
 
 class AzureOpenAIProvider(RealtimeProvider):
-    """Realtime provider for Azure OpenAI.
-
-    Constructs the Azure-specific WebSocket endpoint and authenticates
-    using an ``api-key`` header instead of a Bearer token.
-
-    All constructor arguments fall back to environment variables when omitted:
-
-    | Argument     | Environment variable         |
-    |--------------|------------------------------|
-    | `resource`   | ``AZURE_OPENAI_RESOURCE``    |
-    | `deployment` | ``AZURE_OPENAI_DEPLOYMENT``  |
-    | `api_key`    | ``AZURE_OPENAI_API_KEY``     |
-
-    Example:
-        ```python
-        from rtvoice import RealtimeAgent, AzureOpenAIProvider
-
-        agent = RealtimeAgent(
-            instructions="You are a helpful assistant.",
-            provider=AzureOpenAIProvider(
-                resource="my-resource",
-                deployment="gpt-4o-realtime-preview",
-            ),
-        )
-        ```
-    """
-
     _DEFAULT_API_VERSION = "2025-04-01-preview"
 
     def __init__(

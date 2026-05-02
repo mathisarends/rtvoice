@@ -1,5 +1,1 @@
-from .watchdog import ToolCallingWatchdog
-
-__all__ = [
-    "ToolCallingWatchdog",
-]
+__all__: list[str] = []

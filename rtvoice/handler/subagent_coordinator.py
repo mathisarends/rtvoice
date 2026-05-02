@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from dataclasses import dataclass
 
 from rtvoice.events import EventBus
 from rtvoice.events.views import (
@@ -8,6 +9,11 @@ from rtvoice.events.views import (
     SubAgentFinishedEvent,
     SubAgentStartedEvent,
     UpdateSessionToolsCommand,
+)
+from rtvoice.handler.tool_call_helpers import (
+    send_function_call_output,
+    send_response_event,
+    serialize_tool_result,
 )
 from rtvoice.realtime.schemas import (
     ConversationResponseCreateEvent,
@@ -19,12 +25,6 @@ from rtvoice.subagent import SubAgent
 from rtvoice.subagent.views import AgentClarificationNeeded
 from rtvoice.tools import Inject, Tools
 from rtvoice.tools.views import Tool
-from rtvoice.watchdogs.subagent.views import PendingSubAgentCall
-from rtvoice.watchdogs.tool_calling.helpers import (
-    send_function_call_output,
-    send_response_event,
-    serialize_tool_result,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -32,13 +32,21 @@ _DEFAULT_HOLDING_INSTRUCTION = (
     "The user's request is being processed in the background. "
     "Say ONE very short, generic sentence (e.g. 'On it!', 'Give me a moment!', 'Sure, let me handle that!'). "
     "Do NOT mention what the task is. "
-    "Do NOT state or imply whether it succeeded or failed — you don't know yet. "
+    "Do NOT state or imply whether it succeeded or failed - you don't know yet. "
     "Do NOT paraphrase the task. "
     "Always respond in the same language the user is speaking."
 )
 
 
-class SubAgentInteractionWatchdog:
+@dataclass
+class PendingSubAgentCall:
+    call_id: str
+    subagent_name: str
+    execution_task: asyncio.Task
+    handoff_tool: Tool
+
+
+class SubAgentCoordinator:
     def __init__(
         self,
         event_bus: EventBus,
@@ -102,7 +110,7 @@ class SubAgentInteractionWatchdog:
             and event.name != self._awaiting_clarification_for
         ):
             logger.warning(
-                "Subagent '%s' called while waiting for clarification answer for '%s' — rejecting.",
+                "Subagent '%s' called while waiting for clarification answer for '%s' - rejecting.",
                 event.name,
                 self._awaiting_clarification_for,
             )

@@ -19,7 +19,7 @@ from rtvoice.realtime.schemas import (
 logger = logging.getLogger(__name__)
 
 
-class TranscriptionWatchdog:
+class TranscriptionAccumulator:
     def __init__(self, event_bus: EventBus):
         self._event_bus = event_bus
 

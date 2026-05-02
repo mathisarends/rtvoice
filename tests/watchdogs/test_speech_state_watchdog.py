@@ -8,6 +8,7 @@ from rtvoice.events.views import (
     UserStartedSpeakingEvent,
     UserStoppedSpeakingEvent,
 )
+from rtvoice.handler import SpeechStateTracker
 from rtvoice.realtime.schemas import (
     InputAudioBufferSpeechStartedEvent,
     InputAudioBufferSpeechStoppedEvent,
@@ -15,7 +16,6 @@ from rtvoice.realtime.schemas import (
     RealtimeServerEvent,
     ResponseCreatedEvent,
 )
-from rtvoice.watchdogs import SpeechStateWatchdog
 
 
 @pytest.fixture
@@ -24,8 +24,8 @@ def event_bus() -> EventBus:
 
 
 @pytest.fixture
-def watchdog(event_bus: EventBus) -> SpeechStateWatchdog:
-    return SpeechStateWatchdog(event_bus)
+def watchdog(event_bus: EventBus) -> SpeechStateTracker:
+    return SpeechStateTracker(event_bus)
 
 
 def make_speech_started() -> InputAudioBufferSpeechStartedEvent:
@@ -55,7 +55,7 @@ def make_response_created(response_id: str = "resp_001") -> ResponseCreatedEvent
 class TestUserSpeech:
     @pytest.mark.asyncio
     async def test_speech_started_dispatches_user_started_speaking(
-        self, event_bus: EventBus, watchdog: SpeechStateWatchdog
+        self, event_bus: EventBus, watchdog: SpeechStateTracker
     ) -> None:
         received: list[UserStartedSpeakingEvent] = []
 
@@ -69,7 +69,7 @@ class TestUserSpeech:
 
     @pytest.mark.asyncio
     async def test_speech_stopped_dispatches_user_stopped_speaking(
-        self, event_bus: EventBus, watchdog: SpeechStateWatchdog
+        self, event_bus: EventBus, watchdog: SpeechStateTracker
     ) -> None:
         received: list[UserStoppedSpeakingEvent] = []
 
@@ -85,7 +85,7 @@ class TestUserSpeech:
 class TestAssistantSpeech:
     @pytest.mark.asyncio
     async def test_response_created_dispatches_assistant_started_responding(
-        self, event_bus: EventBus, watchdog: SpeechStateWatchdog
+        self, event_bus: EventBus, watchdog: SpeechStateTracker
     ) -> None:
         received: list[AssistantStartedRespondingEvent] = []
 
@@ -99,7 +99,7 @@ class TestAssistantSpeech:
 
     @pytest.mark.asyncio
     async def test_playback_completed_dispatches_assistant_stopped_responding(
-        self, event_bus: EventBus, watchdog: SpeechStateWatchdog
+        self, event_bus: EventBus, watchdog: SpeechStateTracker
     ) -> None:
         received: list[AssistantStoppedRespondingEvent] = []
 
@@ -113,7 +113,7 @@ class TestAssistantSpeech:
 
     @pytest.mark.asyncio
     async def test_multiple_responses_dispatch_multiple_started_events(
-        self, event_bus: EventBus, watchdog: SpeechStateWatchdog
+        self, event_bus: EventBus, watchdog: SpeechStateTracker
     ) -> None:
         received: list[AssistantStartedRespondingEvent] = []
 

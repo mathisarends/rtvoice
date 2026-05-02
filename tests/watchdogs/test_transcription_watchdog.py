@@ -6,6 +6,7 @@ from rtvoice.events.views import (
     AssistantTranscriptDeltaEvent,
     UserTranscriptCompletedEvent,
 )
+from rtvoice.handler import TranscriptionAccumulator
 from rtvoice.realtime.schemas import (
     InputAudioTranscriptionCompleted,
     RealtimeServerEvent,
@@ -14,7 +15,6 @@ from rtvoice.realtime.schemas import (
     ResponseOutputTextDone,
     ResponseTextDelta,
 )
-from rtvoice.watchdogs import TranscriptionWatchdog
 
 
 @pytest.fixture
@@ -23,14 +23,14 @@ def event_bus() -> EventBus:
 
 
 @pytest.fixture
-def watchdog(event_bus: EventBus) -> TranscriptionWatchdog:
-    return TranscriptionWatchdog(event_bus)
+def watchdog(event_bus: EventBus) -> TranscriptionAccumulator:
+    return TranscriptionAccumulator(event_bus)
 
 
 class TestUserTranscription:
     @pytest.mark.asyncio
     async def test_transcription_completed_dispatches_user_transcript_event(
-        self, event_bus: EventBus, watchdog: TranscriptionWatchdog
+        self, event_bus: EventBus, watchdog: TranscriptionAccumulator
     ) -> None:
         received: list[UserTranscriptCompletedEvent] = []
 
@@ -54,7 +54,7 @@ class TestUserTranscription:
 
     @pytest.mark.asyncio
     async def test_user_transcript_carries_item_id(
-        self, event_bus: EventBus, watchdog: TranscriptionWatchdog
+        self, event_bus: EventBus, watchdog: TranscriptionAccumulator
     ) -> None:
         received: list[UserTranscriptCompletedEvent] = []
 
@@ -78,7 +78,7 @@ class TestUserTranscription:
 class TestAssistantTranscription:
     @pytest.mark.asyncio
     async def test_transcript_done_dispatches_assistant_transcript_event(
-        self, event_bus: EventBus, watchdog: TranscriptionWatchdog
+        self, event_bus: EventBus, watchdog: TranscriptionAccumulator
     ) -> None:
         received: list[AssistantTranscriptCompletedEvent] = []
 
@@ -106,7 +106,7 @@ class TestAssistantTranscription:
 
     @pytest.mark.asyncio
     async def test_assistant_transcript_carries_output_and_content_index(
-        self, event_bus: EventBus, watchdog: TranscriptionWatchdog
+        self, event_bus: EventBus, watchdog: TranscriptionAccumulator
     ) -> None:
         received: list[AssistantTranscriptCompletedEvent] = []
 
@@ -131,7 +131,7 @@ class TestAssistantTranscription:
 
     @pytest.mark.asyncio
     async def test_text_delta_dispatches_assistant_delta_event(
-        self, event_bus: EventBus, watchdog: TranscriptionWatchdog
+        self, event_bus: EventBus, watchdog: TranscriptionAccumulator
     ) -> None:
         received: list[AssistantTranscriptDeltaEvent] = []
 
@@ -157,7 +157,7 @@ class TestAssistantTranscription:
 
     @pytest.mark.asyncio
     async def test_text_done_dispatches_assistant_completed_event(
-        self, event_bus: EventBus, watchdog: TranscriptionWatchdog
+        self, event_bus: EventBus, watchdog: TranscriptionAccumulator
     ) -> None:
         received: list[AssistantTranscriptCompletedEvent] = []
 
@@ -182,7 +182,7 @@ class TestAssistantTranscription:
 
     @pytest.mark.asyncio
     async def test_response_text_delta_dispatches_assistant_delta_event(
-        self, event_bus: EventBus, watchdog: TranscriptionWatchdog
+        self, event_bus: EventBus, watchdog: TranscriptionAccumulator
     ) -> None:
         received: list[AssistantTranscriptDeltaEvent] = []
 

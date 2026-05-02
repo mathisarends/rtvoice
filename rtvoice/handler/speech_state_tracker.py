@@ -17,7 +17,7 @@ from rtvoice.realtime.schemas import (
 logger = logging.getLogger(__name__)
 
 
-class SpeechStateWatchdog:
+class SpeechStateTracker:
     def __init__(self, event_bus: EventBus):
         self._event_bus = event_bus
 

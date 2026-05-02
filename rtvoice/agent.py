@@ -17,7 +17,15 @@ from rtvoice.events.views import (
     UpdateSpeechSpeedCommand,
     UserInactivityTimeoutEvent,
 )
-from rtvoice.handler import AudioForwarder, AudioPlayer, AudioRecorder
+from rtvoice.handler import (
+    AudioForwarder,
+    AudioHandler,
+    AudioRecorder,
+    SpeechStateTracker,
+    SubAgentCoordinator,
+    ToolCallHandler,
+    TranscriptionAccumulator,
+)
 from rtvoice.listener import AgentListener, AgentListenerBridge
 from rtvoice.mcp import MCPServer
 from rtvoice.realtime.providers import OpenAIProvider, RealtimeProvider
@@ -42,10 +50,6 @@ from rtvoice.watchdogs import (
     InterruptionWatchdog,
     LifecycleWatchdog,
     SessionWatchdog,
-    SpeechStateWatchdog,
-    SubAgentInteractionWatchdog,
-    ToolCallingWatchdog,
-    TranscriptionWatchdog,
     UserInactivityTimeoutWatchdog,
 )
 
@@ -270,7 +274,7 @@ class RealtimeAgent[T]:
         )
 
     def _setup_watchdogs(self, audio_session: AudioSession) -> None:
-        self._audio_player = AudioPlayer(
+        self._audio_handler = AudioHandler(
             event_bus=self._event_bus,
             audio_session=audio_session,
         )
@@ -289,26 +293,26 @@ class RealtimeAgent[T]:
             audio_session=audio_session,
         )
         if self._transcription_enabled or self._assistant_text_enabled:
-            self._transcription_watchdog = TranscriptionWatchdog(
+            self._transcription_accumulator = TranscriptionAccumulator(
                 event_bus=self._event_bus
             )
 
-        self._tool_calling_watchdog = ToolCallingWatchdog(
+        self._tool_call_handler = ToolCallHandler(
             event_bus=self._event_bus,
             tools=self._tools,
             websocket=self._websocket,
             subagent_tool_names={s.name for s in self._subagents} or None,
         )
         if self._subagents:
-            self._subagent_watchdog = SubAgentInteractionWatchdog(
+            self._subagent_coordinator = SubAgentCoordinator(
                 event_bus=self._event_bus,
                 tools=self._tools,
                 websocket=self._websocket,
             )
             for subagent in self._subagents:
-                self._subagent_watchdog.register_subagent(subagent.name, subagent)
+                self._subagent_coordinator.register_subagent(subagent.name, subagent)
         self._error_watchdog = ErrorWatchdog(event_bus=self._event_bus)
-        self._speech_state_watchdog = SpeechStateWatchdog(event_bus=self._event_bus)
+        self._speech_state_tracker = SpeechStateTracker(event_bus=self._event_bus)
 
         if self._should_enable_inactivity_timeout:
             self._user_inactivity_timeout_watchdog = UserInactivityTimeoutWatchdog(

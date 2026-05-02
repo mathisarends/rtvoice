@@ -1,7 +1,6 @@
-from .microphone import MicrophoneInput
+from .impl import MicrophoneInput, SpeakerOutput
 from .ports import AudioInputDevice, AudioOutputDevice
 from .session import AudioSession
-from .speaker import SpeakerOutput
 
 __all__ = [
     "AudioInputDevice",

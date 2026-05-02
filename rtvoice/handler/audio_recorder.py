@@ -2,7 +2,7 @@ import base64
 import logging
 from pathlib import Path
 
-from rtvoice.audio.conversation_audio_mixer import ConversationAudioMixer
+from rtvoice.audio.audio_mixer import ConversationAudioMixer
 from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentStoppedEvent,

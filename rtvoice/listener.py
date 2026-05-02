@@ -19,116 +19,62 @@ from rtvoice.events.views import (
 )
 from rtvoice.views import AgentError
 
-logger = logging.getLogger("rtvoice.service")
+logger = logging.getLogger(__name__)
 
 
 class AgentListener:
-    """Callback interface for `RealtimeAgent` session lifecycle events.
+    """Callback interface for `RealtimeAgent` lifecycle events.
 
-    Subclass this and pass an instance to `RealtimeAgent` via the `listener`
-    parameter to react to speaking state changes, transcripts, errors, and
-    session boundaries.
-
-    All methods are async no-ops by default — override only the ones you need.
+    Subclass and pass to `RealtimeAgent` via the `listener` parameter.
+    All methods are async no-ops by default — override only what you need.
 
     Example:
-        ```python
-        class MyListener(AgentListener):
-            async def on_user_transcript(self, transcript: str) -> None:
-                print(f"User: {transcript}")
-
-            async def on_assistant_transcript(self, transcript: str) -> None:
-                print(f"Assistant: {transcript}")
-
-
-        agent = RealtimeAgent(listener=MyListener())
-        ```
     """
 
     async def on_agent_starting(self) -> None:
-        """Called immediately when run() is invoked, before any I/O or WebSocket setup.
-
-        Use this to show loading states in the UI before the session is ready.
-        """
+        """Before any I/O or WebSocket setup — use for loading states."""
 
     async def on_agent_session_connected(self) -> None:
-        """Called once the WebSocket session has been established and is ready."""
+        """WebSocket session established and ready."""
 
     async def on_agent_stopped(self) -> None:
-        """Called after the agent has fully shut down and `run()` is about to return."""
+        """Agent fully shut down, `run()` is about to return."""
 
     async def on_user_inactivity_countdown(self, remaining_seconds: int) -> None:
-        """Called each second during the countdown before the inactivity timeout fires.
-
-        Fires at remaining_seconds = 5, 4, 3, 2, 1.
-
-        Args:
-            remaining_seconds: Seconds remaining until the session is stopped.
-        """
+        """Fires each second (5→1) before the inactivity timeout triggers."""
 
     async def on_agent_interrupted(self) -> None:
-        """Called when the assistant's response is interrupted by the user speaking."""
+        """Assistant response interrupted by the user speaking."""
 
     async def on_agent_error(self, error: AgentError) -> None:
-        """Called when the agent or the Realtime API encounters an error.
-
-        Args:
-            error: Structured error information including type, message, and
-                optional code and parameter.
-        """
+        """Agent or Realtime API encountered an error."""
 
     async def on_user_transcript(self, transcript: str) -> None:
-        """Called when the user's speech has been fully transcribed.
-
-        Only fires if a `transcription_model` is configured on the agent.
-
-        Args:
-            transcript: The finalised transcript text for the current user turn.
-        """
+        """Finalised user transcript. Requires `transcription_model` to be set."""
 
     async def on_assistant_transcript(self, transcript: str) -> None:
-        """Called when the assistant has finished generating a response and its
-        transcript is complete.
-
-        Args:
-            transcript: The full transcript of the assistant's response.
-        """
+        """Full transcript of the assistant's completed response."""
 
     async def on_assistant_transcript_delta(self, delta: str) -> None:
-        """Called when a partial assistant text delta is streamed.
-
-        This is emitted for text output events such as `response.text.delta`
-        and `response.output_text.delta`.
-
-        Args:
-            delta: Incremental transcript text chunk.
-        """
+        """Incremental assistant text chunk as it streams."""
 
     async def on_user_started_speaking(self) -> None:
-        """Called when VAD detects that the user has started speaking."""
+        """VAD detected user speech start."""
 
     async def on_user_stopped_speaking(self) -> None:
-        """Called when VAD detects that the user has stopped speaking."""
+        """VAD detected user speech end."""
 
     async def on_assistant_started_responding(self) -> None:
-        """Called when the assistant begins streaming an audio response."""
+        """Assistant began streaming an audio response."""
 
     async def on_assistant_stopped_responding(self) -> None:
-        """Called when the assistant has finished streaming its audio response."""
+        """Assistant finished streaming its audio response."""
 
     async def on_subagent_started(self, agent_name: str) -> None:
-        """Called when a subagent starts running.
-
-        Args:
-            agent_name: Name of the started subagent.
-        """
+        """Subagent `agent_name` started running."""
 
     async def on_subagent_finished(self, agent_name: str) -> None:
-        """Called when a subagent finishes running.
-
-        Args:
-            agent_name: Name of the finished subagent.
-        """
+        """Subagent `agent_name` finished running."""
 
 
 class AgentListenerBridge:

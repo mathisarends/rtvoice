@@ -38,7 +38,7 @@ from rtvoice.events.views import (
 def make_agent(**kwargs) -> RealtimeAgent:
     audio_input = MagicMock()
     audio_output = MagicMock()
-    with patch("rtvoice.agent.OpenAIProvider"):
+    with patch("rtvoice.agent.agent.OpenAIProvider"):
         return RealtimeAgent(
             audio_input=audio_input,
             audio_output=audio_output,
@@ -128,7 +128,7 @@ class TestInitDefaults:
     def test_override_system_prompt_replaces_default_prompt(self) -> None:
         agent = make_agent(
             extends_system_prompt="Should be ignored.",
-            override_syste_Mpromt="Custom override prompt.",
+            override_system_promt="Custom override prompt.",
         )
         assert agent._realtime_session._instructions == "Custom override prompt."
 

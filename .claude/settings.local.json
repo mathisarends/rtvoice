@@ -11,7 +11,8 @@
       "Bash(cat backend/pyproject.toml)",
       "Bash(cat backend/requirements.txt)",
       "Bash(cat backend/setup.py)",
-      "Bash(uv sync *)"
+      "Bash(uv sync *)",
+      "Bash(uv run *)"
     ]
   }
 }

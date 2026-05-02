@@ -5,6 +5,7 @@ import logging
 import re
 from collections.abc import Callable
 from typing import (
+    TYPE_CHECKING,
     Annotated,
     Any,
     Self,
@@ -15,7 +16,9 @@ from typing import (
 
 from pydantic import BaseModel
 
-from rtvoice.mcp.server import MCPServer
+if TYPE_CHECKING:
+    from rtvoice.mcp.server import MCPServer
+
 from rtvoice.realtime.schemas import FunctionTool
 from rtvoice.tools.di import ToolContext, _Inject
 from rtvoice.tools.schema_builder import ToolSchemaBuilder

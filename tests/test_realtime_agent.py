@@ -38,10 +38,7 @@ AgentErrorEvent.model_rebuild(_types_namespace={"AgentError": AgentError})
 def make_agent(**kwargs) -> RealtimeAgent:
     audio_input = MagicMock()
     audio_output = MagicMock()
-    with (
-        patch("rtvoice.agent.RealtimeWebSocket"),
-        patch("rtvoice.agent.OpenAIProvider"),
-    ):
+    with patch("rtvoice.agent.OpenAIProvider"):
         return RealtimeAgent(
             audio_input=audio_input,
             audio_output=audio_output,
@@ -52,76 +49,80 @@ def make_agent(**kwargs) -> RealtimeAgent:
 class TestInitDefaults:
     def test_default_model_is_mini(self) -> None:
         agent = make_agent()
-        assert agent._model == RealtimeModel.GPT_REALTIME_MINI
+        assert agent._realtime_session._model == RealtimeModel.GPT_REALTIME_MINI
 
     def test_default_voice_is_marin(self) -> None:
         agent = make_agent()
-        assert agent._voice == AssistantVoice.MARIN
+        assert agent._realtime_session._voice == AssistantVoice.MARIN
 
     def test_default_noise_reduction_is_far_field(self) -> None:
         agent = make_agent()
-        assert agent._noise_reduction == NoiseReduction.FAR_FIELD
+        assert agent._realtime_session._noise_reduction == NoiseReduction.FAR_FIELD
 
     def test_default_turn_detection_is_semantic_vad(self) -> None:
         agent = make_agent()
-        assert isinstance(agent._turn_detection, SemanticVAD)
+        assert isinstance(agent._realtime_session._turn_detection, SemanticVAD)
 
     def test_default_transcription_model_is_whisper(self) -> None:
         agent = make_agent()
-        assert agent._transcription_model == TranscriptionModel.WHISPER_1
+        assert (
+            agent._realtime_session._transcription_model == TranscriptionModel.WHISPER_1
+        )
 
     def test_default_inactivity_timeout_disabled(self) -> None:
         agent = make_agent()
-        assert agent._should_enable_inactivity_timeout is False
+        assert agent._realtime_session._inactivity_timeout_enabled is False
 
     def test_custom_turn_detection_is_stored(self) -> None:
         vad = ServerVAD(silence_duration_ms=800)
         agent = make_agent(turn_detection=vad)
-        assert agent._turn_detection == vad
+        assert agent._realtime_session._turn_detection == vad
 
     def test_custom_model_is_stored(self) -> None:
         agent = make_agent(model=RealtimeModel.GPT_REALTIME)
-        assert agent._model == RealtimeModel.GPT_REALTIME
+        assert agent._realtime_session._model == RealtimeModel.GPT_REALTIME
 
     def test_recording_path_is_converted_to_path_object(self, tmp_path) -> None:
         agent = make_agent(recording_path=str(tmp_path / "rec.wav"))
         from pathlib import Path
 
-        assert agent._recording_path == Path(tmp_path / "rec.wav")
+        assert agent._realtime_session._recording_path == Path(tmp_path / "rec.wav")
 
     def test_recording_path_none_when_not_provided(self) -> None:
         agent = make_agent()
-        assert agent._recording_path is None
+        assert agent._realtime_session._recording_path is None
 
     def test_stop_not_called_initially(self) -> None:
         agent = make_agent()
         assert agent._stop_called is False
 
-    def test_text_output_mode_enables_transcription_watchdog_without_stt(self) -> None:
+    def test_text_output_mode_does_not_require_transcription_watchdog_field(
+        self,
+    ) -> None:
         agent = make_agent(transcription_model=None, output_modalities=["text"])
-        assert hasattr(agent, "_transcription_watchdog")
+        assert not hasattr(agent, "_transcription_watchdog")
 
 
 class TestSpeechSpeedClipping:
     def test_value_within_range_is_unchanged(self) -> None:
         agent = make_agent(speech_speed=1.0)
-        assert agent._speech_speed == 1.0
+        assert agent._realtime_session._speech_speed == 1.0
 
     def test_speech_speed_below_minimum_is_clipped_to_minimum(self) -> None:
         agent = make_agent(speech_speed=0.1)
-        assert agent._speech_speed == 0.25
+        assert agent._realtime_session._speech_speed == 0.25
 
     def test_value_above_maximum_is_clipped_to_one_point_five(self) -> None:
         agent = make_agent(speech_speed=2.0)
-        assert agent._speech_speed == 1.5
+        assert agent._realtime_session._speech_speed == 1.5
 
     def test_exact_minimum_is_not_clipped(self) -> None:
         agent = make_agent(speech_speed=0.5)
-        assert agent._speech_speed == 0.5
+        assert agent._realtime_session._speech_speed == 0.5
 
     def test_exact_maximum_is_not_clipped(self) -> None:
         agent = make_agent(speech_speed=1.5)
-        assert agent._speech_speed == 1.5
+        assert agent._realtime_session._speech_speed == 1.5
 
     def test_out_of_range_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.WARNING, logger="rtvoice.service"):
@@ -165,7 +166,9 @@ class TestInitWarnings:
         supervisor.result_instructions = None
         supervisor.holding_instruction = None
         agent = make_agent(transcription_model=None, subagents=[supervisor])
-        assert agent._transcription_model == TranscriptionModel.WHISPER_1
+        assert (
+            agent._realtime_session._transcription_model == TranscriptionModel.WHISPER_1
+        )
 
     def test_transcription_none_with_supervisor_logs_warning(
         self, caplog: pytest.LogCaptureFixture
@@ -200,15 +203,15 @@ class TestInactivityTimeoutFlag:
         agent = make_agent(
             inactivity_timeout_seconds=30.0, inactivity_timeout_enabled=True
         )
-        assert agent._should_enable_inactivity_timeout is True
+        assert agent._realtime_session._inactivity_timeout_enabled is True
 
     def test_disabled_when_only_flag_is_set_without_seconds(self) -> None:
         agent = make_agent(inactivity_timeout_enabled=True)
-        assert agent._should_enable_inactivity_timeout is False
+        assert agent._realtime_session._inactivity_timeout_enabled is False
 
     def test_disabled_when_only_seconds_is_set_without_flag(self) -> None:
         agent = make_agent(inactivity_timeout_seconds=30.0)
-        assert agent._should_enable_inactivity_timeout is False
+        assert agent._realtime_session._inactivity_timeout_enabled is False
 
 
 class TestStop:

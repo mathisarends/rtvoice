@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from rtvoice.llm import (
     AssistantMessage,
@@ -11,7 +13,6 @@ from rtvoice.llm import (
     ToolResultMessage,
     UserMessage,
 )
-from rtvoice.mcp import MCPServer
 from rtvoice.shared.decorators import timed
 from rtvoice.subagent.views import (
     AgentClarificationNeeded,
@@ -25,33 +26,13 @@ from rtvoice.subagent.views import (
 from rtvoice.tools import Tools
 from rtvoice.tools.di import ToolContext
 
+if TYPE_CHECKING:
+    from rtvoice.mcp import MCPServer
+
 logger = logging.getLogger(__name__)
 
 
 class SubAgent[T]:
-    """Agentic sub-agent that can be delegated tasks from a `RealtimeAgent`.
-
-    Runs an LLM-driven tool-calling loop to complete a given task, with built-in
-    support for clarification questions, MCP server integration, and handoff
-    from a parent voice agent.
-
-    The agent exposes two special tools to the LLM automatically:
-
-    - **done** — signals task completion and returns the final result.
-    - **clarify** — asks the user a question and blocks until they answer.
-    - **report_progress** — sends an intermediate status update to the user without interrupting the loop.
-
-    ```python
-    agent = SubAgent(
-        name="calendar_agent",
-        description="Manages the user's calendar.",
-        instructions="You are a calendar assistant ...",
-        llm=OpenAIChat(model="gpt-4o"),
-    )
-    result = await agent.run("Schedule a meeting with Alice tomorrow at 3pm.")
-    ```
-    """
-
     def __init__(
         self,
         name: str,
@@ -103,7 +84,7 @@ class SubAgent[T]:
     def _register_clarify_tool(self) -> None:
         @self._tools.action(
             "Ask the user a clarifying question when essential information is missing. "
-            "Use sparingly - only when you cannot proceed without the answer. "
+            "Use sparingly – only when you cannot proceed without the answer. "
             "Calling this tool immediately returns control to the user; "
             "you will be called again once they answer."
         )
@@ -115,7 +96,7 @@ class SubAgent[T]:
     def _register_progress_tool(self) -> None:
         @self._tools.action(
             "Report an intermediate progress update to the user while working on a long-running task. "
-            "Use this to keep the user informed without blocking - the loop continues immediately after."
+            "Use this to keep the user informed without blocking \u2014 the loop continues immediately after."
         )
         def report_progress(
             message: Annotated[str, "A short status update for the user."],
@@ -123,9 +104,7 @@ class SubAgent[T]:
             return ProgressSignal(message)
 
     @timed()
-    async def prewarm(
-        self,
-    ) -> None:
+    async def prewarm(self) -> None:
         if not self._mcp_ready.is_set():
             await self._connect_mcp_servers()
 
@@ -159,7 +138,6 @@ class SubAgent[T]:
         context: str | None = None,
         on_progress: ProgressCallback | None = None,
     ) -> SubAgentResult:
-        """Start a fresh tool-calling loop for the given task."""
         self._on_progress = on_progress or self.on_progress
         await self.prewarm()
         messages = self._build_messages(task=task, context=context)
@@ -173,7 +151,6 @@ class SubAgent[T]:
         clarify_call_id: str,
         on_progress: ProgressCallback | None = None,
     ) -> SubAgentResult:
-        """Resume a previously interrupted run after the user answered a clarification question."""
         self._on_progress = on_progress or self.on_progress
         messages = list(resume_history)
         messages.append(

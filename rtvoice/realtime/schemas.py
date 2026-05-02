@@ -195,7 +195,7 @@ class SemanticVADConfig(BaseModel):
     interrupt_response: bool = True
 
 
-TurnDetectionConfig = ServerVADConfig | SemanticVADConfig
+type TurnDetectionConfig = ServerVADConfig | SemanticVADConfig
 
 
 class InputAudioTranscriptionConfig(BaseModel):

@@ -13,23 +13,11 @@ from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentStartingEvent,
     AgentStoppedEvent,
-    StartAgentCommand,
-    UpdateSpeechSpeedCommand,
     UserInactivityTimeoutEvent,
-)
-from rtvoice.handler import (
-    AudioForwarder,
-    AudioHandler,
-    AudioRecorder,
-    SpeechStateTracker,
-    SubAgentCoordinator,
-    ToolCallHandler,
-    TranscriptionAccumulator,
 )
 from rtvoice.listener import AgentListener, AgentListenerBridge
 from rtvoice.mcp import MCPServer
-from rtvoice.realtime import OpenAIProvider, RealtimeProvider
-from rtvoice.realtime.websocket import RealtimeWebSocket
+from rtvoice.realtime import OpenAIProvider, RealtimeProvider, RealtimeSession
 from rtvoice.shared.decorators import timed
 from rtvoice.subagent import SubAgent
 from rtvoice.subagent.views import AgentClarificationNeeded, SubAgentResult
@@ -44,13 +32,6 @@ from rtvoice.views import (
     SemanticVAD,
     TranscriptionModel,
     TurnDetection,
-)
-from rtvoice.watchdogs import (
-    ErrorWatchdog,
-    InterruptionWatchdog,
-    LifecycleWatchdog,
-    SessionWatchdog,
-    UserInactivityTimeoutWatchdog,
 )
 
 logger = logging.getLogger(__name__)
@@ -94,10 +75,7 @@ class RealtimeAgent[T]:
         if api_key and provider:
             raise ValueError("Pass either `provider` or `api_key`, not both.")
 
-        self._instructions = instructions
-        self._model = model
-        self._voice = voice
-        self._speech_speed = self._clip_speech_speed(speech_speed)
+        clipped_speech_speed = self._clip_speech_speed(speech_speed)
 
         if transcription_model is None and self._subagents:
             logger.warning(
@@ -107,12 +85,11 @@ class RealtimeAgent[T]:
             )
             transcription_model = TranscriptionModel.WHISPER_1
 
-        self._transcription_model = transcription_model
-        self._transcription_enabled = transcription_model is not None
-        self._output_modalities = self._normalize_output_modalities(output_modalities)
-        self._assistant_text_enabled = "text" in self._output_modalities
-        self._noise_reduction = noise_reduction
-        self._turn_detection: TurnDetection = turn_detection or SemanticVAD()
+        normalized_output_modalities = self._normalize_output_modalities(
+            output_modalities
+        )
+        assistant_text_enabled = "text" in normalized_output_modalities
+        effective_turn_detection: TurnDetection = turn_detection or SemanticVAD()
         self._mcp_servers = mcp_servers or []
 
         if inactivity_timeout_seconds is not None and not inactivity_timeout_enabled:
@@ -121,15 +98,13 @@ class RealtimeAgent[T]:
                 "The timeout will not be active."
             )
 
-        self._should_enable_inactivity_timeout = (
+        should_enable_inactivity_timeout = (
             inactivity_timeout_enabled and inactivity_timeout_seconds is not None
         )
 
         self._listener = listener
-        self._inactivity_timeout_seconds = inactivity_timeout_seconds
-        self._inactivity_timeout_enabled = inactivity_timeout_enabled
         self._context = context
-        self._recording_path = Path(recording_path) if recording_path else None
+        recording_path_obj = Path(recording_path) if recording_path else None
 
         self._stopped = asyncio.Event()
         self._stop_called = False
@@ -152,27 +127,43 @@ class RealtimeAgent[T]:
         for subagent in self._subagents:
             self._register_subagent(subagent)
 
-        self._websocket = RealtimeWebSocket(
-            model=self._model,
+        audio_session = AudioSession(
+            input_device=audio_input or self._create_default_input(),
+            output_device=audio_output or self._create_default_output(),
+        )
+
+        self._realtime_session = RealtimeSession(
+            event_bus=self._event_bus,
+            model=model,
+            instructions=instructions,
+            voice=voice,
+            speech_speed=clipped_speech_speed,
+            transcription_model=transcription_model,
+            output_modalities=normalized_output_modalities,
+            noise_reduction=noise_reduction,
+            turn_detection=effective_turn_detection,
+            tools=self._tools,
+            audio_session=audio_session,
+            subagents=self._subagents,
+            inactivity_timeout_enabled=should_enable_inactivity_timeout,
+            inactivity_timeout_seconds=inactivity_timeout_seconds,
+            recording_path=recording_path_obj,
             provider=provider or OpenAIProvider(api_key=api_key),
         )
 
-        audio_session = AudioSession(
-            input_device=audio_input or self._default_audio_input(),
-            output_device=audio_output or self._default_audio_output(),
+        self._setup_shutdown_handlers()
+        self._listener_bridge: AgentListenerBridge | None = None
+        self._setup_listener(
+            inactivity_timeout_enabled=should_enable_inactivity_timeout,
+            assistant_text_enabled=assistant_text_enabled,
         )
 
-        self._setup_shutdown_handlers()
-        self._setup_watchdogs(audio_session)
-        self._listener_bridge: AgentListenerBridge | None = None
-        self._setup_listener()
-
-    def _default_audio_input(self) -> AudioInputDevice:
+    def _create_default_input(self) -> AudioInputDevice:
         from rtvoice.audio import MicrophoneInput
 
         return MicrophoneInput()
 
-    def _default_audio_output(self) -> AudioOutputDevice:
+    def _create_default_output(self) -> AudioOutputDevice:
         from rtvoice.audio import SpeakerOutput
 
         return SpeakerOutput()
@@ -273,69 +264,18 @@ class RealtimeAgent[T]:
             UserInactivityTimeoutEvent, self._on_inactivity_timeout
         )
 
-    def _setup_watchdogs(self, audio_session: AudioSession) -> None:
-        self._audio_handler = AudioHandler(
-            event_bus=self._event_bus,
-            audio_session=audio_session,
-        )
-        self._lifecycle_watchdog = LifecycleWatchdog(
-            event_bus=self._event_bus, websocket=self._websocket
-        )
-        self._session_watchdog = SessionWatchdog(
-            event_bus=self._event_bus, websocket=self._websocket
-        )
-        self._audio_forwarder = AudioForwarder(
-            event_bus=self._event_bus, websocket=self._websocket
-        )
-        self._interruption_watchdog = InterruptionWatchdog(
-            event_bus=self._event_bus,
-            websocket=self._websocket,
-            audio_session=audio_session,
-        )
-        if self._transcription_enabled or self._assistant_text_enabled:
-            self._transcription_accumulator = TranscriptionAccumulator(
-                event_bus=self._event_bus
-            )
-
-        self._tool_call_handler = ToolCallHandler(
-            event_bus=self._event_bus,
-            tools=self._tools,
-            websocket=self._websocket,
-            subagent_tool_names={s.name for s in self._subagents} or None,
-        )
-        if self._subagents:
-            self._subagent_coordinator = SubAgentCoordinator(
-                event_bus=self._event_bus,
-                tools=self._tools,
-                websocket=self._websocket,
-            )
-            for subagent in self._subagents:
-                self._subagent_coordinator.register_subagent(subagent.name, subagent)
-        self._error_watchdog = ErrorWatchdog(event_bus=self._event_bus)
-        self._speech_state_tracker = SpeechStateTracker(event_bus=self._event_bus)
-
-        if self._should_enable_inactivity_timeout:
-            self._user_inactivity_timeout_watchdog = UserInactivityTimeoutWatchdog(
-                event_bus=self._event_bus,
-                timeout_seconds=self._inactivity_timeout_seconds,
-            )
-
-        if self._recording_path:
-            self._audio_recorder = AudioRecorder(
-                event_bus=self._event_bus,
-                output_path=self._recording_path,
-            )
-
-    def _setup_listener(self) -> None:
+    def _setup_listener(
+        self, *, inactivity_timeout_enabled: bool, assistant_text_enabled: bool
+    ) -> None:
         if not self._listener:
             return
 
         self._listener_bridge = AgentListenerBridge(
             event_bus=self._event_bus,
             listener=self._listener,
-            inactivity_timeout_enabled=self._should_enable_inactivity_timeout,
+            inactivity_timeout_enabled=inactivity_timeout_enabled,
             has_subagents=bool(self._subagents),
-            assistant_text_enabled=self._assistant_text_enabled,
+            assistant_text_enabled=assistant_text_enabled,
         )
         self._listener_bridge.setup()
 
@@ -349,50 +289,27 @@ class RealtimeAgent[T]:
     async def run(
         self,
     ) -> AgentResult:
-        """Start the agent and block until the session ends.
-
-        Dispatches a `StartAgentCommand` to kick off audio I/O and the WebSocket
-        connection, then waits until `stop()` is called — either manually, via
-        inactivity timeout, or through an error watchdog.
-        """
         logger.info("Starting agent...")
 
         await self._event_bus.dispatch(AgentStartingEvent())
         await self.prewarm()
 
-        await self._event_bus.dispatch(
-            StartAgentCommand(
-                model=self._model,
-                instructions=self._instructions,
-                voice=self._voice,
-                speech_speed=self._speech_speed,
-                transcription_model=self._transcription_model,
-                output_modalities=self._output_modalities,
-                noise_reduction=self._noise_reduction,
-                turn_detection=self._turn_detection,
-                tools=self._tools,
-            )
-        )
-        logger.info("Agent started successfully")
+        async with self._realtime_session:
+            await self._realtime_session.start()
+            logger.info("Agent started successfully")
 
-        try:
-            await self._stopped.wait()
-        finally:
-            await self.stop()
+            try:
+                await self._stopped.wait()
+            finally:
+                await self.stop()
 
         return AgentResult(
             turns=self._conversation_history.turns,
-            recording_path=self._recording_path,
+            recording_path=self._realtime_session.recording_path,
         )
 
     @timed()
     async def prewarm(self) -> None:
-        """Prewarm MCP and subagent connections before `run()`.
-
-        Calling this explicitly avoids a cold-start delay when the session begins.
-        Safe to call multiple times — subsequent calls are no-ops for MCP servers
-        that are already connected.
-        """
         tasks = [self._connect_mcp_servers()]
         tasks.extend(subagent.prewarm() for subagent in self._subagents)
 
@@ -425,22 +342,11 @@ class RealtimeAgent[T]:
         self,
         speed: float,
     ) -> None:
-        """Update the assistant's speech speed mid-session.
-
-        Clamps the value to ``[0.25, 1.5]`` before applying. The change takes
-        effect on the next response — audio that is already playing is unaffected.
-        """
         clipped = self._clip_speech_speed(speed)
-        await self._event_bus.dispatch(UpdateSpeechSpeedCommand(speed=clipped))
+        await self._realtime_session.update_speech_speed(clipped)
 
     @timed()
     async def stop(self) -> None:
-        """Gracefully shut down the agent.
-
-        Cleans up all MCP server connections, dispatches `AgentStoppedEvent`,
-        and signals the `run()` coroutine to return. Idempotent — safe to call
-        multiple times.
-        """
         if self._stop_called:
             return
         self._stop_called = True

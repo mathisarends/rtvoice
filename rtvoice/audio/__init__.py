@@ -1,5 +1,5 @@
-from .devices import AudioInputDevice, AudioOutputDevice
 from .microphone import MicrophoneInput
+from .ports import AudioInputDevice, AudioOutputDevice
 from .session import AudioSession
 from .speaker import SpeakerOutput
 

@@ -2,7 +2,7 @@ import logging
 import queue
 import threading
 
-from rtvoice.audio.devices import AudioOutputDevice
+from rtvoice.audio.ports import AudioOutputDevice
 
 logger = logging.getLogger(__name__)
 

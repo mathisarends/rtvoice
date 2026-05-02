@@ -2,6 +2,7 @@ import base64
 import logging
 from pathlib import Path
 
+from rtvoice.audio.conversation_audio_mixer import ConversationAudioMixer
 from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentStoppedEvent,
@@ -12,14 +13,13 @@ from rtvoice.realtime.schemas import (
     InputAudioBufferAppendEvent,
     ResponseOutputAudioDeltaEvent,
 )
-from rtvoice.recording import AudioRecorder
 
 logger = logging.getLogger(__name__)
 
 
-class AudioRecordingWatchdog:
+class AudioRecorder:
     def __init__(self, event_bus: EventBus, output_path: Path):
-        self._recorder = AudioRecorder(output_path)
+        self._mixer = ConversationAudioMixer(output_path)
         self._assistant_speaking = False
 
         event_bus.subscribe(AssistantStartedRespondingEvent, self._on_assistant_started)
@@ -33,16 +33,16 @@ class AudioRecordingWatchdog:
 
     async def _on_assistant_stopped(self, _: AudioPlaybackCompletedEvent) -> None:
         self._assistant_speaking = False
-        self._recorder.mark_end()
+        self._mixer.finalize()
 
     async def _on_user_audio(self, event: InputAudioBufferAppendEvent) -> None:
         if self._assistant_speaking:
             return
-        self._recorder.record_user(base64.b64decode(event.audio))
+        self._mixer.feed_user(base64.b64decode(event.audio))
 
     async def _on_assistant_audio(self, event: ResponseOutputAudioDeltaEvent) -> None:
-        self._recorder.record_assistant(base64.b64decode(event.delta))
+        self._mixer.feed_assistant(base64.b64decode(event.delta))
 
     async def _on_agent_stopped(self, _: AgentStoppedEvent) -> None:
-        self._recorder.save()
-        logger.info("Recording saved to %s", self._recorder._path)
+        self._mixer.save()
+        logger.info("Recording saved to %s", self._mixer.path)

@@ -3,8 +3,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from rtvoice.events.bus import EventBus
+from rtvoice.handler import AudioForwarder
 from rtvoice.realtime.schemas import InputAudioBufferAppendEvent
-from rtvoice.watchdogs import AudioForwardWatchdog
 
 
 @pytest.fixture
@@ -21,8 +21,8 @@ def websocket() -> MagicMock:
 
 
 @pytest.fixture
-def watchdog(event_bus: EventBus, websocket: MagicMock) -> AudioForwardWatchdog:
-    return AudioForwardWatchdog(event_bus, websocket)
+def forwarder(event_bus: EventBus, websocket: MagicMock) -> AudioForwarder:
+    return AudioForwarder(event_bus, websocket)
 
 
 class TestAudioForwarding:
@@ -30,7 +30,7 @@ class TestAudioForwarding:
     async def test_forwards_audio_event_when_connected(
         self,
         event_bus: EventBus,
-        watchdog: AudioForwardWatchdog,
+        forwarder: AudioForwarder,
         websocket: MagicMock,
     ) -> None:
         websocket.is_connected = True
@@ -44,7 +44,7 @@ class TestAudioForwarding:
     async def test_does_not_forward_when_disconnected(
         self,
         event_bus: EventBus,
-        watchdog: AudioForwardWatchdog,
+        forwarder: AudioForwarder,
         websocket: MagicMock,
     ) -> None:
         websocket.is_connected = False

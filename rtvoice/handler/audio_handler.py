@@ -16,11 +16,12 @@ from rtvoice.realtime.schemas import (
     ResponseDoneEvent,
     ResponseOutputAudioDeltaEvent,
 )
+from rtvoice.realtime.websocket import RealtimeWebSocket
 
 logger = logging.getLogger(__name__)
 
 
-class AudioPlayerWatchdog:
+class AudioPlayer:
     def __init__(self, event_bus: EventBus, audio_session: AudioSession):
         self._event_bus = event_bus
         self._audio_session = audio_session
@@ -77,3 +78,19 @@ class AudioPlayerWatchdog:
         while self._audio_session.is_playing:
             await asyncio.sleep(0.05)
         await self._event_bus.dispatch(AudioPlaybackCompletedEvent())
+
+
+class AudioForwarder:
+    def __init__(self, event_bus: EventBus, websocket: RealtimeWebSocket):
+        self._websocket = websocket
+        event_bus.subscribe(
+            InputAudioBufferAppendEvent, self._on_input_audio_buffer_append
+        )
+
+    async def _on_input_audio_buffer_append(
+        self, event: InputAudioBufferAppendEvent
+    ) -> None:
+        if not self._websocket.is_connected:
+            logger.warning("Cannot send audio - WebSocket not connected")
+            return
+        await self._websocket.send(event)

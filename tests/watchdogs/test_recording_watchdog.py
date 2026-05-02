@@ -10,12 +10,12 @@ from rtvoice.events.views import (
     AssistantStartedRespondingEvent,
     AudioPlaybackCompletedEvent,
 )
+from rtvoice.handler import AudioRecorder
 from rtvoice.realtime.schemas import (
     InputAudioBufferAppendEvent,
     RealtimeServerEvent,
     ResponseOutputAudioDeltaEvent,
 )
-from rtvoice.watchdogs import AudioRecordingWatchdog
 
 
 @pytest.fixture
@@ -26,9 +26,9 @@ def event_bus() -> EventBus:
 @pytest.fixture
 def mock_recorder() -> MagicMock:
     recorder = MagicMock()
-    recorder.mark_end = MagicMock()
-    recorder.record_user = MagicMock()
-    recorder.record_assistant = MagicMock()
+    recorder.finalize = MagicMock()
+    recorder.feed_user = MagicMock()
+    recorder.feed_assistant = MagicMock()
     recorder.save = MagicMock()
     return recorder
 
@@ -36,17 +36,17 @@ def mock_recorder() -> MagicMock:
 @pytest.fixture
 def watchdog(
     event_bus: EventBus, mock_recorder: MagicMock, tmp_path: Path
-) -> AudioRecordingWatchdog:
-    with patch("rtvoice.watchdogs.recording.AudioRecorder") as mock_cls:
+) -> AudioRecorder:
+    with patch("rtvoice.handler.audio_recorder.ConversationAudioMixer") as mock_cls:
         mock_cls.return_value = mock_recorder
-        wd = AudioRecordingWatchdog(event_bus, tmp_path / "recording.wav")
+        wd = AudioRecorder(event_bus, tmp_path / "recording.wav")
     return wd
 
 
 class TestAssistantSpeakingState:
     @pytest.mark.asyncio
     async def test_assistant_started_sets_speaking_flag(
-        self, event_bus: EventBus, watchdog: AudioRecordingWatchdog
+        self, event_bus: EventBus, watchdog: AudioRecorder
     ) -> None:
         await event_bus.dispatch(AssistantStartedRespondingEvent())
 
@@ -54,7 +54,7 @@ class TestAssistantSpeakingState:
 
     @pytest.mark.asyncio
     async def test_playback_completed_clears_speaking_flag(
-        self, event_bus: EventBus, watchdog: AudioRecordingWatchdog
+        self, event_bus: EventBus, watchdog: AudioRecorder
     ) -> None:
         await event_bus.dispatch(AssistantStartedRespondingEvent())
         await event_bus.dispatch(AudioPlaybackCompletedEvent())
@@ -62,15 +62,15 @@ class TestAssistantSpeakingState:
         assert watchdog._assistant_speaking is False
 
     @pytest.mark.asyncio
-    async def test_playback_completed_calls_mark_end(
+    async def test_playback_completed_calls_finalize(
         self,
         event_bus: EventBus,
-        watchdog: AudioRecordingWatchdog,
+        watchdog: AudioRecorder,
         mock_recorder: MagicMock,
     ) -> None:
         await event_bus.dispatch(AudioPlaybackCompletedEvent())
 
-        mock_recorder.mark_end.assert_called_once()
+        mock_recorder.finalize.assert_called_once()
 
 
 class TestUserAudioRecording:
@@ -78,7 +78,7 @@ class TestUserAudioRecording:
     async def test_user_audio_recorded_when_assistant_not_speaking(
         self,
         event_bus: EventBus,
-        watchdog: AudioRecordingWatchdog,
+        watchdog: AudioRecorder,
         mock_recorder: MagicMock,
     ) -> None:
         audio_bytes = b"\x00\x01\x02"
@@ -86,13 +86,13 @@ class TestUserAudioRecording:
 
         await event_bus.dispatch(InputAudioBufferAppendEvent(audio=encoded))
 
-        mock_recorder.record_user.assert_called_once_with(audio_bytes)
+        mock_recorder.feed_user.assert_called_once_with(audio_bytes)
 
     @pytest.mark.asyncio
     async def test_user_audio_skipped_when_assistant_speaking(
         self,
         event_bus: EventBus,
-        watchdog: AudioRecordingWatchdog,
+        watchdog: AudioRecorder,
         mock_recorder: MagicMock,
     ) -> None:
         audio_bytes = b"\x00\x01\x02"
@@ -101,13 +101,13 @@ class TestUserAudioRecording:
         await event_bus.dispatch(AssistantStartedRespondingEvent())
         await event_bus.dispatch(InputAudioBufferAppendEvent(audio=encoded))
 
-        mock_recorder.record_user.assert_not_called()
+        mock_recorder.feed_user.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_user_audio_recorded_again_after_playback_completed(
         self,
         event_bus: EventBus,
-        watchdog: AudioRecordingWatchdog,
+        watchdog: AudioRecorder,
         mock_recorder: MagicMock,
     ) -> None:
         audio_bytes = b"\xaa\xbb"
@@ -117,7 +117,7 @@ class TestUserAudioRecording:
         await event_bus.dispatch(AudioPlaybackCompletedEvent())
         await event_bus.dispatch(InputAudioBufferAppendEvent(audio=encoded))
 
-        mock_recorder.record_user.assert_called_once_with(audio_bytes)
+        mock_recorder.feed_user.assert_called_once_with(audio_bytes)
 
 
 class TestAssistantAudioRecording:
@@ -125,7 +125,7 @@ class TestAssistantAudioRecording:
     async def test_assistant_audio_delta_is_recorded(
         self,
         event_bus: EventBus,
-        watchdog: AudioRecordingWatchdog,
+        watchdog: AudioRecorder,
         mock_recorder: MagicMock,
     ) -> None:
         audio_bytes = b"\x10\x20\x30"
@@ -143,7 +143,7 @@ class TestAssistantAudioRecording:
             )
         )
 
-        mock_recorder.record_assistant.assert_called_once_with(audio_bytes)
+        mock_recorder.feed_assistant.assert_called_once_with(audio_bytes)
 
 
 class TestAgentStopped:
@@ -151,7 +151,7 @@ class TestAgentStopped:
     async def test_agent_stopped_saves_recording(
         self,
         event_bus: EventBus,
-        watchdog: AudioRecordingWatchdog,
+        watchdog: AudioRecorder,
         mock_recorder: MagicMock,
     ) -> None:
         await event_bus.dispatch(AgentStoppedEvent())

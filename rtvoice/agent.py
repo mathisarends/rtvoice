@@ -17,6 +17,7 @@ from rtvoice.events.views import (
     UpdateSpeechSpeedCommand,
     UserInactivityTimeoutEvent,
 )
+from rtvoice.handler import AudioForwarder, AudioPlayer, AudioRecorder
 from rtvoice.listener import AgentListener, AgentListenerBridge
 from rtvoice.mcp import MCPServer
 from rtvoice.realtime.providers import OpenAIProvider, RealtimeProvider
@@ -37,9 +38,6 @@ from rtvoice.views import (
     TurnDetection,
 )
 from rtvoice.watchdogs import (
-    AudioForwardWatchdog,
-    AudioPlayerWatchdog,
-    AudioRecordingWatchdog,
     ErrorWatchdog,
     InterruptionWatchdog,
     LifecycleWatchdog,
@@ -272,7 +270,7 @@ class RealtimeAgent[T]:
         )
 
     def _setup_watchdogs(self, audio_session: AudioSession) -> None:
-        self._audio_player_watchdog = AudioPlayerWatchdog(
+        self._audio_player = AudioPlayer(
             event_bus=self._event_bus,
             audio_session=audio_session,
         )
@@ -282,7 +280,7 @@ class RealtimeAgent[T]:
         self._session_watchdog = SessionWatchdog(
             event_bus=self._event_bus, websocket=self._websocket
         )
-        self._audio_forward_watchdog = AudioForwardWatchdog(
+        self._audio_forwarder = AudioForwarder(
             event_bus=self._event_bus, websocket=self._websocket
         )
         self._interruption_watchdog = InterruptionWatchdog(
@@ -319,7 +317,7 @@ class RealtimeAgent[T]:
             )
 
         if self._recording_path:
-            self._recording_watchdog = AudioRecordingWatchdog(
+            self._audio_recorder = AudioRecorder(
                 event_bus=self._event_bus,
                 output_path=self._recording_path,
             )

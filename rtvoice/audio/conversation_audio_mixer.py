@@ -4,7 +4,7 @@ import wave
 from pathlib import Path
 
 
-class AudioRecorder:
+class ConversationAudioMixer:
     def __init__(self, path: str | Path, sample_rate: int = 24000):
         self.sample_rate = sample_rate
         self._path = Path(path)
@@ -15,21 +15,26 @@ class AudioRecorder:
         self._assistant_start_time: float | None = None
         self._last_audio_time: float | None = None
 
+    @property
+    def path(self) -> Path:
+        return self._path
+
     def _now(self) -> float:
         loop = asyncio.get_event_loop()
         if self._start_time is None:
             self._start_time = loop.time()
         return loop.time() - self._start_time
 
-    def record_user(self, data: bytes) -> None:
+    def feed_user(self, data: bytes) -> None:
         self._user_chunks.append((self._now(), data))
 
-    def record_assistant(self, data: bytes) -> None:
+    def feed_assistant(self, data: bytes) -> None:
         if self._assistant_start_time is None:
             self._assistant_start_time = self._now()
         self._assistant_audio.extend(data)
 
-    def mark_end(self) -> None:
+    def finalize(self) -> None:
+        """Compute the final mixed timeline length for both tracks."""
         assistant_duration = len(self._assistant_audio) / 2 / self.sample_rate
         assistant_end = (self._assistant_start_time or 0) + assistant_duration
         self._last_audio_time = max(self._last_user_end(), assistant_end)

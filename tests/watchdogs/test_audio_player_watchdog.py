@@ -10,6 +10,7 @@ from rtvoice.events.views import (
     AgentStoppedEvent,
     AudioPlaybackCompletedEvent,
 )
+from rtvoice.handler import AudioPlayer
 from rtvoice.realtime.schemas import (
     InputAudioBufferSpeechStartedEvent,
     RealtimeResponseObject,
@@ -17,7 +18,6 @@ from rtvoice.realtime.schemas import (
     ResponseDoneEvent,
     ResponseOutputAudioDeltaEvent,
 )
-from rtvoice.watchdogs import AudioPlayerWatchdog
 
 
 async def _empty_stream():
@@ -43,8 +43,8 @@ def audio_session() -> MagicMock:
 
 
 @pytest.fixture
-def watchdog(event_bus: EventBus, audio_session: MagicMock) -> AudioPlayerWatchdog:
-    return AudioPlayerWatchdog(event_bus, audio_session)
+def player(event_bus: EventBus, audio_session: MagicMock) -> AudioPlayer:
+    return AudioPlayer(event_bus, audio_session)
 
 
 class TestSessionLifecycle:
@@ -52,7 +52,7 @@ class TestSessionLifecycle:
     async def test_session_connected_starts_audio(
         self,
         event_bus: EventBus,
-        watchdog: AudioPlayerWatchdog,
+        player: AudioPlayer,
         audio_session: MagicMock,
     ) -> None:
         await event_bus.dispatch(AgentSessionConnectedEvent())
@@ -62,19 +62,19 @@ class TestSessionLifecycle:
 
     @pytest.mark.asyncio
     async def test_session_connected_creates_streaming_task(
-        self, event_bus: EventBus, watchdog: AudioPlayerWatchdog
+        self, event_bus: EventBus, player: AudioPlayer
     ) -> None:
-        assert watchdog._streaming_task is None
+        assert player._streaming_task is None
 
         await event_bus.dispatch(AgentSessionConnectedEvent())
 
-        assert watchdog._streaming_task is not None
+        assert player._streaming_task is not None
 
     @pytest.mark.asyncio
     async def test_agent_stopped_stops_audio(
         self,
         event_bus: EventBus,
-        watchdog: AudioPlayerWatchdog,
+        player: AudioPlayer,
         audio_session: MagicMock,
     ) -> None:
         await event_bus.dispatch(AgentSessionConnectedEvent())
@@ -85,13 +85,13 @@ class TestSessionLifecycle:
 
     @pytest.mark.asyncio
     async def test_agent_stopped_clears_streaming_task(
-        self, event_bus: EventBus, watchdog: AudioPlayerWatchdog
+        self, event_bus: EventBus, player: AudioPlayer
     ) -> None:
         await event_bus.dispatch(AgentSessionConnectedEvent())
         await asyncio.sleep(0)
         await event_bus.dispatch(AgentStoppedEvent())
 
-        assert watchdog._streaming_task is None
+        assert player._streaming_task is None
 
 
 class TestAudioDelta:
@@ -99,7 +99,7 @@ class TestAudioDelta:
     async def test_audio_delta_plays_decoded_chunk(
         self,
         event_bus: EventBus,
-        watchdog: AudioPlayerWatchdog,
+        player: AudioPlayer,
         audio_session: MagicMock,
     ) -> None:
         audio_bytes = b"\x00\x01\x02\x03"
@@ -124,7 +124,7 @@ class TestBargeIn:
     async def test_user_started_speaking_clears_output_buffer(
         self,
         event_bus: EventBus,
-        watchdog: AudioPlayerWatchdog,
+        player: AudioPlayer,
         audio_session: MagicMock,
     ) -> None:
         await event_bus.dispatch(
@@ -143,7 +143,7 @@ class TestPlaybackCompletion:
     async def test_response_done_dispatches_playback_completed_when_not_playing(
         self,
         event_bus: EventBus,
-        watchdog: AudioPlayerWatchdog,
+        player: AudioPlayer,
         audio_session: MagicMock,
     ) -> None:
         received: list[AudioPlaybackCompletedEvent] = []
@@ -169,7 +169,7 @@ class TestPlaybackCompletion:
     async def test_response_done_waits_while_playing_before_dispatching(
         self,
         event_bus: EventBus,
-        watchdog: AudioPlayerWatchdog,
+        player: AudioPlayer,
         audio_session: MagicMock,
     ) -> None:
         received: list[AudioPlaybackCompletedEvent] = []

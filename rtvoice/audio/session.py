@@ -1,6 +1,6 @@
 from collections.abc import AsyncIterator
 
-from rtvoice.audio.devices import AudioInputDevice, AudioOutputDevice
+from rtvoice.audio.ports import AudioInputDevice, AudioOutputDevice
 
 
 class AudioSession:
@@ -11,6 +11,10 @@ class AudioSession:
     ):
         self._input = input_device
         self._output = output_device
+
+    @property
+    def is_playing(self) -> bool:
+        return self._output.is_playing
 
     async def start(self) -> None:
         await self._input.start()
@@ -28,7 +32,3 @@ class AudioSession:
 
     async def clear_output_buffer(self) -> None:
         await self._output.clear_buffer()
-
-    @property
-    def is_playing(self) -> bool:
-        return self._output.is_playing

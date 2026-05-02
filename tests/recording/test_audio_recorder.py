@@ -4,7 +4,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from rtvoice.recording import AudioRecorder
 
 
@@ -44,7 +43,7 @@ class TestInit:
 class TestRecordUser:
     def test_stores_chunk_with_timestamp(self, recorder: AudioRecorder) -> None:
         with patch.object(recorder, "_now", return_value=1.0):
-            recorder.record_user(pcm_bytes(100))
+            recorder.feed_user(pcm_bytes(100))
 
         assert len(recorder._user_chunks) == 1
         ts, _data = recorder._user_chunks[0]
@@ -52,9 +51,9 @@ class TestRecordUser:
 
     def test_accumulates_multiple_chunks(self, recorder: AudioRecorder) -> None:
         with patch.object(recorder, "_now", return_value=0.0):
-            recorder.record_user(pcm_bytes(100))
+            recorder.feed_user(pcm_bytes(100))
         with patch.object(recorder, "_now", return_value=0.5):
-            recorder.record_user(pcm_bytes(100))
+            recorder.feed_user(pcm_bytes(100))
 
         assert len(recorder._user_chunks) == 2
 
@@ -63,13 +62,13 @@ class TestRecordAssistant:
     def test_stores_audio_data(self, recorder: AudioRecorder) -> None:
         data = pcm_bytes(100, value=1000)
         with patch.object(recorder, "_now", return_value=0.0):
-            recorder.record_assistant(data)
+            recorder.feed_assistant(data)
 
         assert recorder._assistant_audio == bytearray(data)
 
     def test_captures_start_time_on_first_chunk(self, recorder: AudioRecorder) -> None:
         with patch.object(recorder, "_now", return_value=2.5):
-            recorder.record_assistant(pcm_bytes(100))
+            recorder.feed_assistant(pcm_bytes(100))
 
         assert recorder._assistant_start_time == 2.5
 
@@ -77,16 +76,16 @@ class TestRecordAssistant:
         self, recorder: AudioRecorder
     ) -> None:
         with patch.object(recorder, "_now", return_value=1.0):
-            recorder.record_assistant(pcm_bytes(100))
+            recorder.feed_assistant(pcm_bytes(100))
         with patch.object(recorder, "_now", return_value=2.0):
-            recorder.record_assistant(pcm_bytes(100))
+            recorder.feed_assistant(pcm_bytes(100))
 
         assert recorder._assistant_start_time == 1.0
 
     def test_concatenates_chunks(self, recorder: AudioRecorder) -> None:
         with patch.object(recorder, "_now", return_value=0.0):
-            recorder.record_assistant(pcm_bytes(50, value=100))
-            recorder.record_assistant(pcm_bytes(50, value=200))
+            recorder.feed_assistant(pcm_bytes(50, value=100))
+            recorder.feed_assistant(pcm_bytes(50, value=200))
 
         assert len(recorder._assistant_audio) == 200
 
@@ -94,9 +93,9 @@ class TestRecordAssistant:
 class TestMarkEnd:
     def test_sets_last_audio_time(self, recorder: AudioRecorder) -> None:
         with patch.object(recorder, "_now", return_value=0.0):
-            recorder.record_assistant(pcm_bytes(24000))
+            recorder.feed_assistant(pcm_bytes(24000))
 
-        recorder.mark_end()
+        recorder.finalize()
 
         assert recorder._last_audio_time is not None
         assert recorder._last_audio_time > 0
@@ -105,16 +104,16 @@ class TestMarkEnd:
         self, recorder: AudioRecorder
     ) -> None:
         with patch.object(recorder, "_now", return_value=0.0):
-            recorder.record_user(pcm_bytes(24000 * 5))
+            recorder.feed_user(pcm_bytes(24000 * 5))
         with patch.object(recorder, "_now", return_value=0.0):
-            recorder.record_assistant(pcm_bytes(24000))
+            recorder.feed_assistant(pcm_bytes(24000))
 
-        recorder.mark_end()
+        recorder.finalize()
 
         assert recorder._last_audio_time == pytest.approx(5.0, abs=0.01)
 
     def test_handles_no_audio(self, recorder: AudioRecorder) -> None:
-        recorder.mark_end()
+        recorder.finalize()
 
         assert recorder._last_audio_time == 0.0
 
@@ -122,8 +121,8 @@ class TestMarkEnd:
 class TestSave:
     def test_writes_wav_file(self, recorder: AudioRecorder, tmp_path: Path) -> None:
         with patch.object(recorder, "_now", return_value=0.0):
-            recorder.record_user(pcm_bytes(24000))
-        recorder.mark_end()
+            recorder.feed_user(pcm_bytes(24000))
+        recorder.finalize()
         recorder.save()
 
         assert (tmp_path / "out.wav").exists()
@@ -132,8 +131,8 @@ class TestSave:
         self, recorder: AudioRecorder, tmp_path: Path
     ) -> None:
         with patch.object(recorder, "_now", return_value=0.0):
-            recorder.record_user(pcm_bytes(24000))
-        recorder.mark_end()
+            recorder.feed_user(pcm_bytes(24000))
+        recorder.finalize()
         recorder.save()
 
         with wave.open(str(tmp_path / "out.wav"), "rb") as f:
@@ -141,8 +140,8 @@ class TestSave:
 
     def test_wav_is_mono(self, recorder: AudioRecorder, tmp_path: Path) -> None:
         with patch.object(recorder, "_now", return_value=0.0):
-            recorder.record_user(pcm_bytes(24000))
-        recorder.mark_end()
+            recorder.feed_user(pcm_bytes(24000))
+        recorder.finalize()
         recorder.save()
 
         with wave.open(str(tmp_path / "out.wav"), "rb") as f:
@@ -159,9 +158,9 @@ class TestSave:
         self, recorder: AudioRecorder, tmp_path: Path
     ) -> None:
         with patch.object(recorder, "_now", return_value=0.0):
-            recorder.record_user(pcm_bytes(24000, value=1000))
-            recorder.record_assistant(pcm_bytes(24000, value=2000))
-        recorder.mark_end()
+            recorder.feed_user(pcm_bytes(24000, value=1000))
+            recorder.feed_assistant(pcm_bytes(24000, value=2000))
+        recorder.finalize()
         recorder.save()
 
         samples = read_wav_samples(tmp_path / "out.wav")
@@ -171,9 +170,9 @@ class TestSave:
         self, recorder: AudioRecorder, tmp_path: Path
     ) -> None:
         with patch.object(recorder, "_now", return_value=0.0):
-            recorder.record_user(pcm_bytes(24000, value=30000))
-            recorder.record_assistant(pcm_bytes(24000, value=30000))
-        recorder.mark_end()
+            recorder.feed_user(pcm_bytes(24000, value=30000))
+            recorder.feed_assistant(pcm_bytes(24000, value=30000))
+        recorder.finalize()
         recorder.save()
 
         samples = read_wav_samples(tmp_path / "out.wav")
@@ -185,11 +184,11 @@ class TestSave:
         assistant_chunk = pcm_bytes(24000, value=500)
 
         with patch.object(recorder, "_now", return_value=0.0):
-            recorder.record_user(pcm_bytes(24000 * 2, value=0))
+            recorder.feed_user(pcm_bytes(24000 * 2, value=0))
         with patch.object(recorder, "_now", return_value=1.0):
-            recorder.record_assistant(assistant_chunk)
+            recorder.feed_assistant(assistant_chunk)
 
-        recorder.mark_end()
+        recorder.finalize()
         recorder.save()
 
         samples = read_wav_samples(tmp_path / "out.wav")

@@ -25,21 +25,21 @@ from rtvoice.handler import (
 )
 from rtvoice.realtime.port import RealtimeProvider
 from rtvoice.realtime.schemas import (
-    AudioConfig,
-    AudioInputConfig,
-    AudioOutputConfig,
+    AudioInputSettings,
+    AudioOutputSettings,
+    AudioSettings,
     ConversationItemCreateEvent,
-    InputAudioNoiseReductionConfig,
-    InputAudioTranscriptionConfig,
+    InputAudioNoiseReductionSettings,
+    InputAudioTranscriptionSettings,
     NoiseReductionType,
-    RealtimeSessionConfig,
-    SemanticVADConfig,
-    ServerVADConfig,
+    RealtimeSessionSettings,
+    SemanticVADSettings,
+    ServerVADSettings,
     SessionUpdateEvent,
     SpeedUpdateEvent,
     ToolChoiceMode,
     ToolsUpdateEvent,
-    TurnDetectionConfig,
+    TurnDetectionSettings,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
@@ -263,13 +263,13 @@ class RealtimeSession:
 
     def _build_session_config(
         self,
-    ) -> RealtimeSessionConfig:
+    ) -> RealtimeSessionSettings:
         if isinstance(self._turn_detection, SemanticVAD):
-            turn_detection_config: TurnDetectionConfig = SemanticVADConfig(
+            turn_detection_config: TurnDetectionSettings = SemanticVADSettings(
                 eagerness=self._turn_detection.eagerness
             )
         elif isinstance(self._turn_detection, ServerVAD):
-            turn_detection_config = ServerVADConfig(
+            turn_detection_config = ServerVADSettings(
                 threshold=self._turn_detection.threshold,
                 prefix_padding_ms=self._turn_detection.prefix_padding_ms,
                 silence_duration_ms=self._turn_detection.silence_duration_ms,
@@ -280,24 +280,24 @@ class RealtimeSession:
         transcription_config = (
             None
             if self._transcription_model is None
-            else InputAudioTranscriptionConfig(model=self._transcription_model)
+            else InputAudioTranscriptionSettings(model=self._transcription_model)
         )
 
-        return RealtimeSessionConfig(
+        return RealtimeSessionSettings(
             model=self._model,
             instructions=self._instructions,
             output_modalities=self._output_modalities,
             tool_choice=ToolChoiceMode.AUTO,
             tools=self._tools.get_tool_schema(),
-            audio=AudioConfig(
-                input=AudioInputConfig(
+            audio=AudioSettings(
+                input=AudioInputSettings(
                     turn_detection=turn_detection_config,
-                    noise_reduction=InputAudioNoiseReductionConfig(
+                    noise_reduction=InputAudioNoiseReductionSettings(
                         type=NoiseReductionType(self._noise_reduction)
                     ),
                     transcription=transcription_config,
                 ),
-                output=AudioOutputConfig(
+                output=AudioOutputSettings(
                     voice=self._voice.value, speed=self._speech_speed
                 ),
             ),

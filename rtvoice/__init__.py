@@ -1,11 +1,5 @@
-from ._logging import configure_logging
-from .agent import RealtimeAgent
-from .listener import AgentListener
-from .mcp import MCPServerStdio
-from .realtime import AzureOpenAIProvider, OpenAIProvider, RealtimeProvider
-from .subagent import SubAgent
-from .tools import Inject, ToolContext, Tools
-from .views import (
+from .agent import AgentListener, RealtimeAgent
+from .agent.views import (
     AssistantVoice,
     ConversationSeed,
     NoiseReduction,
@@ -18,6 +12,10 @@ from .views import (
     TranscriptionModel,
     TurnDetection,
 )
+from .mcp import MCPServerStdio
+from .realtime import AzureOpenAIProvider, OpenAIProvider, RealtimeProvider
+from .subagent import SubAgent
+from .tools import Inject, ToolContext, Tools
 
 __all__ = [
     "AgentListener",
@@ -41,5 +39,4 @@ __all__ = [
     "Tools",
     "TranscriptionModel",
     "TurnDetection",
-    "configure_logging",
 ]

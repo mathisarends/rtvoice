@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from rtvoice.events.bus import EventBus
 from rtvoice.tools import Tools
 from rtvoice.tools.di import Inject, ToolContext
-from rtvoice.tools.schema_builder import ToolSchemaBuilder
+from rtvoice.tools.views import ToolSchemaBuilder
 
 
 class SearchParams(BaseModel):

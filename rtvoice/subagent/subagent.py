@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING
 
 from rtvoice.llm import (
     AssistantMessage,
@@ -76,9 +76,7 @@ class SubAgent[T]:
             "Signal that the task is complete and return the final result to the user. "
             "Only call this once you have gathered all necessary information or took the appropriate action."
         )
-        def done(
-            result: Annotated[str, "The final answer or result to return to the user."],
-        ) -> DoneSignal:
+        def done(result: str) -> DoneSignal:
             return DoneSignal(result)
 
     def _register_clarify_tool(self) -> None:
@@ -88,9 +86,7 @@ class SubAgent[T]:
             "Calling this tool immediately returns control to the user; "
             "you will be called again once they answer."
         )
-        def clarify(
-            question: Annotated[str, "The question to ask the user."],
-        ) -> ClarifySignal:
+        def clarify(question: str) -> ClarifySignal:
             return ClarifySignal(question)
 
     def _register_progress_tool(self) -> None:
@@ -98,9 +94,7 @@ class SubAgent[T]:
             "Report an intermediate progress update to the user while working on a long-running task. "
             "Use this to keep the user informed without blocking \u2014 the loop continues immediately after."
         )
-        def report_progress(
-            message: Annotated[str, "A short status update for the user."],
-        ) -> ProgressSignal:
+        def report_progress(message: str) -> ProgressSignal:
             return ProgressSignal(message)
 
     @timed()

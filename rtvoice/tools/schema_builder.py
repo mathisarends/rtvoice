@@ -43,11 +43,10 @@ class ToolSchemaBuilder:
                 continue
 
             param_type = type_hints.get(param_name, str)
-            actual_type, description = self._extract_type_and_description(param_type)
+            if get_origin(param_type) is Annotated:
+                param_type = get_args(param_type)[0]
 
-            properties[param_name] = self._convert_to_json_schema(
-                actual_type, description
-            )
+            properties[param_name] = self._convert_to_json_schema(param_type)
 
             if param.default == inspect.Parameter.empty:
                 required_params.append(param_name)
@@ -96,16 +95,6 @@ class ToolSchemaBuilder:
         if get_origin(type_hint) is not Annotated:
             return False
         return any(isinstance(arg, type(_INJECT_MARKER)) for arg in get_args(type_hint))
-
-    def _extract_type_and_description(self, type_hint: Any) -> tuple[Any, str | None]:
-        if get_origin(type_hint) is not Annotated:
-            return type_hint, None
-
-        args = get_args(type_hint)
-        actual_type = args[0]
-        description = next((arg for arg in args[1:] if isinstance(arg, str)), None)
-
-        return actual_type, description
 
     def _convert_to_json_schema(
         self, python_type: Any, description: str | None = None

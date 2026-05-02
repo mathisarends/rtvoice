@@ -1,5 +1,3 @@
-from typing import Annotated
-
 import pytest
 from pydantic import BaseModel
 
@@ -60,31 +58,6 @@ class TestPrimitiveTypes:
         result = builder.build(func)
 
         assert result.properties["data"].type == "object"
-
-
-class TestAnnotatedTypes:
-    def test_annotated_extracts_description(self, builder: ToolSchemaBuilder) -> None:
-        def func(name: Annotated[str, "The user's name"]) -> None: ...
-
-        result = builder.build(func)
-
-        assert result.properties["name"].description == "The user's name"
-        assert result.properties["name"].type == "string"
-
-    def test_annotated_without_description(self, builder: ToolSchemaBuilder) -> None:
-        def func(name: Annotated[str, 42]) -> None: ...
-
-        result = builder.build(func)
-
-        assert result.properties["name"].description is None
-
-    def test_annotated_int_with_description(self, builder: ToolSchemaBuilder) -> None:
-        def func(count: Annotated[int, "Number of items"]) -> None: ...
-
-        result = builder.build(func)
-
-        assert result.properties["count"].type == "integer"
-        assert result.properties["count"].description == "Number of items"
 
 
 class TestOptionalTypes:
@@ -183,14 +156,6 @@ class TestPydanticModelParams:
         result = builder.build(func)
 
         assert result.properties["data"].type == "object"
-
-    def test_pydantic_model_with_description(self, builder: ToolSchemaBuilder) -> None:
-        def func(data: Annotated[SampleModel, "Input payload"]) -> None: ...
-
-        result = builder.build(func)
-
-        assert result.properties["data"].type == "object"
-        assert result.properties["data"].description == "Input payload"
 
 
 class TestCollectionTypes:

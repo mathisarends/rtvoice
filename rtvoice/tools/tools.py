@@ -26,8 +26,6 @@ from rtvoice.tools.views import Tool
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["Tools"]
-
 
 class Tools:
     def __init__(self):

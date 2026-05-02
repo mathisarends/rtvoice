@@ -66,13 +66,12 @@ Create a `Tools` instance, decorate functions with `@tools.action(description)`,
 
 ```python
 import asyncio
-from typing import Annotated
 from rtvoice import RealtimeAgent, Tools
 
 tools = Tools()
 
 @tools.action("Get the current weather for a given city")
-async def get_weather(city: Annotated[str, "The city name"]) -> str:
+async def get_weather(city: str) -> str:
     return f"It's 18°C and partly cloudy in {city}."
 
 async def main():
@@ -85,7 +84,7 @@ async def main():
 asyncio.run(main())
 ```
 
-Parameter descriptions are pulled from `Annotated` metadata and are included in the schema sent to the model. All parameters without a default value are marked required.
+Parameter types are inferred from the function signature and included in the schema sent to the model. All parameters without a default value are marked required. For richer per-parameter descriptions, pass a Pydantic model via `param_model=` on `@tools.action(...)` and use `Field(description=...)` on its fields.
 
 ### Long-running tools
 
@@ -96,7 +95,7 @@ Set `holding_instruction` to have the assistant speak a phrase while the tool ru
     "Search the web for a query",
     holding_instruction="Let me search that for you, give me a moment.",
 )
-async def search_web(query: Annotated[str, "The search query"]) -> str:
+async def search_web(query: str) -> str:
     result = await do_search(query)
     return result
 ```
@@ -121,7 +120,7 @@ async def get_headlines() -> str: ...
     "Play a song by name",
     status="Playing {song} now.",
 )
-async def play_song(song: Annotated[str, "Song title"]) -> str:
+async def play_song(song: str) -> str:
     await music_player.play(song)
     return f"Now playing: {song}"
 ```
@@ -137,7 +136,7 @@ async def play_song(song: Annotated[str, "Song title"]) -> str:
     "Look up a contact",
     steering="If the contact has a preferred name, use it in your response.",
 )
-async def lookup_contact(name: Annotated[str, "Full name"]) -> str: ...
+async def lookup_contact(name: str) -> str: ...
 ```
 
 ### Context injection
@@ -206,10 +205,10 @@ tools = Tools()
 
 @tools.action("Book a restaurant table")
 async def book_table(
-    restaurant: Annotated[str, "Restaurant name"],
-    date: Annotated[str, "Date in YYYY-MM-DD"],
-    time: Annotated[str, "Time in HH:MM"],
-    party_size: Annotated[int, "Number of guests"],
+    restaurant: str,
+    date: str,
+    time: str,
+    party_size: int,
 ) -> str:
     return f"Booked for {party_size} at {restaurant} on {date} at {time}."
 

@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from pathlib import Path
-from typing import Annotated
 
 from rtvoice.audio import (
     AudioInputDevice,
@@ -222,15 +221,9 @@ class RealtimeAgent[T]:
             holding_instruction=subagent.holding_instruction,
         )
         async def _handoff(
-            task: Annotated[
-                str,
-                "The task or question to delegate to this agent. Be specific and include enough context for the agent to act without clarification.",
-            ],
+            task: str,
             conversation_history: Inject[ConversationHistory],
-            clarification_answer: Annotated[
-                str | None,
-                "If this is a follow-up call after a clarification request, provide the user's answer here. Leave empty for the initial call.",
-            ] = None,
+            clarification_answer: str | None = None,
         ) -> SubAgentResult:
             nonlocal paused_for_clarification
 

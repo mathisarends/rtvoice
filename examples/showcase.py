@@ -15,7 +15,6 @@ Running
 
 import asyncio
 import logging
-from typing import Annotated
 
 from dotenv import load_dotenv
 
@@ -40,26 +39,17 @@ def build_tools() -> Tools:
         return {"unread": 3, "senders": ["jonas@example.com", "boss@viadee.de"]}
 
     @tools.action("Turn lights on or off in a room.")
-    async def set_room_power(
-        room: Annotated[str, "Room name."],
-        on: Annotated[bool, "True = on, False = off."],
-    ) -> dict:
+    async def set_room_power(room: str, on: bool) -> dict:
         await asyncio.sleep(0.5)
         return {"room": room, "state": "on" if on else "off"}
 
     @tools.action("Activate a lighting scene in a room.")
-    async def apply_scene(
-        room: Annotated[str, "Room name."],
-        scene: Annotated[str, "Scene name."],
-    ) -> dict:
+    async def apply_scene(room: str, scene: str) -> dict:
         await asyncio.sleep(0.6)
         return {"room": room, "scene": scene, "applied": True}
 
     @tools.action("Start a music playlist in a room.")
-    async def play_music(
-        room: Annotated[str, "Room name."],
-        playlist: Annotated[str, "Playlist name."],
-    ) -> dict:
+    async def play_music(room: str, playlist: str) -> dict:
         await asyncio.sleep(0.8)
         return {"room": room, "playlist": playlist, "playing": True}
 

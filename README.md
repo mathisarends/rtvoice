@@ -40,9 +40,9 @@ Run it, speak into your microphone, and the agent responds through your speakers
 
 - [Tool calling](#tool-calling)
   - [Basic tools](#basic-tools)
+    - [Pydantic model tools](#pydantic-model-tools)
   - [Long-running tools](#long-running-tools)
   - [Status templates](#status-templates)
-  - [Tool steering](#tool-steering)
   - [Context injection](#context-injection)
   - [Custom application context](#custom-application-context)
 - [Subagents](#subagents)
@@ -84,7 +84,40 @@ async def main():
 asyncio.run(main())
 ```
 
-Parameter types are inferred from the function signature and included in the schema sent to the model. All parameters without a default value are marked required. For richer per-parameter descriptions, pass a Pydantic model via `param_model=` on `@tools.action(...)` and use `Field(description=...)` on its fields.
+Parameter types are inferred from the function signature and included in the schema sent to the model. All parameters without a default value are marked required.
+
+### Pydantic model tools
+
+For richer schemas, register a Pydantic model with `param_model=`. The model fields become the tool parameters, and the function receives a validated model instance.
+
+```python
+from typing import Literal
+
+from pydantic import BaseModel, Field
+from rtvoice import Tools
+
+tools = Tools()
+
+class CalendarSearchParams(BaseModel):
+    query: str = Field(description="What to search for")
+    date: str | None = Field(default=None, description="Optional ISO date filter")
+    limit: int = Field(default=5, description="Maximum number of matches")
+    source: Literal["work", "personal"] = "work"
+
+@tools.action(
+    "Search calendar events",
+    param_model=CalendarSearchParams,
+)
+async def search_calendar(params: CalendarSearchParams) -> str:
+    return await calendar.search(
+        query=params.query,
+        date=params.date,
+        limit=params.limit,
+        source=params.source,
+    )
+```
+
+Nested Pydantic models, typed lists, enums, literals, defaults, and `Field(description=...)` are included in the generated tool schema.
 
 ### Long-running tools
 
@@ -113,41 +146,44 @@ async def get_headlines() -> str: ...
 
 ### Status templates
 
-`status` is a spoken update that interpolates tool arguments. Use `{param_name}` placeholders — rtvoice validates them at registration time.
+`status` is a spoken update for tools registered with `param_model=`. Use `{field_name}` placeholders from the Pydantic model — rtvoice validates them at registration time.
+
+```python
+class PlaySongParams(BaseModel):
+    song: str = Field(description="Song title")
+
+@tools.action(
+    "Play a song by name",
+    param_model=PlaySongParams,
+    status="Playing {song} now.",
+)
+async def play_song(params: PlaySongParams) -> str:
+    await music_player.play(params.song)
+    return f"Now playing: {params.song}"
+```
+
+`status` can also be a callable that receives the validated Pydantic model and returns a string dynamically.
 
 ```python
 @tools.action(
     "Play a song by name",
-    status="Playing {song} now.",
+    param_model=PlaySongParams,
+    status=lambda params: f"Playing {params.song} now.",
 )
-async def play_song(song: str) -> str:
-    await music_player.play(song)
-    return f"Now playing: {song}"
-```
-
-`status` can also be an `async def` that receives the same arguments and returns a string dynamically.
-
-### Tool steering
-
-`steering` appends hidden guidance to the tool result without exposing it to the user transcript. Useful for nudging the model without cluttering the response.
-
-```python
-@tools.action(
-    "Look up a contact",
-    steering="If the contact has a preferred name, use it in your response.",
-)
-async def lookup_contact(name: str) -> str: ...
+async def play_song(params: PlaySongParams) -> str:
+    await music_player.play(params.song)
+    return f"Now playing: {params.song}"
 ```
 
 ### Context injection
 
 Any tool parameter typed as `Inject[T]` is filled automatically by the framework — the model never sees it and does not need to supply a value. Three types are injectable:
 
-| Type | What it provides |
-|---|---|
-| `Inject[EventBus]` | Internal event bus |
-| `Inject[ConversationHistory]` | Full conversation so far |
-| `Inject[YourContextType]` | Your custom `context=` object |
+| Type                          | What it provides              |
+| ----------------------------- | ----------------------------- |
+| `Inject[EventBus]`            | Internal event bus            |
+| `Inject[ConversationHistory]` | Full conversation so far      |
+| `Inject[YourContextType]`     | Your custom `context=` object |
 
 ```python
 from rtvoice import Tools, Inject
@@ -231,19 +267,19 @@ agent = RealtimeAgent(
 
 **`SubAgent` parameters:**
 
-| Parameter | Description |
-|---|---|
-| `name` | Unique name; becomes the tool name the realtime model calls |
-| `description` | Shown to the realtime model to decide when to delegate |
-| `instructions` | System prompt for the subagent's own LLM loop |
-| `llm` | `ChatOpenAI(model=...)` or any `ChatModel` implementation |
-| `tools` | `Tools` instance with the actions the subagent may call |
-| `mcp_servers` | MCP servers to connect to during prewarm |
-| `holding_instruction` | Spoken while the subagent works |
-| `result_instructions` | Tells the realtime model how to present the result |
-| `handoff_instructions` | Extra guidance appended to the tool description |
-| `max_iterations` | Loop iteration cap (default: 10) |
-| `context` | Arbitrary object injectable inside subagent tools |
+| Parameter              | Description                                                 |
+| ---------------------- | ----------------------------------------------------------- |
+| `name`                 | Unique name; becomes the tool name the realtime model calls |
+| `description`          | Shown to the realtime model to decide when to delegate      |
+| `instructions`         | System prompt for the subagent's own LLM loop               |
+| `llm`                  | `ChatOpenAI(model=...)` or any `ChatModel` implementation   |
+| `tools`                | `Tools` instance with the actions the subagent may call     |
+| `mcp_servers`          | MCP servers to connect to during prewarm                    |
+| `holding_instruction`  | Spoken while the subagent works                             |
+| `result_instructions`  | Tells the realtime model how to present the result          |
+| `handoff_instructions` | Extra guidance appended to the tool description             |
+| `max_iterations`       | Loop iteration cap (default: 10)                            |
+| `context`              | Arbitrary object injectable inside subagent tools           |
 
 ---
 
@@ -347,23 +383,23 @@ agent = RealtimeAgent(
 
 **All available callbacks:**
 
-| Method | When it fires |
-|---|---|
-| `on_agent_starting()` | Before any I/O or WebSocket setup |
-| `on_agent_session_connected()` | WebSocket session established |
-| `on_agent_stopped()` | Agent fully shut down |
-| `on_user_started_speaking()` | VAD detected speech start |
-| `on_user_stopped_speaking()` | VAD detected speech end |
-| `on_user_transcript(transcript)` | Finalised user transcript (requires `transcription_model`) |
-| `on_assistant_started_responding()` | Assistant began streaming audio |
-| `on_assistant_stopped_responding()` | Assistant finished streaming audio |
-| `on_assistant_transcript(transcript)` | Full assistant response text |
-| `on_assistant_transcript_delta(delta)` | Incremental assistant text chunk (requires `"text"` in `output_modalities`) |
-| `on_agent_interrupted()` | User interrupted the assistant mid-response |
-| `on_agent_error(error)` | Session or API error |
-| `on_subagent_started(agent_name)` | A subagent began running |
-| `on_subagent_finished(agent_name)` | A subagent finished |
-| `on_user_inactivity_countdown(remaining_seconds)` | Fires each second before inactivity timeout |
+| Method                                            | When it fires                                                               |
+| ------------------------------------------------- | --------------------------------------------------------------------------- |
+| `on_agent_starting()`                             | Before any I/O or WebSocket setup                                           |
+| `on_agent_session_connected()`                    | WebSocket session established                                               |
+| `on_agent_stopped()`                              | Agent fully shut down                                                       |
+| `on_user_started_speaking()`                      | VAD detected speech start                                                   |
+| `on_user_stopped_speaking()`                      | VAD detected speech end                                                     |
+| `on_user_transcript(transcript)`                  | Finalised user transcript (requires `transcription_model`)                  |
+| `on_assistant_started_responding()`               | Assistant began streaming audio                                             |
+| `on_assistant_stopped_responding()`               | Assistant finished streaming audio                                          |
+| `on_assistant_transcript(transcript)`             | Full assistant response text                                                |
+| `on_assistant_transcript_delta(delta)`            | Incremental assistant text chunk (requires `"text"` in `output_modalities`) |
+| `on_agent_interrupted()`                          | User interrupted the assistant mid-response                                 |
+| `on_agent_error(error)`                           | Session or API error                                                        |
+| `on_subagent_started(agent_name)`                 | A subagent began running                                                    |
+| `on_subagent_finished(agent_name)`                | A subagent finished                                                         |
+| `on_user_inactivity_countdown(remaining_seconds)` | Fires each second before inactivity timeout                                 |
 
 ---
 

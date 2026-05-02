@@ -5,6 +5,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from rtvoice.agent import RealtimeAgent
+from rtvoice.agent.listener import AgentListener
+from rtvoice.agent.views import (
+    AgentError,
+    AssistantVoice,
+    ConversationSeed,
+    NoiseReduction,
+    RealtimeModel,
+    SeedMessage,
+    SemanticVAD,
+    ServerVAD,
+    TranscriptionModel,
+)
 from rtvoice.events.views import (
     AgentErrorEvent,
     AgentSessionConnectedEvent,
@@ -20,18 +32,6 @@ from rtvoice.events.views import (
     UserStartedSpeakingEvent,
     UserStoppedSpeakingEvent,
     UserTranscriptCompletedEvent,
-)
-from rtvoice.listener import AgentListener
-from rtvoice.views import (
-    AgentError,
-    AssistantVoice,
-    ConversationSeed,
-    NoiseReduction,
-    RealtimeModel,
-    SeedMessage,
-    SemanticVAD,
-    ServerVAD,
-    TranscriptionModel,
 )
 
 
@@ -110,6 +110,27 @@ class TestInitDefaults:
     ) -> None:
         agent = make_agent(transcription_model=None, output_modalities=["text"])
         assert not hasattr(agent, "_transcription_watchdog")
+
+    def test_default_system_prompt_is_loaded_from_markdown(self) -> None:
+        agent = make_agent()
+        assert (
+            agent._realtime_session._instructions
+            == "You are a helpful voice assistant."
+        )
+
+    def test_extend_system_prompt_appends_to_default_prompt(self) -> None:
+        agent = make_agent(extends_system_prompt="Antworte kurz.")
+        assert (
+            agent._realtime_session._instructions
+            == "You are a helpful voice assistant.\n\nAntworte kurz."
+        )
+
+    def test_override_system_prompt_replaces_default_prompt(self) -> None:
+        agent = make_agent(
+            extends_system_prompt="Should be ignored.",
+            override_syste_Mpromt="Custom override prompt.",
+        )
+        assert agent._realtime_session._instructions == "Custom override prompt."
 
 
 class TestSpeechSpeedClipping:

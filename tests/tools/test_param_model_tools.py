@@ -1,3 +1,6 @@
+from enum import StrEnum
+from typing import Annotated, Literal
+
 import pytest
 from pydantic import BaseModel, Field
 
@@ -16,6 +19,23 @@ class CreateEventParams(BaseModel):
     title: str = Field(description="Event title")
     date: str = Field(description="Event date")
     attendees: list[str] = Field(default_factory=list, description="List of attendees")
+
+
+class Priority(StrEnum):
+    LOW = "low"
+    HIGH = "high"
+
+
+class LocationParams(BaseModel):
+    city: str = Field(description="City name")
+    country: str
+
+
+class ReminderParams(BaseModel):
+    title: Annotated[str, "Reminder title"]
+    priority: Priority
+    channel: Literal["email", "sms"] = "email"
+    locations: list[LocationParams] = Field(default_factory=list)
 
 
 @pytest.fixture
@@ -59,10 +79,52 @@ class TestSchemaBuilderFromModel:
 
         assert schema.properties["max_results"].default == 10
 
+    def test_default_factory_is_not_included_as_default(
+        self, builder: ToolSchemaBuilder
+    ) -> None:
+        schema = builder.build_from_model(CreateEventParams)
+
+        assert schema.properties["attendees"].default is None
+
     def test_list_field_maps_to_array(self, builder: ToolSchemaBuilder) -> None:
         schema = builder.build_from_model(CreateEventParams)
 
         assert schema.properties["attendees"].type == "array"
+
+    def test_typed_list_field_includes_item_schema(
+        self, builder: ToolSchemaBuilder
+    ) -> None:
+        schema = builder.build_from_model(CreateEventParams)
+
+        assert schema.properties["attendees"].items is not None
+        assert schema.properties["attendees"].items.type == "string"
+
+    def test_nested_model_field_includes_object_schema(
+        self, builder: ToolSchemaBuilder
+    ) -> None:
+        schema = builder.build_from_model(ReminderParams)
+        locations = schema.properties["locations"]
+
+        assert locations.items is not None
+        assert locations.items.type == "object"
+        assert locations.items.properties is not None
+        assert locations.items.properties["city"].description == "City name"
+        assert locations.items.required == ["city", "country"]
+
+    def test_enum_and_literal_fields_include_allowed_values(
+        self, builder: ToolSchemaBuilder
+    ) -> None:
+        schema = builder.build_from_model(ReminderParams)
+
+        assert schema.properties["priority"].enum == ["low", "high"]
+        assert schema.properties["channel"].enum == ["email", "sms"]
+
+    def test_annotated_field_uses_description_metadata(
+        self, builder: ToolSchemaBuilder
+    ) -> None:
+        schema = builder.build_from_model(ReminderParams)
+
+        assert schema.properties["title"].description == "Reminder title"
 
     def test_build_delegates_to_build_from_model(
         self, builder: ToolSchemaBuilder
@@ -174,7 +236,7 @@ class TestLambdaStatus:
         assert status == "Searching for 'dentist'"
 
     def test_lambda_status_without_param_model_raises(self, tools: Tools) -> None:
-        with pytest.raises(ValueError, match="callable status requires a param_model"):
+        with pytest.raises(ValueError, match="status requires a param_model"):
 
             @tools.action(
                 description="Search",
@@ -207,18 +269,15 @@ class TestLambdaStatus:
             async def search(params: SearchParams) -> str:
                 return params.query
 
-    def test_string_status_still_works_with_flat_params(self, tools: Tools) -> None:
-        @tools.action(
-            description="Search",
-            status="Searching for '{query}'",
-        )
-        async def search(query: str) -> str:
-            return query
+    def test_string_status_without_param_model_raises(self, tools: Tools) -> None:
+        with pytest.raises(ValueError, match="status requires a param_model"):
 
-        tool = tools.get("search")
-        status = tool.format_status({"query": "dentist"})
-
-        assert status == "Searching for 'dentist'"
+            @tools.action(
+                description="Search",
+                status="Searching for '{query}'",
+            )
+            async def search(query: str) -> str:
+                return query
 
     def test_string_status_with_param_model(self, tools: Tools) -> None:
         @tools.action(
@@ -239,10 +298,11 @@ class TestLambdaStatus:
 
             @tools.action(
                 description="Search",
+                param_model=SearchParams,
                 status="Searching for '{nonexistent}'",
             )
-            async def search(query: str) -> str:
-                return query
+            async def search(params: SearchParams) -> str:
+                return params.query
 
     def test_string_status_validates_against_param_model_fields(
         self, tools: Tools

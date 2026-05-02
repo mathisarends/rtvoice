@@ -204,9 +204,6 @@ class SubAgent[T]:
                         continue
 
                 content = str(result)
-                steering = self._tools.get_steering(tool_name)
-                if steering:
-                    content = f"{content}\n\n<steering>{steering}</steering>"
 
                 messages.append(
                     ToolResultMessage(tool_call_id=tool_call.id, content=content)

@@ -81,7 +81,7 @@ def build_morning_agent() -> SubAgent:
 
 async def main() -> None:
     agent = RealtimeAgent(
-        instructions=(
+        extends_system_prompt=(
             "You are Jarvis, a calm personal voice assistant.\n"
             "For morning routine requests, hand off to the Morning Routine Agent.\n"
             "Do not attempt those tasks yourself."

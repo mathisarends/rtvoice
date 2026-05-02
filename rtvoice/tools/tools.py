@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import inspect
 import logging
-import re
 from collections.abc import Callable
 from typing import (
     TYPE_CHECKING,
@@ -21,7 +20,6 @@ if TYPE_CHECKING:
 
 from rtvoice.realtime.schemas import FunctionTool
 from rtvoice.tools.di import ToolContext, _Inject
-from rtvoice.tools.schema_builder import ToolSchemaBuilder
 from rtvoice.tools.views import Tool
 
 logger = logging.getLogger(__name__)
@@ -30,7 +28,6 @@ logger = logging.getLogger(__name__)
 class Tools:
     def __init__(self):
         self.tools: dict[str, Tool] = {}
-        self._schema_builder = ToolSchemaBuilder()
         self._context: ToolContext | None = None
 
     def action(
@@ -41,24 +38,17 @@ class Tools:
         result_instruction: str | None = None,
         holding_instruction: str | None = None,
         status: str | Callable | None = None,
-        steering: str | None = None,
     ) -> Callable:
         def decorator(func: Callable) -> Callable:
-            if isinstance(status, str):
-                self._validate_status_template(status, func, param_model)
-
             bound_func = getattr(self, func.__name__, func)
-            schema = self._schema_builder.build(func, param_model=param_model)
             tool = Tool(
                 name=name or func.__name__,
                 description=description,
                 function=bound_func,
-                schema=schema,
                 param_model=param_model,
                 result_instruction=result_instruction,
                 holding_instruction=holding_instruction,
                 status=status,
-                steering=steering,
             )
             self._register_tool(tool)
             return func
@@ -91,12 +81,6 @@ class Tools:
 
     def get(self, name: str) -> Tool | None:
         return self.tools.get(name)
-
-    def get_steering(self, name: str) -> str | None:
-        tool = self.tools.get(name)
-        if tool is None:
-            return None
-        return tool.steering
 
     def get_tool_schema(self) -> list[FunctionTool]:
         return [tool.to_pydantic() for tool in self.tools.values()]
@@ -137,29 +121,6 @@ class Tools:
         if tool.name in self.tools:
             raise ValueError(f"Tool '{tool.name}' already registered")
         self.tools[tool.name] = tool
-
-    def _validate_status_template(
-        self, status: str, function: Callable, param_model: type[BaseModel] | None
-    ) -> None:
-        placeholders = {match.group(1) for match in re.finditer(r"\{(\w+)\}", status)}
-        if not placeholders:
-            return
-
-        if param_model is not None:
-            available_names = set(param_model.model_fields.keys())
-        else:
-            available_names = {
-                name
-                for name in inspect.signature(function).parameters
-                if name not in {"self", "cls"}
-            }
-
-        unknown_placeholders = placeholders - available_names
-        if unknown_placeholders:
-            raise ValueError(
-                "Status template contains unknown placeholders: "
-                f"{unknown_placeholders}. Available parameters: {available_names}"
-            )
 
     def _prepare_arguments(
         self,

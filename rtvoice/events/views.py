@@ -4,10 +4,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from rtvoice.realtime.schemas import FunctionTool, ToolChoiceMode
-    from rtvoice.views import (
+    from rtvoice.agent.views import (
         AgentError,
     )
+    from rtvoice.realtime.schemas import FunctionTool, ToolChoiceMode
 
 
 @dataclass

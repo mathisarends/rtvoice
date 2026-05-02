@@ -1,10 +1,21 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from pydantic import BaseModel
 
 from rtvoice.events.bus import EventBus
 from rtvoice.tools import Tools
 from rtvoice.tools.di import Inject, ToolContext
+
+
+class EventSearchParams(BaseModel):
+    query: str
+    date: str
+
+
+class EventCreateParams(BaseModel):
+    date: str
+    attendees: str
 
 
 @pytest.fixture
@@ -290,9 +301,10 @@ class TestSubAgentTools:
 
         @agent.action(
             description="Search events",
+            param_model=EventSearchParams,
             status="Suche nach '{query}' im Kalender...",
         )
-        def search_events(query: str, date: str) -> list:
+        def search_events(params: EventSearchParams) -> list:
             return []
 
         tool = agent.get("search_events")
@@ -319,9 +331,10 @@ class TestSubAgentTools:
 
         @agent.action(
             description="Create event",
+            param_model=EventCreateParams,
             status="Erstelle Termin am {date} mit {attendees}...",
         )
-        def create_event(date: str, attendees: str) -> str:
+        def create_event(params: EventCreateParams) -> str:
             return "ok"
 
         tool = agent.get("create_event")

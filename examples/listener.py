@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 
 from rtvoice import RealtimeAgent
-from rtvoice.listener import AgentListener
+from rtvoice.agent.listener import AgentListener
 
 load_dotenv(override=True)
 
@@ -16,7 +16,7 @@ class LifecycleLogger(AgentListener):
 
 async def main():
     agent = RealtimeAgent(
-        instructions="Du bist Jarvis. Antworte kurz und bündig.",
+        extends_system_prompt="Du bist Jarvis. Antworte kurz und bündig.",
         listener=LifecycleLogger(),
     )
     await agent.run()

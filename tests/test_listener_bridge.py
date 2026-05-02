@@ -2,6 +2,8 @@ import logging
 
 import pytest
 
+from rtvoice.agent.listener import AgentListener, AgentListenerBridge
+from rtvoice.agent.views import AgentError
 from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentErrorEvent,
@@ -19,8 +21,6 @@ from rtvoice.events.views import (
     UserStoppedSpeakingEvent,
     UserTranscriptCompletedEvent,
 )
-from rtvoice.listener import AgentListener, AgentListenerBridge
-from rtvoice.views import AgentError
 
 
 def make_bridge(

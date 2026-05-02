@@ -1,9 +1,9 @@
 import logging
 
+from rtvoice.agent.views import AgentError
 from rtvoice.events import EventBus
 from rtvoice.events.views import AgentErrorEvent
 from rtvoice.realtime.schemas import ErrorEvent
-from rtvoice.views import AgentError
 
 logger = logging.getLogger(__name__)
 

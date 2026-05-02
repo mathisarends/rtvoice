@@ -2,6 +2,20 @@ import asyncio
 import logging
 from pathlib import Path
 
+from rtvoice.agent.listener import AgentListener, AgentListenerBridge
+from rtvoice.agent.prompts import SystemPrompt
+from rtvoice.agent.views import (
+    AgentResult,
+    AssistantVoice,
+    ClarificationCheckpoint,
+    ConversationSeed,
+    NoiseReduction,
+    OutputModality,
+    RealtimeModel,
+    SemanticVAD,
+    TranscriptionModel,
+    TurnDetection,
+)
 from rtvoice.audio import (
     AudioInputDevice,
     AudioOutputDevice,
@@ -14,25 +28,12 @@ from rtvoice.events.views import (
     AgentStoppedEvent,
     UserInactivityTimeoutEvent,
 )
-from rtvoice.listener import AgentListener, AgentListenerBridge
 from rtvoice.mcp import MCPServer
 from rtvoice.realtime import OpenAIProvider, RealtimeProvider, RealtimeSession
 from rtvoice.shared.decorators import timed
 from rtvoice.subagent import SubAgent
 from rtvoice.subagent.views import AgentClarificationNeeded, SubAgentResult
 from rtvoice.tools import Inject, ToolContext, Tools
-from rtvoice.views import (
-    AgentResult,
-    AssistantVoice,
-    ClarificationCheckpoint,
-    ConversationSeed,
-    NoiseReduction,
-    OutputModality,
-    RealtimeModel,
-    SemanticVAD,
-    TranscriptionModel,
-    TurnDetection,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,8 @@ class RealtimeAgent[T]:
     def __init__(
         self,
         *,
-        instructions: str = "",
+        extends_system_prompt: str = "",
+        override_system_promt: str = "",
         model: RealtimeModel = RealtimeModel.GPT_REALTIME_MINI,
         voice: AssistantVoice = AssistantVoice.MARIN,
         speech_speed: float = 1.0,
@@ -132,6 +134,12 @@ class RealtimeAgent[T]:
             input_device=audio_input or self._create_default_input(),
             output_device=audio_output or self._create_default_output(),
         )
+
+        system_prompt = SystemPrompt(
+            extends_system_prompt=extends_system_prompt,
+            override_syste_Mpromt=override_system_promt,
+        )
+        instructions = system_prompt.render()
 
         self._realtime_session = RealtimeSession(
             event_bus=self._event_bus,

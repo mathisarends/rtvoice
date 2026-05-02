@@ -10,7 +10,7 @@ This example shows:
 from dotenv import load_dotenv
 
 from rtvoice import RealtimeAgent
-from rtvoice.views import AgentListener
+from rtvoice.agent.views import AgentListener
 
 load_dotenv(override=True)
 
@@ -67,7 +67,7 @@ async def main_text_and_audio():
     )
 
     agent = RealtimeAgent(
-        instructions="Du bist ein hilfsbereiter Assistent. Antworte kurz und präzise.",
+        extends_system_prompt="Du bist ein hilfsbereiter Assistent. Antworte kurz und präzise.",
         listener=TextAndAudioListener(),
         output_modalities=["text", "audio"],  # Enable both modalities
         inactivity_timeout_seconds=30.0,
@@ -87,7 +87,7 @@ async def main_text_only():
     print("The assistant will respond with text only (no audio)\n")
 
     agent = RealtimeAgent(
-        instructions="Du bist ein hilfsbereiter Assistent. Antworte kurz und präzise.",
+        extends_system_prompt="Du bist ein hilfsbereiter Assistent. Antworte kurz und präzise.",
         listener=TextAndAudioListener(),
         output_modalities=["text"],
         inactivity_timeout_seconds=30.0,
@@ -104,7 +104,7 @@ async def main_audio_only():
     print("The assistant will respond with audio only\n")
 
     agent = RealtimeAgent(
-        instructions="Du bist ein hilfsbereiter Assistent. Antworte kurz und präzise.",
+        extends_system_prompt="Du bist ein hilfsbereiter Assistent. Antworte kurz und präzise.",
         listener=TextAndAudioListener(),
         output_modalities=["audio"],  # Audio only (default)
         inactivity_timeout_seconds=30.0,

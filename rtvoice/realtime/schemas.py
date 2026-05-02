@@ -11,7 +11,7 @@ from pydantic import (
     model_validator,
 )
 
-from rtvoice.views import RealtimeModel
+from rtvoice.agent.views import RealtimeModel
 
 # ============================================================================
 # Enums
@@ -157,25 +157,25 @@ class MCPRequireApprovalMode(StrEnum):
 
 
 # ============================================================================
-# Audio & Session Settings
+# Audio & Session Configuration
 # ============================================================================
 
 
-class AudioFormatSettings(BaseModel):
+class AudioFormatConfig(BaseModel):
     type: AudioInputFormat = AudioInputFormat.PCM
     rate: int = 24000
 
 
-class AudioOutputFormatSettings(BaseModel):
+class AudioOutputFormatConfig(BaseModel):
     type: AudioInputFormat = AudioInputFormat.PCM
     rate: int = 24000
 
 
-class InputAudioNoiseReductionSettings(BaseModel):
+class InputAudioNoiseReductionConfig(BaseModel):
     type: NoiseReductionType
 
 
-class ServerVADSettings(BaseModel):
+class ServerVADConfig(BaseModel):
     type: Literal["server_vad"] = "server_vad"
     threshold: float = 0.5
     prefix_padding_ms: int = 300
@@ -185,7 +185,7 @@ class ServerVADSettings(BaseModel):
     idle_timeout_ms: int | None = None
 
 
-class SemanticVADSettings(BaseModel):
+class SemanticVADConfig(BaseModel):
     type: Literal["semantic_vad"] = "semantic_vad"
     eagerness: Literal["low", "medium", "high", "auto"] = "auto"
     # low    = wait up to 8 s for a natural endpoint
@@ -195,39 +195,39 @@ class SemanticVADSettings(BaseModel):
     interrupt_response: bool = True
 
 
-type TurnDetectionSettings = ServerVADSettings | SemanticVADSettings
+type TurnDetectionConfig = ServerVADConfig | SemanticVADConfig
 
 
-class InputAudioTranscriptionSettings(BaseModel):
+class InputAudioTranscriptionConfig(BaseModel):
     model: TranscriptionModel = TranscriptionModel.WHISPER_1
 
 
-class AudioOutputSettings(BaseModel):
-    format: AudioOutputFormatSettings = Field(default_factory=AudioOutputFormatSettings)
+class AudioOutputConfig(BaseModel):
+    format: AudioOutputFormatConfig = Field(default_factory=AudioOutputFormatConfig)
     speed: float = 1.0
     voice: str | None = None
 
 
-class AudioInputSettings(BaseModel):
-    format: AudioFormatSettings = Field(default_factory=AudioFormatSettings)
-    turn_detection: TurnDetectionSettings | None = Field(
-        default_factory=SemanticVADSettings
+class AudioInputConfig(BaseModel):
+    format: AudioFormatConfig = Field(default_factory=AudioFormatConfig)
+    turn_detection: TurnDetectionConfig | None = Field(
+        default_factory=SemanticVADConfig
     )
-    transcription: InputAudioTranscriptionSettings | None = None
-    noise_reduction: InputAudioNoiseReductionSettings | None = Field(
-        default_factory=lambda: InputAudioNoiseReductionSettings(
+    transcription: InputAudioTranscriptionConfig | None = None
+    noise_reduction: InputAudioNoiseReductionConfig | None = Field(
+        default_factory=lambda: InputAudioNoiseReductionConfig(
             type=NoiseReductionType.FAR_FIELD
         )
     )
 
 
-class AudioSettings(BaseModel):
-    output: AudioOutputSettings = Field(default_factory=AudioOutputSettings)
-    input: AudioInputSettings = Field(default_factory=AudioInputSettings)
+class AudioConfig(BaseModel):
+    output: AudioOutputConfig = Field(default_factory=AudioOutputConfig)
+    input: AudioInputConfig = Field(default_factory=AudioInputConfig)
 
 
 # ============================================================================
-# Tools Settings
+# Tools Configuration
 # ============================================================================
 
 
@@ -357,7 +357,7 @@ ConversationItem = MessageConversationItem | FunctionCallOutputConversationItem
 
 
 # ============================================================================
-# Session Settings
+# Session Configuration
 # ============================================================================
 
 
@@ -374,11 +374,11 @@ class ErrorDetails(BaseModel):
     param: str | None = None
 
 
-class RealtimeSessionSettings(BaseModel):
+class RealtimeSessionConfig(BaseModel):
     type: Literal["realtime"] = "realtime"
     model: RealtimeModel = RealtimeModel.GPT_REALTIME
     instructions: str | None = None
-    audio: AudioSettings = Field(default_factory=AudioSettings)
+    audio: AudioConfig = Field(default_factory=AudioConfig)
     include: list[str] | None = None
     max_output_tokens: int | Literal["inf"] = "inf"
     output_modalities: list[OutputModality] = Field(default_factory=lambda: ["audio"])
@@ -468,37 +468,35 @@ class ConversationResponseCreateEvent(BaseModel):
         )
 
 
-class _SpeedOnlyOutputSettings(BaseModel):
+class _SpeedOnlyOutputConfig(BaseModel):
     speed: float
 
 
-class _SpeedOnlyAudioSettings(BaseModel):
-    output: _SpeedOnlyOutputSettings
+class _SpeedOnlyAudioConfig(BaseModel):
+    output: _SpeedOnlyOutputConfig
 
 
-class _SpeedOnlySessionSettings(BaseModel):
+class _SpeedOnlySessionConfig(BaseModel):
     type: Literal["realtime"] = "realtime"
-    audio: _SpeedOnlyAudioSettings
+    audio: _SpeedOnlyAudioConfig
 
 
 class SpeedUpdateEvent(BaseModel):
     type: Literal[RealtimeClientEvent.SESSION_UPDATE] = (
         RealtimeClientEvent.SESSION_UPDATE
     )
-    session: _SpeedOnlySessionSettings
+    session: _SpeedOnlySessionConfig
 
     @classmethod
     def from_speed(cls, speed: float) -> Self:
         return cls(
-            session=_SpeedOnlySessionSettings(
-                audio=_SpeedOnlyAudioSettings(
-                    output=_SpeedOnlyOutputSettings(speed=speed)
-                )
+            session=_SpeedOnlySessionConfig(
+                audio=_SpeedOnlyAudioConfig(output=_SpeedOnlyOutputConfig(speed=speed))
             )
         )
 
 
-class _ToolChoiceOnlySessionSettings(BaseModel):
+class _ToolChoiceOnlySessionConfig(BaseModel):
     type: Literal["realtime"] = "realtime"
     tool_choice: ToolChoiceMode
 
@@ -507,14 +505,14 @@ class ToolChoiceUpdateEvent(BaseModel):
     type: Literal[RealtimeClientEvent.SESSION_UPDATE] = (
         RealtimeClientEvent.SESSION_UPDATE
     )
-    session: _ToolChoiceOnlySessionSettings
+    session: _ToolChoiceOnlySessionConfig
 
     @classmethod
     def from_mode(cls, mode: ToolChoiceMode) -> Self:
-        return cls(session=_ToolChoiceOnlySessionSettings(tool_choice=mode))
+        return cls(session=_ToolChoiceOnlySessionConfig(tool_choice=mode))
 
 
-class _ToolsOnlySessionSettings(BaseModel):
+class _ToolsOnlySessionConfig(BaseModel):
     type: Literal["realtime"] = "realtime"
     tools: list[FunctionTool]
 
@@ -523,11 +521,11 @@ class ToolsUpdateEvent(BaseModel):
     type: Literal[RealtimeClientEvent.SESSION_UPDATE] = (
         RealtimeClientEvent.SESSION_UPDATE
     )
-    session: _ToolsOnlySessionSettings
+    session: _ToolsOnlySessionConfig
 
     @classmethod
     def from_tools(cls, tools: list[FunctionTool]) -> Self:
-        return cls(session=_ToolsOnlySessionSettings(tools=tools))
+        return cls(session=_ToolsOnlySessionConfig(tools=tools))
 
 
 class SessionUpdateEvent(BaseModel):
@@ -535,7 +533,7 @@ class SessionUpdateEvent(BaseModel):
         RealtimeClientEvent.SESSION_UPDATE
     )
     event_id: str | None = None
-    session: RealtimeSessionSettings
+    session: RealtimeSessionConfig
 
 
 class ResponseCancelEvent(BaseModel):
@@ -562,7 +560,7 @@ class SessionCreatedEvent(BaseModel):
         RealtimeServerEvent.SESSION_CREATED
     )
     event_id: str
-    session: RealtimeSessionSettings
+    session: RealtimeSessionConfig
 
 
 class SessionUpdatedEvent(BaseModel):
@@ -570,7 +568,7 @@ class SessionUpdatedEvent(BaseModel):
         RealtimeServerEvent.SESSION_UPDATED
     )
     event_id: str
-    session: RealtimeSessionSettings
+    session: RealtimeSessionConfig
 
 
 class ErrorEvent(BaseModel):

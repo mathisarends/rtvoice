@@ -6,6 +6,18 @@ from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from rtvoice.agent.views import (
+    AssistantVoice,
+    ConversationSeed,
+    NoiseReduction,
+    OutputModality,
+    RealtimeModel,
+    SeedMessage,
+    SemanticVAD,
+    ServerVAD,
+    TranscriptionModel,
+    TurnDetection,
+)
 from rtvoice.audio import AudioSession
 from rtvoice.events import EventBus
 from rtvoice.events.views import (
@@ -25,36 +37,24 @@ from rtvoice.handler import (
 )
 from rtvoice.realtime.port import RealtimeProvider
 from rtvoice.realtime.schemas import (
-    AudioInputSettings,
-    AudioOutputSettings,
-    AudioSettings,
+    AudioConfig,
+    AudioInputConfig,
+    AudioOutputConfig,
     ConversationItemCreateEvent,
-    InputAudioNoiseReductionSettings,
-    InputAudioTranscriptionSettings,
+    InputAudioNoiseReductionConfig,
+    InputAudioTranscriptionConfig,
     NoiseReductionType,
-    RealtimeSessionSettings,
-    SemanticVADSettings,
-    ServerVADSettings,
+    RealtimeSessionConfig,
+    SemanticVADConfig,
+    ServerVADConfig,
     SessionUpdateEvent,
     SpeedUpdateEvent,
     ToolChoiceMode,
     ToolsUpdateEvent,
-    TurnDetectionSettings,
+    TurnDetectionConfig,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
-from rtvoice.views import (
-    AssistantVoice,
-    ConversationSeed,
-    NoiseReduction,
-    OutputModality,
-    RealtimeModel,
-    SeedMessage,
-    SemanticVAD,
-    ServerVAD,
-    TranscriptionModel,
-    TurnDetection,
-)
 from rtvoice.watchdogs.error import ErrorWatchdog
 
 if TYPE_CHECKING:
@@ -263,13 +263,13 @@ class RealtimeSession:
 
     def _build_session_config(
         self,
-    ) -> RealtimeSessionSettings:
+    ) -> RealtimeSessionConfig:
         if isinstance(self._turn_detection, SemanticVAD):
-            turn_detection_config: TurnDetectionSettings = SemanticVADSettings(
+            turn_detection_config: TurnDetectionConfig = SemanticVADConfig(
                 eagerness=self._turn_detection.eagerness
             )
         elif isinstance(self._turn_detection, ServerVAD):
-            turn_detection_config = ServerVADSettings(
+            turn_detection_config = ServerVADConfig(
                 threshold=self._turn_detection.threshold,
                 prefix_padding_ms=self._turn_detection.prefix_padding_ms,
                 silence_duration_ms=self._turn_detection.silence_duration_ms,
@@ -280,24 +280,24 @@ class RealtimeSession:
         transcription_config = (
             None
             if self._transcription_model is None
-            else InputAudioTranscriptionSettings(model=self._transcription_model)
+            else InputAudioTranscriptionConfig(model=self._transcription_model)
         )
 
-        return RealtimeSessionSettings(
+        return RealtimeSessionConfig(
             model=self._model,
             instructions=self._instructions,
             output_modalities=self._output_modalities,
             tool_choice=ToolChoiceMode.AUTO,
             tools=self._tools.get_tool_schema(),
-            audio=AudioSettings(
-                input=AudioInputSettings(
+            audio=AudioConfig(
+                input=AudioInputConfig(
                     turn_detection=turn_detection_config,
-                    noise_reduction=InputAudioNoiseReductionSettings(
+                    noise_reduction=InputAudioNoiseReductionConfig(
                         type=NoiseReductionType(self._noise_reduction)
                     ),
                     transcription=transcription_config,
                 ),
-                output=AudioOutputSettings(
+                output=AudioOutputConfig(
                     voice=self._voice.value, speed=self._speech_speed
                 ),
             ),

@@ -5,7 +5,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from rtvoice import RealtimeAgent
-from rtvoice.views import AssistantVoice
+from rtvoice.agent.views import AssistantVoice
 
 load_dotenv(override=True)
 
@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 
 async def main():
     agent = RealtimeAgent(
-        instructions="Du bist ein hilfreicher Assistent.",
+        extends_system_prompt="Du bist ein hilfreicher Assistent.",
         voice=AssistantVoice.MARIN,
         recording_path=Path("recordings/session.wav"),
         inactivity_timeout_seconds=5,

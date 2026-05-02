@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 
 from rtvoice import AgentListener, RealtimeAgent
-from rtvoice.views import TranscriptionModel
+from rtvoice.agent.views import TranscriptionModel
 
 load_dotenv(override=True)
 
@@ -18,7 +18,7 @@ async def main():
     instructions = """Du bist Jarvis. Antworte kurz und bündig."""
 
     agent = RealtimeAgent(
-        instructions=instructions,
+        extends_system_prompt=instructions,
         transcription_model=TranscriptionModel.WHISPER_1,
         listener=ConsolePrinter(),
     )

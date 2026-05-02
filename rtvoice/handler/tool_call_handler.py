@@ -47,10 +47,6 @@ class ToolCallHandler:
         result = await self._tools.execute(event.name, event.arguments or {})
         serialized = serialize_tool_result(result)
 
-        steering = self._tools.get_steering(event.name)
-        if steering:
-            serialized = f"{serialized}\n\n<steering>{steering}</steering>"
-
         logger.info("Tool result: '%s' [result=%s]", event.name, serialized)
         await send_function_call_output(self._websocket, event.call_id, serialized)
         await send_response_event(self._websocket, tool)

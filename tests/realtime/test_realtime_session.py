@@ -3,13 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from rtvoice.audio import AudioSession
-from rtvoice.events import EventBus
-from rtvoice.events.views import AgentSessionConnectedEvent
-from rtvoice.realtime.schemas import ConversationItemCreateEvent, SessionUpdateEvent
-from rtvoice.realtime.session import RealtimeSession
-from rtvoice.tools import Tools
-from rtvoice.views import (
+from rtvoice.agent.views import (
     AssistantVoice,
     ConversationSeed,
     NoiseReduction,
@@ -18,6 +12,12 @@ from rtvoice.views import (
     SemanticVAD,
     TranscriptionModel,
 )
+from rtvoice.audio import AudioSession
+from rtvoice.events import EventBus
+from rtvoice.events.views import AgentSessionConnectedEvent
+from rtvoice.realtime.schemas import ConversationItemCreateEvent, SessionUpdateEvent
+from rtvoice.realtime.session import RealtimeSession
+from rtvoice.tools import Tools
 
 
 class FakeWebSocket:

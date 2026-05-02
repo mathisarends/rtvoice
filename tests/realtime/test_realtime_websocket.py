@@ -7,9 +7,9 @@ from pydantic import BaseModel
 from websockets import frames
 from websockets.exceptions import ConnectionClosed
 
+from rtvoice.agent.views import RealtimeModel
 from rtvoice.realtime.providers import OpenAIProvider
 from rtvoice.realtime.websocket import RealtimeWebSocket
-from rtvoice.views import RealtimeModel
 
 
 class SampleMessage(BaseModel):

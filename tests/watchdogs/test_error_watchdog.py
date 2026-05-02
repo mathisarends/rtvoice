@@ -3,10 +3,7 @@ import pytest
 from rtvoice.events.bus import EventBus
 from rtvoice.events.views import AgentErrorEvent
 from rtvoice.realtime.schemas import ErrorDetails, ErrorEvent, RealtimeServerEvent
-from rtvoice.views import AgentError
 from rtvoice.watchdogs import ErrorWatchdog
-
-AgentErrorEvent.model_rebuild(_types_namespace={"AgentError": AgentError})
 
 
 @pytest.fixture

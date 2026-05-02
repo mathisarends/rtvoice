@@ -34,8 +34,6 @@ from rtvoice.views import (
     TranscriptionModel,
 )
 
-AgentErrorEvent.model_rebuild(_types_namespace={"AgentError": AgentError})
-
 
 def make_agent(**kwargs) -> RealtimeAgent:
     audio_input = MagicMock()

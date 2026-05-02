@@ -22,8 +22,6 @@ from rtvoice.events.views import (
 from rtvoice.listener import AgentListener, AgentListenerBridge
 from rtvoice.views import AgentError
 
-AgentErrorEvent.model_rebuild(_types_namespace={"AgentError": AgentError})
-
 
 def make_bridge(
     listener: AgentListener,

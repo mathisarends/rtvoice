@@ -99,7 +99,8 @@ class SubAgentFinishedEvent:
 
 @dataclass
 class AssistantInterruptedEvent:
-    pass
+    item_id: str | None = None
+    played_ms: int | None = None
 
 
 @dataclass

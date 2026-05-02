@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
 from pydantic import BaseModel
 
@@ -186,6 +186,49 @@ Either a [`SemanticVAD`][rtvoice.views.SemanticVAD] or a
 [`ServerVAD`][rtvoice.views.ServerVAD] instance. Passed directly to
 `RealtimeAgent` via the `turn_detection` parameter.
 """
+
+
+@dataclass
+class SeedMessage:
+    """Pre-filled conversation message injected before live user input begins.
+
+    Use this to provide the realtime model with known context or example turns
+    without adding them to the live [`ConversationHistory`][rtvoice.conversation.ConversationHistory].
+    """
+
+    role: Literal["user", "assistant"]
+    """Role used when creating the seed conversation item."""
+
+    text: str
+    """Message text to inject into the realtime conversation."""
+
+    @classmethod
+    def user(cls, text: str) -> Self:
+        return cls(role="user", text=text)
+
+    @classmethod
+    def assistant(cls, text: str) -> Self:
+        return cls(role="assistant", text=text)
+
+
+@dataclass
+class ConversationSeed:
+    """Initial conversation items sent to the realtime session during startup.
+
+    Seed messages are sent after `session.update` and before microphone audio is
+    started, making them useful for context injection and short few-shot examples.
+    """
+
+    messages: list[SeedMessage]
+    """Ordered seed messages to inject into the realtime conversation."""
+
+    @classmethod
+    def from_pairs(cls, *pairs: tuple[str, str]) -> "ConversationSeed":
+        messages: list[SeedMessage] = []
+        for user_text, assistant_text in pairs:
+            messages.append(SeedMessage.user(user_text))
+            messages.append(SeedMessage.assistant(assistant_text))
+        return cls(messages=messages)
 
 
 @dataclass

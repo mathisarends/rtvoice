@@ -26,6 +26,7 @@ from rtvoice.realtime.schemas import (
     AudioConfig,
     AudioInputConfig,
     AudioOutputConfig,
+    ConversationItemCreateEvent,
     InputAudioNoiseReductionConfig,
     InputAudioTranscriptionConfig,
     NoiseReductionType,
@@ -42,9 +43,11 @@ from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
 from rtvoice.views import (
     AssistantVoice,
+    ConversationSeed,
     NoiseReduction,
     OutputModality,
     RealtimeModel,
+    SeedMessage,
     SemanticVAD,
     ServerVAD,
     TranscriptionModel,
@@ -77,6 +80,7 @@ class RealtimeSession:
         tools: Tools,
         audio_session: AudioSession,
         subagents: list[SubAgent],
+        conversation_seed: ConversationSeed | None,
         inactivity_timeout_enabled: bool,
         inactivity_timeout_seconds: float | None,
         recording_path: Path | None,
@@ -94,6 +98,7 @@ class RealtimeSession:
         self._tools = tools
         self._audio_session = audio_session
         self._subagents = subagents
+        self._conversation_seed = conversation_seed
         self._assistant_text_enabled = "text" in self._output_modalities
         self._transcription_enabled = self._transcription_model is not None
         self._inactivity_timeout_enabled = inactivity_timeout_enabled
@@ -173,8 +178,25 @@ class RealtimeSession:
             self._forward_task = asyncio.create_task(self._forward_events())
 
         await self._send_session_update()
+        await self._inject_conversation_seed()
         await self._event_bus.dispatch(AgentSessionConnectedEvent())
         logger.info("Realtime session ready")
+
+    async def _inject_conversation_seed(self) -> None:
+        if not self._conversation_seed:
+            return
+
+        logger.info(
+            "Injecting conversation seed [messages=%d]",
+            len(self._conversation_seed.messages),
+        )
+        for message in self._conversation_seed.messages:
+            await self._websocket.send(self._seed_message_event(message))
+
+    def _seed_message_event(self, message: SeedMessage) -> ConversationItemCreateEvent:
+        if message.role == "user":
+            return ConversationItemCreateEvent.user_message(message.text)
+        return ConversationItemCreateEvent.assistant_message(message.text)
 
     async def _send_session_update(self) -> None:
         logger.info(

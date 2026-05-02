@@ -406,6 +406,15 @@ class ConversationItemCreateEvent(BaseModel):
     item: ConversationItem
 
     @classmethod
+    def user_message(cls, text: str) -> Self:
+        return cls(
+            item=MessageConversationItem(
+                role=MessageRole.USER,
+                content=[InputConversationContent(text=text)],
+            ),
+        )
+
+    @classmethod
     def assistant_message(cls, text: str) -> Self:
         return cls(
             item=MessageConversationItem(

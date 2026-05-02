@@ -7,9 +7,11 @@ from .subagent import SubAgent
 from .tools import Inject, ToolContext, Tools
 from .views import (
     AssistantVoice,
+    ConversationSeed,
     NoiseReduction,
     OutputModality,
     RealtimeModel,
+    SeedMessage,
     SemanticEagerness,
     SemanticVAD,
     ServerVAD,
@@ -21,6 +23,7 @@ __all__ = [
     "AgentListener",
     "AssistantVoice",
     "AzureOpenAIProvider",
+    "ConversationSeed",
     "Inject",
     "MCPServerStdio",
     "NoiseReduction",
@@ -29,6 +32,7 @@ __all__ = [
     "RealtimeAgent",
     "RealtimeModel",
     "RealtimeProvider",
+    "SeedMessage",
     "SemanticEagerness",
     "SemanticVAD",
     "ServerVAD",

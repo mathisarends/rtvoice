@@ -25,8 +25,10 @@ from rtvoice.listener import AgentListener
 from rtvoice.views import (
     AgentError,
     AssistantVoice,
+    ConversationSeed,
     NoiseReduction,
     RealtimeModel,
+    SeedMessage,
     SemanticVAD,
     ServerVAD,
     TranscriptionModel,
@@ -72,6 +74,15 @@ class TestInitDefaults:
     def test_default_inactivity_timeout_disabled(self) -> None:
         agent = make_agent()
         assert agent._realtime_session._inactivity_timeout_enabled is False
+
+    def test_default_conversation_seed_is_none(self) -> None:
+        agent = make_agent()
+        assert agent._realtime_session._conversation_seed is None
+
+    def test_conversation_seed_is_passed_to_realtime_session(self) -> None:
+        seed = ConversationSeed([SeedMessage.user("Mein Name ist Max.")])
+        agent = make_agent(conversation_seed=seed)
+        assert agent._realtime_session._conversation_seed is seed
 
     def test_custom_turn_detection_is_stored(self) -> None:
         vad = ServerVAD(silence_duration_ms=800)

@@ -13,6 +13,7 @@ from rtvoice.events.views import (
     SupervisorFinishedEvent,
     SupervisorStartedEvent,
     UpdateSessionToolsCommand,
+    UpdateSupervisorCommand,
 )
 from rtvoice.handler.tool_call_helpers import (
     send_function_call_output,
@@ -32,23 +33,18 @@ if TYPE_CHECKING:
     from rtvoice.agent.supervisor import Supervisor
     from rtvoice.tools import Tools
 
-logger = logging.getLogger(__name__)
 
-_DEFAULT_HOLDING_INSTRUCTION = (
-    "The user's request is being processed in the background. "
-    "Say ONE very short, generic sentence (e.g. 'On it!', 'Give me a moment!', 'Sure, let me handle that!'). "
-    "Do NOT mention what the task is. "
-    "Do NOT state or imply whether it succeeded or failed - you don't know yet. "
-    "Do NOT paraphrase the task. "
-    "Always respond in the same language the user is speaking."
-)
+logger = logging.getLogger(__name__)
 
 
 @dataclass
 class PendingSupervisorCall:
     call_id: str
-    execution_task: asyncio.Task
     handoff_tool: Tool
+    arguments: dict
+    started: asyncio.Event
+    execution_task: asyncio.Task | None = None
+    runner_task: asyncio.Task | None = None
 
 
 class SupervisorCoordinator:
@@ -64,12 +60,18 @@ class SupervisorCoordinator:
         self._websocket = websocket
         self._supervisor = supervisor
         self._cancel_tool = self._register_cancel_tool()
+        self._update_tool = self._register_update_tool()
+        self._tools.eject_tool(self._cancel_tool.name)
+        self._tools.eject_tool(self._update_tool.name)
         self._active: PendingSupervisorCall | None = None
         self._awaiting_clarification = False
 
         self._event_bus.subscribe(FunctionCallItem, self._handle_tool_call)
         self._event_bus.subscribe(
             CancelSupervisorCommand, self._cancel_active_supervisor
+        )
+        self._event_bus.subscribe(
+            UpdateSupervisorCommand, self._update_active_supervisor
         )
 
     def _register_cancel_tool(self) -> Tool:
@@ -86,6 +88,22 @@ class SupervisorCoordinator:
         tool = self._tools.get("cancel_supervisor")
         if not tool:
             raise RuntimeError("Failed to register cancel tool")
+        return tool
+
+    def _register_update_tool(self) -> Tool:
+        @self._tools.action(
+            "Send new context, corrections, or additional instructions to the currently running supervisor. "
+            "Call this when the user adds information while the supervisor is still working, instead of restarting the task.",
+            name="update_supervisor",
+            result_instruction="Briefly acknowledge that the update was added to the running task.",
+        )
+        async def _update_supervisor(message: str, event_bus: Inject[EventBus]) -> str:
+            await event_bus.dispatch(UpdateSupervisorCommand(message=message))
+            return "The supervisor has received the update."
+
+        tool = self._tools.get("update_supervisor")
+        if not tool:
+            raise RuntimeError("Failed to register update tool")
         return tool
 
     async def _handle_tool_call(self, event: FunctionCallItem) -> None:
@@ -122,23 +140,22 @@ class SupervisorCoordinator:
             json.dumps(event.arguments or {}, ensure_ascii=False),
         )
 
-        await self._inject_cancel_supervisor_tool()
+        await self._inject_supervisor_control_tools()
         self._supervisor.on_progress = self._send_progress_update
-
-        result_task = asyncio.create_task(
-            self._tools.execute(event.name, event.arguments or {})
-        )
 
         active = PendingSupervisorCall(
             call_id=event.call_id,
-            execution_task=result_task,
             handoff_tool=tool,
+            arguments=event.arguments or {},
+            started=asyncio.Event(),
         )
         self._active = active
 
         await self._event_bus.dispatch(SupervisorStartedEvent())
         await self._send_holding_message(tool)
-        asyncio.create_task(self._wait_for_result_and_respond(active))
+        active.runner_task = asyncio.create_task(self._run_supervisor_call(active))
+        active.runner_task.add_done_callback(self._log_unhandled_runner_exception)
+        await active.started.wait()
 
     async def _send_progress_update(self, message: str) -> None:
         logger.debug("Sending supervisor progress update: %s", message)
@@ -150,9 +167,12 @@ class SupervisorCoordinator:
         )
 
     async def _send_holding_message(self, tool: Tool) -> None:
+        if not tool.holding_instruction:
+            return
+
         await self._websocket.send(
             ConversationResponseCreateEvent.from_instructions(
-                tool.holding_instruction or _DEFAULT_HOLDING_INSTRUCTION,
+                tool.holding_instruction,
                 tool_choice=ToolChoiceMode.NONE,
             )
         )
@@ -165,11 +185,28 @@ class SupervisorCoordinator:
         self._active = None
         self._awaiting_clarification = False
         await self._notify_supervisor_finished()
-        await self._eject_cancel_supervisor_tool()
+        await self._eject_supervisor_control_tools()
 
-    async def _wait_for_result_and_respond(self, active: PendingSupervisorCall) -> None:
+    async def _update_active_supervisor(self, event: UpdateSupervisorCommand) -> None:
+        if self._active is None:
+            logger.debug("Ignoring supervisor update because no task is active")
+            return
+
+        logger.info("Updating active supervisor task: %s", event.message)
+        await self._supervisor.update(event.message)
+
+    async def _run_supervisor_call(self, active: PendingSupervisorCall) -> None:
+        failure_message: str | None = None
+
         try:
-            result = await active.execution_task
+            try:
+                async with asyncio.TaskGroup() as task_group:
+                    active.execution_task = task_group.create_task(
+                        self._tools.execute(active.handoff_tool.name, active.arguments)
+                    )
+                    active.started.set()
+            except* Exception as exception_group:
+                failure_message = str(exception_group.exceptions[0])
         except asyncio.CancelledError:
             logger.info("Supervisor was cancelled")
             return
@@ -177,6 +214,21 @@ class SupervisorCoordinator:
             if self._active is active:
                 self._active = None
 
+        if failure_message is not None:
+            logger.error("Supervisor failed: %s", failure_message)
+            await self._handle_supervisor_failure(active, failure_message)
+            return
+
+        if active.execution_task is None or active.execution_task.cancelled():
+            logger.info("Supervisor was cancelled")
+            return
+
+        result = active.execution_task.result()
+        await self._deliver_supervisor_result(active, result)
+
+    async def _deliver_supervisor_result(
+        self, active: PendingSupervisorCall, result: object
+    ) -> None:
         try:
             if isinstance(result, SupervisorClarificationNeeded):
                 await self._ask_user_for_clarification(active, result)
@@ -188,9 +240,20 @@ class SupervisorCoordinator:
             await send_function_call_output(self._websocket, active.call_id, serialized)
             await send_response_event(self._websocket, active.handoff_tool)
             await self._notify_supervisor_finished()
-            await self._eject_cancel_supervisor_tool()
+            await self._eject_supervisor_control_tools()
         except Exception:
             logger.exception("Failed to deliver supervisor result")
+
+    async def _handle_supervisor_failure(
+        self, active: PendingSupervisorCall, message: str
+    ) -> None:
+        await send_function_call_output(
+            self._websocket,
+            active.call_id,
+            f"Supervisor task failed: {message}",
+        )
+        await self._notify_supervisor_finished()
+        await self._eject_supervisor_control_tools()
 
     async def _ask_user_for_clarification(
         self, active: PendingSupervisorCall, result: SupervisorClarificationNeeded
@@ -214,25 +277,48 @@ class SupervisorCoordinator:
             )
         )
         await self._notify_supervisor_finished()
-        await self._eject_cancel_supervisor_tool()
+        await self._eject_supervisor_control_tools()
 
     def _abort_pending_call(self, active: PendingSupervisorCall) -> None:
-        active.execution_task.cancel()
+        if active.execution_task is not None:
+            active.execution_task.cancel()
+            return
+        if active.runner_task is not None:
+            active.runner_task.cancel()
+
+    def _log_unhandled_runner_exception(self, task: asyncio.Task) -> None:
+        if task.cancelled():
+            return
+        exception = task.exception()
+        if exception is not None:
+            logger.exception("Supervisor runner failed", exc_info=exception)
 
     async def _notify_supervisor_finished(self) -> None:
         await self._event_bus.dispatch(SupervisorFinishedEvent())
 
-    async def _inject_cancel_supervisor_tool(self) -> None:
-        if not self._tools.is_registered(self._cancel_tool):
-            self._tools.inject_tool(self._cancel_tool)
-            await self._sync_session_tools()
-            logger.debug("Cancel tool '%s' injected", self._cancel_tool.name)
+    async def _inject_supervisor_control_tools(self) -> None:
+        changed = False
+        for tool in (self._cancel_tool, self._update_tool):
+            if not self._tools.is_registered(tool):
+                self._tools.inject_tool(tool)
+                changed = True
+                logger.debug("Supervisor control tool '%s' injected", tool.name)
 
-    async def _eject_cancel_supervisor_tool(self) -> None:
-        if self._cancel_tool:
-            self._tools.eject_tool(self._cancel_tool.name)
+        if changed:
             await self._sync_session_tools()
-            logger.debug("Cancel tool '%s' ejected", self._cancel_tool.name)
+
+    async def _eject_supervisor_control_tools(self) -> None:
+        changed = False
+        for tool in (self._cancel_tool, self._update_tool):
+            if self._tools.get(tool.name) is not None:
+                self._tools.eject_tool(tool.name)
+                changed = True
+                logger.debug("Supervisor control tool '%s' ejected", tool.name)
+
+        self._supervisor.discard_pending_updates()
+
+        if changed:
+            await self._sync_session_tools()
 
     async def _sync_session_tools(self) -> None:
         await self._event_bus.dispatch(

@@ -1,5 +1,4 @@
-from __future__ import annotations
-
+import asyncio
 import json
 import logging
 from collections.abc import Awaitable, Callable
@@ -18,7 +17,6 @@ from rtvoice.llm import (
     ToolResultMessage,
     UserMessage,
 )
-from rtvoice.shared.decorators import timed
 from rtvoice.tools import Tools
 from rtvoice.tools.di import ToolContext
 
@@ -60,7 +58,7 @@ class Supervisor[T]:
         self.name = "supervisor"
         self.description = description
         self._instructions = instructions
-        self._llm = llm
+        self._llm = llm or ChatModel(model="gpt-5.4-mini")
         self._tools = Tools()
         if tools:
             self._tools.merge(tools)
@@ -71,6 +69,7 @@ class Supervisor[T]:
         self.holding_instruction = holding_instruction
 
         self._tools.set_context(ToolContext(context=context))
+        self._pending_updates: asyncio.Queue[str] = asyncio.Queue()
 
         self.on_progress: ProgressCallback | None = None
         self._on_progress: ProgressCallback | None = None
@@ -78,6 +77,14 @@ class Supervisor[T]:
         self._register_done_tool()
         self._register_clarify_tool()
         self._register_progress_tool()
+
+    async def update(self, message: str) -> None:
+        await self._pending_updates.put(message)
+
+    def discard_pending_updates(self) -> None:
+        while not self._pending_updates.empty():
+            self._pending_updates.get_nowait()
+            self._pending_updates.task_done()
 
     def _register_done_tool(self) -> None:
         @self._tools.action(
@@ -105,10 +112,6 @@ class Supervisor[T]:
         def report_progress(message: str) -> ProgressSignal:
             return ProgressSignal(message)
 
-    @timed()
-    async def prewarm(self) -> None:
-        pass
-
     async def run(
         self,
         task: str,
@@ -116,11 +119,20 @@ class Supervisor[T]:
         on_progress: ProgressCallback | None = None,
     ) -> SupervisorResult:
         self._on_progress = on_progress or self.on_progress
-        await self.prewarm()
         messages = self._build_messages(task=task, context=context)
         return await self._loop(messages)
 
-    @timed()
+    def _build_messages(self, task: str, context: str | None) -> list[Message]:
+        messages = [SystemMessage(content=self._instructions)]
+        if context:
+            messages.append(
+                UserMessage(
+                    content=f"<conversation_history>\n{context}\n</conversation_history>"
+                )
+            )
+        messages.append(UserMessage(content=f"<task>\n{task}\n</task>"))
+        return messages
+
     async def resume(
         self,
         clarification_answer: str,
@@ -142,6 +154,7 @@ class Supervisor[T]:
         tool_schema = self._tools.get_json_tool_schema()
 
         for _ in range(self._max_iterations):
+            self._append_pending_updates(messages)
             response = await self._llm.invoke(messages, tools=tool_schema)
 
             if not response.tool_calls:
@@ -156,10 +169,34 @@ class Supervisor[T]:
 
             for tool_call in response.tool_calls:
                 tool_name = tool_call.function.name
-                tool_args = json.loads(tool_call.function.arguments)
+                try:
+                    tool_args = json.loads(tool_call.function.arguments)
+                except json.JSONDecodeError as exc:
+                    logger.warning(
+                        "Failed to parse arguments for tool '%s': %s", tool_name, exc
+                    )
+                    messages.append(
+                        ToolResultMessage(
+                            tool_call_id=tool_call.id,
+                            content=f"Error: could not parse tool arguments – {exc}. Please retry with valid JSON.",
+                        )
+                    )
+                    continue
 
                 logger.debug("Executing supervisor tool call: '%s'", tool_name)
-                result = await self._tools.execute(tool_name, tool_args)
+                try:
+                    result = await self._tools.execute(tool_name, tool_args)
+                except Exception as exc:
+                    logger.warning(
+                        "Tool '%s' raised an error: %s", tool_name, exc, exc_info=True
+                    )
+                    messages.append(
+                        ToolResultMessage(
+                            tool_call_id=tool_call.id,
+                            content=f"Error: tool '{tool_name}' failed with: {exc}. Please handle this and try again.",
+                        )
+                    )
+                    continue
 
                 match result:
                     case DoneSignal(result=message):
@@ -198,13 +235,12 @@ class Supervisor[T]:
             success=False,
         )
 
-    def _build_messages(self, task: str, context: str | None) -> list[Message]:
-        messages = [SystemMessage(content=self._instructions)]
-        if context:
+    def _append_pending_updates(self, messages: list[Message]) -> None:
+        while not self._pending_updates.empty():
+            update = self._pending_updates.get_nowait()
             messages.append(
                 UserMessage(
-                    content=f"<conversation_history>\n{context}\n</conversation_history>"
+                    content=f"<supervisor_update>\n{update}\n</supervisor_update>"
                 )
             )
-        messages.append(UserMessage(content=f"<task>\n{task}\n</task>"))
-        return messages
+            self._pending_updates.task_done()

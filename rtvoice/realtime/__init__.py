@@ -1,5 +1,6 @@
 from .port import RealtimeProvider
 from .providers import AzureOpenAIProvider, OpenAIProvider
+from .session import RealtimeSession
 
 __all__ = [
     "AzureOpenAIProvider",
@@ -7,11 +8,3 @@ __all__ = [
     "RealtimeProvider",
     "RealtimeSession",
 ]
-
-
-def __getattr__(name: str):
-    if name == "RealtimeSession":
-        from .session import RealtimeSession
-
-        return RealtimeSession
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

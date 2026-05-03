@@ -10,6 +10,7 @@ from rtvoice.events.views import (
     SupervisorFinishedEvent,
     SupervisorStartedEvent,
     UpdateSessionToolsCommand,
+    UpdateSupervisorCommand,
 )
 from rtvoice.handler import SupervisorCoordinator
 from rtvoice.realtime.schemas import (
@@ -18,7 +19,7 @@ from rtvoice.realtime.schemas import (
     FunctionCallItem,
     ToolChoiceMode,
 )
-from rtvoice.tools import Tools
+from rtvoice.tools import ToolContext, Tools
 from rtvoice.tools.views import Tool
 
 
@@ -171,7 +172,23 @@ class TestToolCallHandling:
         assert tool is None
 
     @pytest.mark.asyncio
-    async def test_sends_holding_response_immediately(
+    async def test_sends_holding_response_immediately_when_configured(
+        self,
+        event_bus: EventBus,
+        watchdog: SupervisorCoordinator,
+        websocket: AsyncMock,
+        tools: Tools,
+    ) -> None:
+        register_tool(tools, holding_instruction="Please wait briefly.")
+
+        await event_bus.dispatch(make_function_call_item())
+
+        assert websocket.send.call_count >= 1
+        sent = websocket.send.call_args_list[0][0][0]
+        assert isinstance(sent, ConversationResponseCreateEvent)
+
+    @pytest.mark.asyncio
+    async def test_does_not_send_holding_response_without_instruction(
         self,
         event_bus: EventBus,
         watchdog: SupervisorCoordinator,
@@ -181,10 +198,17 @@ class TestToolCallHandling:
         register_tool(tools)
 
         await event_bus.dispatch(make_function_call_item())
+        await asyncio.sleep(0.05)
 
-        assert websocket.send.call_count >= 1
-        sent = websocket.send.call_args_list[0][0][0]
-        assert isinstance(sent, ConversationResponseCreateEvent)
+        sent_payloads = [c.args[0] for c in websocket.send.call_args_list]
+        response_events = [
+            event
+            for event in sent_payloads
+            if isinstance(event, ConversationResponseCreateEvent)
+        ]
+
+        assert isinstance(sent_payloads[0], ConversationItemCreateEvent)
+        assert len(response_events) == 1
 
     @pytest.mark.asyncio
     async def test_dispatches_started_event(
@@ -335,7 +359,7 @@ class TestResultDelivery:
             if isinstance(event, ConversationItemCreateEvent)
         ]
 
-        assert len(response_events) == 2
+        assert len(response_events) == 1
         assert len(item_events) == 1
 
     @pytest.mark.asyncio
@@ -547,8 +571,88 @@ class TestCancelTool:
         await event_bus.dispatch(make_function_call_item())
         await asyncio.sleep(0.05)
 
-        assert tools.get("cancel_agent") is None
+        assert tools.get("cancel_supervisor") is None
+        assert tools.get("update_supervisor") is None
         assert len(received) >= 1
+
+
+class TestUpdateSupervisor:
+    @pytest.fixture(autouse=True)
+    def setup_supervisor(self, watchdog: SupervisorCoordinator) -> None:
+        pass
+
+    @pytest.mark.asyncio
+    async def test_update_command_pushes_message_to_active_supervisor(
+        self,
+        event_bus: EventBus,
+        watchdog: SupervisorCoordinator,
+        tools: Tools,
+    ) -> None:
+        supervisor = watchdog._supervisor
+        supervisor.update = AsyncMock()
+        register_tool(tools)
+        block = asyncio.Event()
+
+        async def blocking_execute(query: str | None = None) -> str:
+            await block.wait()
+            return "done"
+
+        tool = tools.get("supervisor")
+        assert tool is not None
+        tool.function = blocking_execute
+
+        await event_bus.dispatch(make_function_call_item())
+        await event_bus.dispatch(
+            UpdateSupervisorCommand(message="Focus on the European market")
+        )
+
+        supervisor.update.assert_awaited_once_with("Focus on the European market")
+        block.set()
+        await asyncio.sleep(0.05)
+
+    @pytest.mark.asyncio
+    async def test_update_command_without_active_supervisor_is_ignored(
+        self,
+        event_bus: EventBus,
+        watchdog: SupervisorCoordinator,
+    ) -> None:
+        supervisor = watchdog._supervisor
+        supervisor.update = AsyncMock()
+
+        await event_bus.dispatch(UpdateSupervisorCommand(message="Use EU context"))
+
+        supervisor.update.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_update_tool_dispatches_update_command(
+        self,
+        event_bus: EventBus,
+        watchdog: SupervisorCoordinator,
+        tools: Tools,
+    ) -> None:
+        supervisor = watchdog._supervisor
+        supervisor.update = AsyncMock()
+        tools.set_context(ToolContext(event_bus=event_bus))
+        register_tool(tools)
+        block = asyncio.Event()
+
+        async def blocking_execute(query: str | None = None) -> str:
+            await block.wait()
+            return "done"
+
+        tool = tools.get("supervisor")
+        assert tool is not None
+        tool.function = blocking_execute
+
+        await event_bus.dispatch(make_function_call_item())
+        result = await tools.execute(
+            "update_supervisor", {"message": "Prioritize Europe"}
+        )
+
+        assert result == "The supervisor has received the update."
+        supervisor.update.assert_awaited_once_with("Prioritize Europe")
+        block.set()
+        await asyncio.sleep(0.05)
 
 
 class TestClarificationFlow:
@@ -670,5 +774,8 @@ class TestSessionToolsSyncing:
         await event_bus.dispatch(make_function_call_item(call_id="call_sync"))
         await asyncio.sleep(0.05)
 
-        assert len(received) == 1
-        assert all(tool.name != "cancel_agent" for tool in received[0].tools)
+        assert len(received) == 2
+        assert any(tool.name == "cancel_supervisor" for tool in received[0].tools)
+        assert any(tool.name == "update_supervisor" for tool in received[0].tools)
+        assert all(tool.name != "cancel_supervisor" for tool in received[1].tools)
+        assert all(tool.name != "update_supervisor" for tool in received[1].tools)

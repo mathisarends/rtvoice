@@ -178,7 +178,7 @@ class TestToolCallHandling:
         websocket: AsyncMock,
         tools: Tools,
     ) -> None:
-        register_tool(tools)
+        register_tool(tools, holding_instruction="Please wait briefly.")
 
         await event_bus.dispatch(make_function_call_item())
 
@@ -335,7 +335,7 @@ class TestResultDelivery:
             if isinstance(event, ConversationItemCreateEvent)
         ]
 
-        assert len(response_events) == 2
+        assert len(response_events) == 1
         assert len(item_events) == 1
 
     @pytest.mark.asyncio
@@ -547,7 +547,8 @@ class TestCancelTool:
         await event_bus.dispatch(make_function_call_item())
         await asyncio.sleep(0.05)
 
-        assert tools.get("cancel_agent") is None
+        assert tools.get("cancel_supervisor") is None
+        assert tools.get("update_supervisor") is None
         assert len(received) >= 1
 
 
@@ -670,5 +671,8 @@ class TestSessionToolsSyncing:
         await event_bus.dispatch(make_function_call_item(call_id="call_sync"))
         await asyncio.sleep(0.05)
 
-        assert len(received) == 1
-        assert all(tool.name != "cancel_agent" for tool in received[0].tools)
+        assert len(received) == 2
+        assert any(tool.name == "cancel_supervisor" for tool in received[0].tools)
+        assert any(tool.name == "update_supervisor" for tool in received[0].tools)
+        assert all(tool.name != "cancel_supervisor" for tool in received[1].tools)
+        assert all(tool.name != "update_supervisor" for tool in received[1].tools)

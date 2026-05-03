@@ -26,6 +26,11 @@ class CancelSupervisorCommand:
 
 
 @dataclass
+class UpdateSupervisorCommand:
+    message: str
+
+
+@dataclass
 class UpdateSessionToolsCommand:
     tools: list[FunctionTool]
 

@@ -14,6 +14,7 @@ from rtvoice.llm import (
     SystemMessage,
     ToolCall,
     ToolResultMessage,
+    UserMessage,
 )
 from rtvoice.tools import Tools
 
@@ -168,6 +169,55 @@ class TestSupervisorRunAndLoop:
             isinstance(message, ToolResultMessage)
             and message.tool_call_id == "call_search"
             and message.content == "result:Monday"
+            for message in second_invoke_messages
+        )
+
+    @pytest.mark.asyncio
+    async def test_run_appends_pending_update_before_next_invoke(self) -> None:
+        llm = MagicMock()
+        invoke_count = 0
+        search_call = ToolCall(
+            id="call_search",
+            function=Function(name="search_schedule", arguments='{"query":"Monday"}'),
+        )
+
+        async def invoke(
+            messages: list, tools: list | None = None
+        ) -> ChatInvokeCompletion:
+            nonlocal invoke_count
+            invoke_count += 1
+            if invoke_count == 1:
+                await agent.update("Focus on the European market")
+                return ChatInvokeCompletion(
+                    completion="Checking", tool_calls=[search_call]
+                )
+            return ChatInvokeCompletion(completion="Done", tool_calls=[])
+
+        llm.invoke = AsyncMock(side_effect=invoke)
+
+        tools = Tools()
+
+        @tools.action(description="Search schedule")
+        async def search_schedule(query: str) -> str:
+            return f"result:{query}"
+
+        agent = Supervisor(
+            description="Planning helper",
+            instructions="You are a planner.",
+            llm=llm,
+            tools=tools,
+            max_iterations=3,
+        )
+
+        result = await agent.run(task="Plan my day")
+
+        assert isinstance(result, SupervisorDone)
+
+        second_invoke_messages = llm.invoke.await_args_list[1].args[0]
+        assert any(
+            isinstance(message, UserMessage)
+            and message.content
+            == "<supervisor_update>\nFocus on the European market\n</supervisor_update>"
             for message in second_invoke_messages
         )
 

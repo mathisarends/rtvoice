@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from rtvoice.events import EventBus
 from rtvoice.handler.tool_call_helpers import (
@@ -9,7 +12,9 @@ from rtvoice.handler.tool_call_helpers import (
 )
 from rtvoice.realtime.schemas import FunctionCallItem
 from rtvoice.realtime.websocket import RealtimeWebSocket
-from rtvoice.tools import Tools
+
+if TYPE_CHECKING:
+    from rtvoice.tools import Tools
 
 logger = logging.getLogger(__name__)
 

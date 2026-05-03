@@ -267,7 +267,6 @@ class RealtimeAgent[T]:
         logger.info("Starting agent...")
 
         await self._event_bus.dispatch(AgentStartingEvent())
-        await self.prewarm()
 
         try:
             await self._realtime_session.start()
@@ -281,11 +280,6 @@ class RealtimeAgent[T]:
             turns=self._conversation_history.turns,
             recording_path=self._realtime_session.recording_path,
         )
-
-    @timed()
-    async def prewarm(self) -> None:
-        if self._supervisor:
-            await self._supervisor.prewarm()
 
     async def set_speech_speed(
         self,

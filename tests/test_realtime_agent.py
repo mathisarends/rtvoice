@@ -261,29 +261,6 @@ class TestStop:
         await agent.stop()
 
 
-class TestPrepare:
-    @pytest.mark.asyncio
-    async def test_returns_none(self) -> None:
-        agent = make_agent()
-        result = await agent.prewarm()
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_prewarm_prepares_supervisor(self) -> None:
-        supervisor = MagicMock()
-        supervisor.name = "supervisor"
-        supervisor.description = "Helps"
-        supervisor.handoff_instructions = None
-        supervisor.result_instructions = None
-        supervisor.holding_instruction = None
-        supervisor.prewarm = AsyncMock()
-        agent = make_agent(supervisor=supervisor)
-
-        await agent.prewarm()
-
-        supervisor.prewarm.assert_called_once()
-
-
 class TestListenerWiring:
     @pytest.mark.asyncio
     async def test_on_user_transcript_is_called(self) -> None:

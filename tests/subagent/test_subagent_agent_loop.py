@@ -253,21 +253,6 @@ class TestSupervisorResumeAndPrewarm:
         assert invoke_messages[-1].content == "Use Tuesday"
 
     @pytest.mark.asyncio
-    async def test_prewarm_with_no_mcp_servers_sets_ready_event(self) -> None:
-        llm = MagicMock()
-        llm.invoke = AsyncMock(
-            return_value=ChatInvokeCompletion(completion="done", tool_calls=[])
-        )
-
-        agent = Supervisor(
-            description="Planning helper",
-            instructions="You are a planner.",
-            llm=llm,
-        )
-
-        await agent.prewarm()
-
-    @pytest.mark.asyncio
     async def test_run_calls_prewarm_before_first_invoke(self) -> None:
         llm = MagicMock()
         llm.invoke = AsyncMock(

@@ -141,7 +141,6 @@ class SupervisorCoordinator:
         )
 
         await self._inject_supervisor_control_tools()
-        self._supervisor.on_progress = self._send_progress_update
 
         active = PendingSupervisorCall(
             call_id=event.call_id,
@@ -156,15 +155,6 @@ class SupervisorCoordinator:
         active.runner_task = asyncio.create_task(self._run_supervisor_call(active))
         active.runner_task.add_done_callback(self._log_unhandled_runner_exception)
         await active.started.wait()
-
-    async def _send_progress_update(self, message: str) -> None:
-        logger.debug("Sending supervisor progress update: %s", message)
-        await self._websocket.send(
-            ConversationResponseCreateEvent.from_instructions(
-                f'Tell the user briefly: "{message}". One sentence, same language.',
-                tool_choice=ToolChoiceMode.NONE,
-            )
-        )
 
     async def _send_holding_message(self, tool: Tool) -> None:
         if not tool.holding_instruction:

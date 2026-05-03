@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from rtvoice.agent.views import (
@@ -31,14 +30,6 @@ class DoneSignal:
 @dataclass
 class ClarifySignal:
     question: str
-
-
-@dataclass
-class ProgressSignal:
-    message: str
-
-
-type ProgressCallback = Callable[[str], Awaitable[None]]
 
 
 class Supervisor[T]:
@@ -71,12 +62,8 @@ class Supervisor[T]:
         self._tools.set_context(ToolContext(context=context))
         self._pending_updates: asyncio.Queue[str] = asyncio.Queue()
 
-        self.on_progress: ProgressCallback | None = None
-        self._on_progress: ProgressCallback | None = None
-
         self._register_done_tool()
         self._register_clarify_tool()
-        self._register_progress_tool()
 
     async def update(self, message: str) -> None:
         await self._pending_updates.put(message)
@@ -104,21 +91,11 @@ class Supervisor[T]:
         def clarify(question: str) -> ClarifySignal:
             return ClarifySignal(question)
 
-    def _register_progress_tool(self) -> None:
-        @self._tools.action(
-            "Report an intermediate progress update to the user while working on a long-running task. "
-            "Use this to keep the user informed without blocking - the loop continues immediately after."
-        )
-        def report_progress(message: str) -> ProgressSignal:
-            return ProgressSignal(message)
-
     async def run(
         self,
         task: str,
         context: str | None = None,
-        on_progress: ProgressCallback | None = None,
     ) -> SupervisorResult:
-        self._on_progress = on_progress or self.on_progress
         messages = self._build_messages(task=task, context=context)
         return await self._loop(messages)
 
@@ -138,9 +115,7 @@ class Supervisor[T]:
         clarification_answer: str,
         resume_history: list[Message],
         clarify_call_id: str,
-        on_progress: ProgressCallback | None = None,
     ) -> SupervisorResult:
-        self._on_progress = on_progress or self.on_progress
         messages = list(resume_history)
         messages.append(
             ToolResultMessage(
@@ -214,18 +189,6 @@ class Supervisor[T]:
                             resume_history=list(messages),
                             clarify_call_id=tool_call.id,
                         )
-                    case ProgressSignal(message=message):
-                        logger.debug("Supervisor progress update: %s", message)
-                        if self._on_progress:
-                            await self._on_progress(message)
-                        messages.append(
-                            ToolResultMessage(
-                                tool_call_id=tool_call.id,
-                                content="Progress noted, continue.",
-                            )
-                        )
-                        continue
-
                 messages.append(
                     ToolResultMessage(tool_call_id=tool_call.id, content=str(result))
                 )

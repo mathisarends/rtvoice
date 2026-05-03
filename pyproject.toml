@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-audio = ["pyaudio>=0.2.14"]
+audio = ["sounddevice>=0.5.1"]
 
 [dependency-groups]
 dev = [

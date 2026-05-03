@@ -8,20 +8,6 @@ logger = logging.getLogger(__name__)
 
 
 class SpeakerOutput(AudioOutputDevice):
-    """Default speaker output powered by PyAudio.
-
-    Plays raw 16-bit PCM audio through the system speaker using a
-    dedicated background thread, keeping the async event loop unblocked.
-    Requires the `pyaudio` package — install it with
-    `pip install rtvoice[audio]`.
-
-    Example:
-        ```python
-        speaker = SpeakerOutput(sample_rate=24000)
-        agent = RealtimeAgent(audio_output=speaker)
-        ```
-    """
-
     def __init__(
         self,
         device_index: int | None = None,
@@ -29,7 +15,6 @@ class SpeakerOutput(AudioOutputDevice):
     ):
         self._device_index = device_index
         self._sample_rate = sample_rate
-        self._audio = None
         self._stream = None
         self._active = False
 
@@ -46,21 +31,20 @@ class SpeakerOutput(AudioOutputDevice):
             return
 
         try:
-            import pyaudio
+            import sounddevice as sd
         except ImportError as e:
             raise ImportError(
-                "pyaudio is required for SpeakerOutput. "
+                "sounddevice is required for SpeakerOutput. "
                 "Install it with: pip install rtvoice[audio]"
             ) from e
 
-        self._audio = pyaudio.PyAudio()
-        self._stream = self._audio.open(
-            format=pyaudio.paInt16,
+        self._stream = sd.RawOutputStream(
+            samplerate=self._sample_rate,
             channels=1,
-            rate=self._sample_rate,
-            output=True,
-            output_device_index=self._device_index,
+            dtype="int16",
+            device=self._device_index,
         )
+        self._stream.start()
         self._active = True
 
         self._playback_thread = threading.Thread(
@@ -79,10 +63,8 @@ class SpeakerOutput(AudioOutputDevice):
             self._playback_thread.join(timeout=2.0)
 
         if self._stream:
-            self._stream.stop_stream()
+            self._stream.stop()
             self._stream.close()
-        if self._audio:
-            self._audio.terminate()
 
     def _playback_loop(self) -> None:
         while True:

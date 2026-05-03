@@ -15,7 +15,6 @@ class MicrophoneInput(AudioInputDevice):
         self._device_index = device_index
         self._sample_rate = sample_rate
         self._chunk_size = chunk_size
-        self._audio = None
         self._stream = None
         self._active = False
         self._read_complete = threading.Event()
@@ -30,22 +29,21 @@ class MicrophoneInput(AudioInputDevice):
             return
 
         try:
-            import pyaudio
+            import sounddevice as sd
         except ImportError as e:
             raise ImportError(
-                "pyaudio is required for MicrophoneInput. "
+                "sounddevice is required for MicrophoneInput. "
                 "Install it with: pip install rtvoice[audio]"
             ) from e
 
-        self._audio = pyaudio.PyAudio()
-        self._stream = self._audio.open(
-            format=pyaudio.paInt16,
+        self._stream = sd.RawInputStream(
+            samplerate=self._sample_rate,
+            blocksize=self._chunk_size,
             channels=1,
-            rate=self._sample_rate,
-            input=True,
-            input_device_index=self._device_index,
-            frames_per_buffer=self._chunk_size,
+            dtype="int16",
+            device=self._device_index,
         )
+        self._stream.start()
         self._active = True
 
     def _safe_read(self) -> bytes | None:
@@ -53,8 +51,9 @@ class MicrophoneInput(AudioInputDevice):
         try:
             if not self._active or not self._stream:
                 return None
-            return self._stream.read(self._chunk_size)
-        except OSError:
+            data, _ = self._stream.read(self._chunk_size)
+            return bytes(data)
+        except Exception:
             return None
         finally:
             self._read_complete.set()
@@ -70,13 +69,9 @@ class MicrophoneInput(AudioInputDevice):
         )
 
         if self._stream:
-            self._stream.stop_stream()
+            self._stream.stop()
             self._stream.close()
             self._stream = None
-
-        if self._audio:
-            self._audio.terminate()
-            self._audio = None
 
     async def stream_chunks(self) -> AsyncIterator[bytes]:
         while self._active and self._stream:

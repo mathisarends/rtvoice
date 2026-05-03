@@ -3,7 +3,6 @@ import logging
 from pathlib import Path
 
 from rtvoice.agent.listener import AgentListener, AgentListenerBridge
-from rtvoice.agent.prompts import SystemPrompt
 from rtvoice.agent.views import (
     AgentResult,
     AssistantVoice,
@@ -42,8 +41,7 @@ class RealtimeAgent[T]:
     def __init__(
         self,
         *,
-        extends_system_prompt: str = "",
-        override_system_promt: str = "",
+        instructions: str = "",
         model: RealtimeModel = RealtimeModel.GPT_REALTIME_MINI,
         voice: AssistantVoice = AssistantVoice.MARIN,
         speech_speed: float = 1.0,
@@ -133,12 +131,6 @@ class RealtimeAgent[T]:
             input_device=audio_input or self._create_default_input(),
             output_device=audio_output or self._create_default_output(),
         )
-
-        system_prompt = SystemPrompt(
-            extends_system_prompt=extends_system_prompt,
-            override_syste_Mpromt=override_system_promt,
-        )
-        instructions = system_prompt.render()
 
         self._realtime_session = RealtimeSession(
             event_bus=self._event_bus,

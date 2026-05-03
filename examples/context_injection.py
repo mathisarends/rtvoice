@@ -34,7 +34,7 @@ async def main() -> None:
     )
 
     print("Frag zum Beispiel: Welche Kundendaten kennst du schon?")
-    await agent.run()
+    await agent.start()
 
 
 if __name__ == "__main__":

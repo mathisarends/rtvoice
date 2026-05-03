@@ -86,7 +86,7 @@ You're not a tool. You're the dev he can think out loud with at 2am when the GKE
         instructions=prompt,
         listener=LifecycleLogger(),
     )
-    await agent.run()
+    await agent.start()
 
 
 if __name__ == "__main__":

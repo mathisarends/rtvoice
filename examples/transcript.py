@@ -22,7 +22,7 @@ async def main():
         transcription_model=TranscriptionModel.WHISPER_1,
         listener=ConsolePrinter(),
     )
-    await agent.run()
+    await agent.start()
 
 
 if __name__ == "__main__":

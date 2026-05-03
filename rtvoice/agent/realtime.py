@@ -224,7 +224,7 @@ class RealtimeAgent[T]:
                 context = (
                     conversation_history.format() if conversation_history else None
                 )
-                result = await supervisor.start(task, context=context)
+                result = await supervisor.run(task, context=context)
 
             if isinstance(result, SupervisorClarificationNeeded):
                 paused_for_clarification = ClarificationCheckpoint(
@@ -261,7 +261,7 @@ class RealtimeAgent[T]:
         )
         asyncio.ensure_future(self.stop())
 
-    async def run(
+    async def start(
         self,
     ) -> AgentResult:
         logger.info("Starting agent...")

@@ -20,7 +20,7 @@ async def main():
         inactivity_timeout_seconds=5,
     )
 
-    result = await agent.run()
+    result = await agent.start()
 
     print("\n--- Session beendet ---")
     print(f"Recording: {result.recording_path}")

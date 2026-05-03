@@ -15,15 +15,9 @@ async def main() -> None:
     )
 
     result = await agent.run()
-    summary = result.token_usage
-    usage, cost = summary.usage, summary.cost
-
-    print(f"Input:   {usage.input_tokens} tokens  (${cost.input_usd:.6f})")
-    print(
-        f"Cached:  {usage.cached_input_tokens} tokens  (${cost.cached_input_usd:.6f})"
-    )
-    print(f"Output:  {usage.output_tokens} tokens  (${cost.output_usd:.6f})")
-    print(f"Total:   {usage.total_tokens} tokens  (${cost.total_usd:.6f})")
+    print(f"Turns: {len(result.turns)}")
+    for turn in result.turns:
+        print(f"  {turn.role}: {turn.text}")
 
 
 if __name__ == "__main__":

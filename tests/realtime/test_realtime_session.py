@@ -17,7 +17,6 @@ from rtvoice.events import EventBus
 from rtvoice.events.views import AgentSessionConnectedEvent
 from rtvoice.realtime.schemas import ConversationItemCreateEvent, SessionUpdateEvent
 from rtvoice.realtime.session import RealtimeSession
-from rtvoice.token import TokenTracker
 from rtvoice.tools import Tools
 
 
@@ -74,7 +73,6 @@ def make_session(
             inactivity_timeout_seconds=None,
             recording_path=None,
             provider=MagicMock(),
-            token_tracker=TokenTracker(),
         )
     session._websocket = websocket
 

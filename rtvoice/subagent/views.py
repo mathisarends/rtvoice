@@ -3,10 +3,9 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from rtvoice.llm import Message
-from rtvoice.token.views import TokenUsageSummary
 
 
 @dataclass
@@ -34,7 +33,6 @@ class AgentDone(BaseModel):
 
     message: str
     success: bool = True
-    token_usage: TokenUsageSummary = Field(default_factory=TokenUsageSummary)
 
 
 class AgentClarificationNeeded(BaseModel):
@@ -43,7 +41,6 @@ class AgentClarificationNeeded(BaseModel):
     question: str
     resume_history: list[Message]
     clarify_call_id: str
-    token_usage: TokenUsageSummary = Field(default_factory=TokenUsageSummary)
 
 
 type SubAgentResult = AgentDone | AgentClarificationNeeded

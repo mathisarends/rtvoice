@@ -33,7 +33,6 @@ from rtvoice.events.views import (
     UserStoppedSpeakingEvent,
     UserTranscriptCompletedEvent,
 )
-from rtvoice.subagent import SubAgent
 
 
 def make_agent(**kwargs) -> RealtimeAgent:
@@ -91,18 +90,6 @@ class TestInitDefaults:
     def test_custom_model_is_stored(self) -> None:
         agent = make_agent(model=RealtimeModel.GPT_REALTIME)
         assert agent._realtime_session._model == RealtimeModel.GPT_REALTIME
-
-    def test_subagent_uses_agent_token_tracker(self) -> None:
-        subagent = SubAgent(
-            name="planner",
-            description="Planning helper",
-            instructions="You are a planner.",
-            llm=MagicMock(),
-        )
-
-        agent = make_agent(subagents=[subagent])
-
-        assert subagent._token_tracker is agent._token_tracker
 
     def test_recording_path_is_converted_to_path_object(self, tmp_path) -> None:
         agent = make_agent(recording_path=str(tmp_path / "rec.wav"))

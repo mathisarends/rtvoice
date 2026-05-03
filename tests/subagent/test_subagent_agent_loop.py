@@ -48,9 +48,6 @@ class TestSubAgentRunAndLoop:
 
         assert isinstance(result, AgentDone)
         assert result.message == "Final answer"
-        assert result.token_usage.usage.input_text_tokens == 75
-        assert result.token_usage.usage.cached_input_text_tokens == 25
-        assert result.token_usage.usage.output_text_tokens == 10
         assert llm.invoke.await_count == 1
 
     @pytest.mark.asyncio

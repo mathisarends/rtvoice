@@ -3,10 +3,9 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from rtvoice.conversation.views import ConversationTurn
-from rtvoice.token.views import TokenUsageSummary
 
 type OutputModality = Literal["text", "audio"]
 
@@ -128,7 +127,6 @@ class AgentError:
 class AgentResult(BaseModel):
     turns: list[ConversationTurn]
     recording_path: Path | None = None
-    token_usage: TokenUsageSummary = Field(default_factory=TokenUsageSummary)
 
 
 @dataclass

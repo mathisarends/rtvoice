@@ -33,7 +33,6 @@ from rtvoice.realtime import OpenAIProvider, RealtimeProvider, RealtimeSession
 from rtvoice.shared.decorators import timed
 from rtvoice.subagent import SubAgent
 from rtvoice.subagent.views import AgentClarificationNeeded, SubAgentResult
-from rtvoice.token import TokenTracker
 from rtvoice.tools import Inject, ToolContext, Tools
 
 logger = logging.getLogger(__name__)
@@ -115,7 +114,6 @@ class RealtimeAgent[T]:
 
         self._event_bus = EventBus()
         self._conversation_history = ConversationHistory(self._event_bus)
-        self._token_tracker = TokenTracker()
 
         self._tools = Tools()
         if tools:
@@ -129,7 +127,6 @@ class RealtimeAgent[T]:
             )
         )
         for subagent in self._subagents:
-            subagent.use_token_tracker(self._token_tracker)
             self._register_subagent(subagent)
 
         audio_session = AudioSession(
@@ -161,7 +158,6 @@ class RealtimeAgent[T]:
             inactivity_timeout_seconds=inactivity_timeout_seconds,
             recording_path=recording_path_obj,
             provider=provider or OpenAIProvider(api_key=api_key),
-            token_tracker=self._token_tracker,
         )
 
         self._setup_shutdown_handlers()
@@ -312,7 +308,6 @@ class RealtimeAgent[T]:
         return AgentResult(
             turns=self._conversation_history.turns,
             recording_path=self._realtime_session.recording_path,
-            token_usage=self._token_tracker.summary(),
         )
 
     @timed()

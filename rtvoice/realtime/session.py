@@ -37,24 +37,24 @@ from rtvoice.handler import (
 )
 from rtvoice.realtime.port import RealtimeProvider
 from rtvoice.realtime.schemas import (
-    AudioConfig,
-    AudioInputConfig,
-    AudioOutputConfig,
+    AudioInputSettings,
+    AudioOutputSettings,
+    AudioSettings,
     ConversationItemCreateEvent,
     ConversationResponseCreateEvent,
-    InputAudioNoiseReductionConfig,
+    InputAudioNoiseReductionSettings,
     InputAudioTranscriptionCompleted,
-    InputAudioTranscriptionConfig,
+    InputAudioTranscriptionSettings,
     NoiseReductionType,
-    RealtimeSessionConfig,
+    RealtimeSessionSettings,
     ResponseDoneEvent,
-    SemanticVADConfig,
-    ServerVADConfig,
+    SemanticVADSettings,
+    ServerVADSettings,
     SessionUpdateEvent,
     SpeedUpdateEvent,
     ToolChoiceMode,
     ToolsUpdateEvent,
-    TurnDetectionConfig,
+    TurnDetectionSettings,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
@@ -210,7 +210,7 @@ class RealtimeSession:
 
     async def _send_session_update(self) -> None:
         logger.info(
-            "Configuring session [model=%s, voice=%s, speed=%s, turn_detection=%s, transcription=%s, output_modalities=%s]",
+            "Applying session settings [model=%s, voice=%s, speed=%s, turn_detection=%s, transcription=%s, output_modalities=%s]",
             self._model,
             self._voice,
             self._speech_speed,
@@ -218,8 +218,8 @@ class RealtimeSession:
             self._transcription_model,
             self._output_modalities,
         )
-        config = self._build_session_config()
-        await self._websocket.send(SessionUpdateEvent(session=config))
+        settings = self._build_session_settings()
+        await self._websocket.send(SessionUpdateEvent(session=settings))
 
     @timed()
     async def update_speech_speed(self, speed: float) -> None:
@@ -286,15 +286,15 @@ class RealtimeSession:
         await self._websocket.close()
         logger.info("Realtime session stopped")
 
-    def _build_session_config(
+    def _build_session_settings(
         self,
-    ) -> RealtimeSessionConfig:
+    ) -> RealtimeSessionSettings:
         if isinstance(self._turn_detection, SemanticVAD):
-            turn_detection_config: TurnDetectionConfig = SemanticVADConfig(
+            turn_detection_settings: TurnDetectionSettings = SemanticVADSettings(
                 eagerness=self._turn_detection.eagerness
             )
         elif isinstance(self._turn_detection, ServerVAD):
-            turn_detection_config = ServerVADConfig(
+            turn_detection_settings = ServerVADSettings(
                 threshold=self._turn_detection.threshold,
                 prefix_padding_ms=self._turn_detection.prefix_padding_ms,
                 silence_duration_ms=self._turn_detection.silence_duration_ms,
@@ -302,27 +302,27 @@ class RealtimeSession:
         else:
             raise TypeError(f"Unknown TurnDetection type: {type(self._turn_detection)}")
 
-        transcription_config = (
+        transcription_settings = (
             None
             if self._transcription_model is None
-            else InputAudioTranscriptionConfig(model=self._transcription_model)
+            else InputAudioTranscriptionSettings(model=self._transcription_model)
         )
 
-        return RealtimeSessionConfig(
+        return RealtimeSessionSettings(
             model=self._model,
             instructions=self._instructions,
             output_modalities=self._output_modalities,
             tool_choice=ToolChoiceMode.AUTO,
             tools=self._tools.get_tool_schema(),
-            audio=AudioConfig(
-                input=AudioInputConfig(
-                    turn_detection=turn_detection_config,
-                    noise_reduction=InputAudioNoiseReductionConfig(
+            audio=AudioSettings(
+                input=AudioInputSettings(
+                    turn_detection=turn_detection_settings,
+                    noise_reduction=InputAudioNoiseReductionSettings(
                         type=NoiseReductionType(self._noise_reduction)
                     ),
-                    transcription=transcription_config,
+                    transcription=transcription_settings,
                 ),
-                output=AudioOutputConfig(
+                output=AudioOutputSettings(
                     voice=self._voice.value, speed=self._speech_speed
                 ),
             ),

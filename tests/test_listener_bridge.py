@@ -14,8 +14,8 @@ from rtvoice.events.views import (
     AssistantStoppedRespondingEvent,
     AssistantTranscriptCompletedEvent,
     AssistantTranscriptDeltaEvent,
-    SubAgentFinishedEvent,
-    SubAgentStartedEvent,
+    SupervisorFinishedEvent,
+    SupervisorStartedEvent,
     UserInactivityCountdownEvent,
     UserStartedSpeakingEvent,
     UserStoppedSpeakingEvent,
@@ -27,14 +27,14 @@ def make_bridge(
     listener: AgentListener,
     *,
     inactivity_timeout_enabled: bool = False,
-    has_subagents: bool = False,
+    has_supervisor: bool = False,
     assistant_text_enabled: bool = False,
 ) -> AgentListenerBridge:
     return AgentListenerBridge(
         event_bus=EventBus(),
         listener=listener,
         inactivity_timeout_enabled=inactivity_timeout_enabled,
-        has_subagents=has_subagents,
+        has_supervisor=has_supervisor,
         assistant_text_enabled=assistant_text_enabled,
     )
 
@@ -53,14 +53,14 @@ class ListenerWithTranscriptDelta(AgentListener):
         _ = delta
 
 
-class ListenerWithSubagentStarted(AgentListener):
-    async def on_subagent_started(self, agent_name: str) -> None:
-        _ = agent_name
+class ListenerWithSupervisorStarted(AgentListener):
+    async def on_supervisor_started(self) -> None:
+        pass
 
 
-class ListenerWithSubagentFinished(AgentListener):
-    async def on_subagent_finished(self, agent_name: str) -> None:
-        _ = agent_name
+class ListenerWithSupervisorFinished(AgentListener):
+    async def on_supervisor_finished(self) -> None:
+        pass
 
 
 class RecordingListener(AgentListener):
@@ -103,11 +103,11 @@ class RecordingListener(AgentListener):
     async def on_user_inactivity_countdown(self, remaining_seconds: int) -> None:
         self.calls.append(("on_user_inactivity_countdown", remaining_seconds))
 
-    async def on_subagent_started(self, agent_name: str) -> None:
-        self.calls.append(("on_subagent_started", agent_name))
+    async def on_supervisor_started(self) -> None:
+        self.calls.append(("on_supervisor_started", None))
 
-    async def on_subagent_finished(self, agent_name: str) -> None:
-        self.calls.append(("on_subagent_finished", agent_name))
+    async def on_supervisor_finished(self) -> None:
+        self.calls.append(("on_supervisor_finished", None))
 
 
 class TestListenerOverrideChecks:
@@ -127,49 +127,49 @@ class TestListenerOverrideChecks:
         bridge = make_bridge(ListenerWithTranscriptDelta())
         assert bridge._listener_overrides_assistant_transcript_delta() is True
 
-    def test_listener_overrides_subagent_callbacks_is_false_by_default(self) -> None:
+    def test_listener_overrides_supervisor_callbacks_is_false_by_default(self) -> None:
         bridge = make_bridge(ListenerWithoutOverrides())
-        assert bridge._listener_overrides_subagent_callbacks() is False
+        assert bridge._listener_overrides_supervisor_callbacks() is False
 
-    def test_listener_overrides_subagent_callbacks_is_true_when_started_is_implemented(
+    def test_listener_overrides_supervisor_callbacks_is_true_when_started_is_implemented(
         self,
     ) -> None:
-        bridge = make_bridge(ListenerWithSubagentStarted())
-        assert bridge._listener_overrides_subagent_callbacks() is True
+        bridge = make_bridge(ListenerWithSupervisorStarted())
+        assert bridge._listener_overrides_supervisor_callbacks() is True
 
-    def test_listener_overrides_subagent_callbacks_is_true_when_finished_is_implemented(
+    def test_listener_overrides_supervisor_callbacks_is_true_when_finished_is_implemented(
         self,
     ) -> None:
-        bridge = make_bridge(ListenerWithSubagentFinished())
-        assert bridge._listener_overrides_subagent_callbacks() is True
+        bridge = make_bridge(ListenerWithSupervisorFinished())
+        assert bridge._listener_overrides_supervisor_callbacks() is True
 
 
 class TestListenerBridgeWarnings:
-    def test_warns_when_subagent_callbacks_are_overridden_without_subagents(
+    def test_warns_when_supervisor_callbacks_are_overridden_without_supervisors(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         with caplog.at_level(logging.WARNING, logger="rtvoice.service"):
             make_bridge(
-                ListenerWithSubagentStarted(),
-                has_subagents=False,
+                ListenerWithSupervisorStarted(),
+                has_supervisor=False,
             ).setup()
 
         assert any(
-            "on_subagent_started or on_subagent_finished" in r.message
+            "on_supervisor_started or on_supervisor_finished" in r.message
             for r in caplog.records
         )
 
-    def test_does_not_warn_when_subagent_callbacks_are_overridden_with_subagents(
+    def test_does_not_warn_when_supervisor_callbacks_are_overridden_with_supervisors(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         with caplog.at_level(logging.WARNING, logger="rtvoice.service"):
             make_bridge(
-                ListenerWithSubagentFinished(),
-                has_subagents=True,
+                ListenerWithSupervisorFinished(),
+                has_supervisor=True,
             ).setup()
 
         assert not any(
-            "on_subagent_started or on_subagent_finished" in r.message
+            "on_supervisor_started or on_supervisor_finished" in r.message
             for r in caplog.records
         )
 
@@ -205,7 +205,7 @@ class TestListenerBridgeEventPropagation:
         bridge = make_bridge(
             listener,
             inactivity_timeout_enabled=True,
-            has_subagents=True,
+            has_supervisor=True,
             assistant_text_enabled=True,
         )
         bridge.setup()
@@ -241,8 +241,8 @@ class TestListenerBridgeEventPropagation:
         await bridge._event_bus.dispatch(
             UserInactivityCountdownEvent(remaining_seconds=5)
         )
-        await bridge._event_bus.dispatch(SubAgentStartedEvent(agent_name="research"))
-        await bridge._event_bus.dispatch(SubAgentFinishedEvent(agent_name="research"))
+        await bridge._event_bus.dispatch(SupervisorStartedEvent())
+        await bridge._event_bus.dispatch(SupervisorFinishedEvent())
 
         assert listener.calls == [
             ("on_agent_starting", None),
@@ -257,6 +257,6 @@ class TestListenerBridgeEventPropagation:
             ("on_assistant_started_responding", None),
             ("on_assistant_stopped_responding", None),
             ("on_user_inactivity_countdown", 5),
-            ("on_subagent_started", "research"),
-            ("on_subagent_finished", "research"),
+            ("on_supervisor_started", None),
+            ("on_supervisor_finished", None),
         ]

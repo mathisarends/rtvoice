@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
+from rtvoice.agent.views import (
+    SupervisorClarificationNeeded,
+    SupervisorDone,
+    SupervisorResult,
+)
 from rtvoice.llm import (
     AssistantMessage,
     ChatModel,
@@ -12,25 +19,34 @@ from rtvoice.llm import (
     UserMessage,
 )
 from rtvoice.shared.decorators import timed
-from rtvoice.subagent.views import (
-    AgentClarificationNeeded,
-    AgentDone,
-    ClarifySignal,
-    DoneSignal,
-    ProgressCallback,
-    ProgressSignal,
-    SubAgentResult,
-)
 from rtvoice.tools import Tools
 from rtvoice.tools.di import ToolContext
 
 logger = logging.getLogger(__name__)
 
 
-class SubAgent[T]:
+@dataclass
+class DoneSignal:
+    result: str
+
+
+@dataclass
+class ClarifySignal:
+    question: str
+
+
+@dataclass
+class ProgressSignal:
+    message: str
+
+
+type ProgressCallback = Callable[[str], Awaitable[None]]
+
+
+class Supervisor[T]:
     def __init__(
         self,
-        name: str,
+        *,
         description: str,
         instructions: str,
         llm: ChatModel | None = None,
@@ -41,7 +57,7 @@ class SubAgent[T]:
         holding_instruction: str | None = None,
         context: T | None = None,
     ) -> None:
-        self.name = name.replace(" ", "_")
+        self.name = "supervisor"
         self.description = description
         self._instructions = instructions
         self._llm = llm
@@ -57,6 +73,7 @@ class SubAgent[T]:
         self._tools.set_context(ToolContext(context=context))
 
         self.on_progress: ProgressCallback | None = None
+        self._on_progress: ProgressCallback | None = None
 
         self._register_done_tool()
         self._register_clarify_tool()
@@ -73,7 +90,7 @@ class SubAgent[T]:
     def _register_clarify_tool(self) -> None:
         @self._tools.action(
             "Ask the user a clarifying question when essential information is missing. "
-            "Use sparingly – only when you cannot proceed without the answer. "
+            "Use sparingly - only when you cannot proceed without the answer. "
             "Calling this tool immediately returns control to the user; "
             "you will be called again once they answer."
         )
@@ -83,7 +100,7 @@ class SubAgent[T]:
     def _register_progress_tool(self) -> None:
         @self._tools.action(
             "Report an intermediate progress update to the user while working on a long-running task. "
-            "Use this to keep the user informed without blocking \u2014 the loop continues immediately after."
+            "Use this to keep the user informed without blocking - the loop continues immediately after."
         )
         def report_progress(message: str) -> ProgressSignal:
             return ProgressSignal(message)
@@ -97,7 +114,7 @@ class SubAgent[T]:
         task: str,
         context: str | None = None,
         on_progress: ProgressCallback | None = None,
-    ) -> SubAgentResult:
+    ) -> SupervisorResult:
         self._on_progress = on_progress or self.on_progress
         await self.prewarm()
         messages = self._build_messages(task=task, context=context)
@@ -110,7 +127,7 @@ class SubAgent[T]:
         resume_history: list[Message],
         clarify_call_id: str,
         on_progress: ProgressCallback | None = None,
-    ) -> SubAgentResult:
+    ) -> SupervisorResult:
         self._on_progress = on_progress or self.on_progress
         messages = list(resume_history)
         messages.append(
@@ -121,16 +138,14 @@ class SubAgent[T]:
         )
         return await self._loop(messages)
 
-    async def _loop(self, messages: list[Message]) -> SubAgentResult:
+    async def _loop(self, messages: list[Message]) -> SupervisorResult:
         tool_schema = self._tools.get_json_tool_schema()
 
         for _ in range(self._max_iterations):
             response = await self._llm.invoke(messages, tools=tool_schema)
 
             if not response.tool_calls:
-                return AgentDone(
-                    message=response.completion,
-                )
+                return SupervisorDone(message=response.completion)
 
             messages.append(
                 AssistantMessage(
@@ -143,28 +158,29 @@ class SubAgent[T]:
                 tool_name = tool_call.function.name
                 tool_args = json.loads(tool_call.function.arguments)
 
-                logger.debug("Executing tool call: '%s'", tool_name)
+                logger.debug("Executing supervisor tool call: '%s'", tool_name)
                 result = await self._tools.execute(tool_name, tool_args)
 
                 match result:
-                    case DoneSignal(result=msg):
-                        logger.debug("Tool 'done' called with result: %s", msg)
-                        return AgentDone(
-                            message=msg,
+                    case DoneSignal(result=message):
+                        logger.debug(
+                            "Supervisor tool 'done' called with result: %s", message
                         )
+                        return SupervisorDone(message=message)
                     case ClarifySignal(question=question):
                         logger.debug(
-                            "Tool 'clarify' called with question: %s", question
+                            "Supervisor tool 'clarify' called with question: %s",
+                            question,
                         )
-                        return AgentClarificationNeeded(
+                        return SupervisorClarificationNeeded(
                             question=question,
                             resume_history=list(messages),
                             clarify_call_id=tool_call.id,
                         )
-                    case ProgressSignal(message=msg):
-                        logger.debug("Progress update: %s", msg)
+                    case ProgressSignal(message=message):
+                        logger.debug("Supervisor progress update: %s", message)
                         if self._on_progress:
-                            await self._on_progress(msg)
+                            await self._on_progress(message)
                         messages.append(
                             ToolResultMessage(
                                 tool_call_id=tool_call.id,
@@ -173,19 +189,14 @@ class SubAgent[T]:
                         )
                         continue
 
-                content = str(result)
-
                 messages.append(
-                    ToolResultMessage(tool_call_id=tool_call.id, content=content)
+                    ToolResultMessage(tool_call_id=tool_call.id, content=str(result))
                 )
 
-        return AgentDone(
+        return SupervisorDone(
             message="Max iterations reached.",
             success=False,
         )
-
-    def _model_name(self) -> str:
-        return str(getattr(self._llm, "_model", type(self._llm).__name__))
 
     def _build_messages(self, task: str, context: str | None) -> list[Message]:
         messages = [SystemMessage(content=self._instructions)]

@@ -18,7 +18,7 @@ import logging
 
 from dotenv import load_dotenv
 
-from rtvoice import RealtimeAgent, SubAgent, Tools
+from rtvoice import RealtimeAgent, Supervisor, Tools
 from rtvoice.llm import ChatOpenAI
 
 load_dotenv(override=True)
@@ -56,9 +56,8 @@ def build_tools() -> Tools:
     return tools
 
 
-def build_morning_agent() -> SubAgent:
-    return SubAgent(
-        name="Morning Routine Agent",
+def build_supervisor() -> Supervisor:
+    return Supervisor(
         description="Runs the user's morning routine: checks weather and inbox, sets up lights and music.",
         instructions=(
             "You are a morning routine assistant. "
@@ -81,12 +80,12 @@ def build_morning_agent() -> SubAgent:
 
 async def main() -> None:
     agent = RealtimeAgent(
-        extends_system_prompt=(
+        instructions=(
             "You are Jarvis, a calm personal voice assistant.\n"
-            "For morning routine requests, hand off to the Morning Routine Agent.\n"
+            "For morning routine requests, hand off to the supervisor.\n"
             "Do not attempt those tasks yourself."
         ),
-        subagents=[build_morning_agent()],
+        supervisor=build_supervisor(),
         inactivity_timeout_seconds=90,
         inactivity_timeout_enabled=True,
     )

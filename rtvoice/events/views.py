@@ -21,7 +21,7 @@ class UpdateToolChoiceCommand:
 
 
 @dataclass
-class CancelSubAgentCommand:
+class CancelSupervisorCommand:
     pass
 
 
@@ -88,13 +88,13 @@ class UserInactivityTimeoutEvent:
 
 
 @dataclass
-class SubAgentStartedEvent:
-    agent_name: str
+class SupervisorStartedEvent:
+    pass
 
 
 @dataclass
-class SubAgentFinishedEvent:
-    agent_name: str
+class SupervisorFinishedEvent:
+    pass
 
 
 @dataclass

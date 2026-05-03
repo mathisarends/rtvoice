@@ -3,6 +3,11 @@ import logging
 from pathlib import Path
 
 from rtvoice.agent.listener import AgentListener, AgentListenerBridge
+from rtvoice.agent.supervisor import (
+    Supervisor,
+    SupervisorClarificationNeeded,
+    SupervisorResult,
+)
 from rtvoice.agent.views import (
     AgentResult,
     AssistantVoice,
@@ -29,8 +34,6 @@ from rtvoice.events.views import (
 )
 from rtvoice.realtime import OpenAIProvider, RealtimeProvider, RealtimeSession
 from rtvoice.shared.decorators import timed
-from rtvoice.subagent import SubAgent
-from rtvoice.subagent.views import AgentClarificationNeeded, SubAgentResult
 from rtvoice.tools import Inject, ToolContext, Tools
 
 logger = logging.getLogger(__name__)
@@ -49,7 +52,7 @@ class RealtimeAgent[T]:
         noise_reduction: NoiseReduction = NoiseReduction.FAR_FIELD,
         turn_detection: TurnDetection | None = None,
         tools: Tools | None = None,
-        subagents: list[SubAgent] | None = None,
+        supervisor: Supervisor | None = None,
         audio_input: AudioInputDevice | None = None,
         audio_output: AudioOutputDevice | None = None,
         context: T | None = None,
@@ -61,18 +64,17 @@ class RealtimeAgent[T]:
         provider: RealtimeProvider | None = None,
         api_key: str | None = None,
     ):
-        self._subagents = list(subagents or [])
-        self._validate_subagent_names(self._subagents)
+        self._supervisor = supervisor
 
         if api_key and provider:
             raise ValueError("Pass either `provider` or `api_key`, not both.")
 
         clipped_speech_speed = self._clip_speech_speed(speech_speed)
 
-        if transcription_model is None and self._subagents:
+        if transcription_model is None and self._supervisor:
             logger.warning(
-                "transcription_model is None but subagents are attached. "
-                "Transcription is required for subagent handoffs — "
+                "transcription_model is None but a supervisor is attached. "
+                "Transcription is required for supervisor handoffs - "
                 "defaulting to TranscriptionModel.WHISPER_1."
             )
             transcription_model = TranscriptionModel.WHISPER_1
@@ -114,8 +116,8 @@ class RealtimeAgent[T]:
                 conversation_history=self._conversation_history,
             )
         )
-        for subagent in self._subagents:
-            self._register_subagent(subagent)
+        if self._supervisor:
+            self._register_supervisor(self._supervisor)
 
         audio_session = AudioSession(
             input_device=audio_input or self._create_default_input(),
@@ -134,7 +136,7 @@ class RealtimeAgent[T]:
             turn_detection=effective_turn_detection,
             tools=self._tools,
             audio_session=audio_session,
-            subagents=self._subagents,
+            supervisor=self._supervisor,
             conversation_seed=conversation_seed,
             inactivity_timeout_enabled=should_enable_inactivity_timeout,
             inactivity_timeout_seconds=inactivity_timeout_seconds,
@@ -177,43 +179,32 @@ class RealtimeAgent[T]:
         modalities = output_modalities or ["audio"]
         return list(dict.fromkeys(modalities))
 
-    def _validate_subagent_names(self, subagents: list[SubAgent]) -> None:
-        seen_names: set[str] = set()
-        for subagent in subagents:
-            if subagent.name in seen_names:
-                raise ValueError(
-                    f"Duplicate subagent name '{subagent.name}'. "
-                    "Subagent names must be unique."
-                )
-            seen_names.add(subagent.name)
-
-    def _register_subagent(self, subagent: SubAgent) -> None:
-        description = subagent.description
-        if subagent.handoff_instructions:
+    def _register_supervisor(self, supervisor: Supervisor) -> None:
+        description = supervisor.description
+        if supervisor.handoff_instructions:
             description = (
-                f"{subagent.description}\n\n"
-                f"Handoff instructions: {subagent.handoff_instructions}"
+                f"{supervisor.description}\n\n"
+                f"Handoff instructions: {supervisor.handoff_instructions}"
             )
 
-        subagent_name = subagent.name
-        self._register_subagent_handoff(subagent, subagent_name, description)
+        self._register_supervisor_handoff(supervisor, description)
 
-    def _register_subagent_handoff(
-        self, subagent: SubAgent, subagent_name: str, description: str
+    def _register_supervisor_handoff(
+        self, supervisor: Supervisor, description: str
     ) -> None:
         paused_for_clarification: ClarificationCheckpoint | None = None
 
         @self._tools.action(
             description,
-            name=subagent_name,
-            result_instruction=subagent.result_instructions,
-            holding_instruction=subagent.holding_instruction,
+            name=supervisor.name,
+            result_instruction=supervisor.result_instructions,
+            holding_instruction=supervisor.holding_instruction,
         )
         async def _handoff(
             task: str,
             conversation_history: Inject[ConversationHistory],
             clarification_answer: str | None = None,
-        ) -> SubAgentResult:
+        ) -> SupervisorResult:
             nonlocal paused_for_clarification
 
             is_resuming = (
@@ -224,7 +215,7 @@ class RealtimeAgent[T]:
             if is_resuming:
                 checkpoint = paused_for_clarification
                 paused_for_clarification = None
-                result = await subagent.resume(
+                result = await supervisor.resume(
                     clarification_answer=clarification_answer,
                     resume_history=checkpoint.resume_history,
                     clarify_call_id=checkpoint.clarify_call_id,
@@ -233,10 +224,9 @@ class RealtimeAgent[T]:
                 context = (
                     conversation_history.format() if conversation_history else None
                 )
-                result = await subagent.run(task, context=context)
+                result = await supervisor.run(task, context=context)
 
-            if isinstance(result, AgentClarificationNeeded):
-                # Subagent yielded control back to the realtime agent to collect user input
+            if isinstance(result, SupervisorClarificationNeeded):
                 paused_for_clarification = ClarificationCheckpoint(
                     resume_history=result.resume_history,
                     clarify_call_id=result.clarify_call_id,
@@ -259,7 +249,7 @@ class RealtimeAgent[T]:
             event_bus=self._event_bus,
             listener=self._listener,
             inactivity_timeout_enabled=inactivity_timeout_enabled,
-            has_subagents=bool(self._subagents),
+            has_supervisor=bool(self._supervisor),
             assistant_text_enabled=assistant_text_enabled,
         )
         self._listener_bridge.setup()
@@ -294,8 +284,8 @@ class RealtimeAgent[T]:
 
     @timed()
     async def prewarm(self) -> None:
-        tasks = [subagent.prewarm() for subagent in self._subagents]
-        await asyncio.gather(*tasks, return_exceptions=True)
+        if self._supervisor:
+            await self._supervisor.prewarm()
 
     async def set_speech_speed(
         self,

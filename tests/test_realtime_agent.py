@@ -26,8 +26,8 @@ from rtvoice.events.views import (
     AssistantStoppedRespondingEvent,
     AssistantTranscriptCompletedEvent,
     AssistantTranscriptDeltaEvent,
-    SubAgentFinishedEvent,
-    SubAgentStartedEvent,
+    SupervisorFinishedEvent,
+    SupervisorStartedEvent,
     UserInactivityTimeoutEvent,
     UserStartedSpeakingEvent,
     UserStoppedSpeakingEvent,
@@ -38,7 +38,7 @@ from rtvoice.events.views import (
 def make_agent(**kwargs) -> RealtimeAgent:
     audio_input = MagicMock()
     audio_output = MagicMock()
-    with patch("rtvoice.agent.agent.OpenAIProvider"):
+    with patch("rtvoice.agent.realtime.OpenAIProvider"):
         return RealtimeAgent(
             audio_input=audio_input,
             audio_output=audio_output,
@@ -169,7 +169,7 @@ class TestInitWarnings:
         supervisor.handoff_instructions = None
         supervisor.result_instructions = None
         supervisor.holding_instruction = None
-        agent = make_agent(transcription_model=None, subagents=[supervisor])
+        agent = make_agent(transcription_model=None, supervisor=supervisor)
         assert (
             agent._realtime_session._transcription_model == TranscriptionModel.WHISPER_1
         )
@@ -184,7 +184,7 @@ class TestInitWarnings:
         supervisor.result_instructions = None
         supervisor.holding_instruction = None
         with caplog.at_level(logging.WARNING, logger="rtvoice.service"):
-            make_agent(transcription_model=None, subagents=[supervisor])
+            make_agent(transcription_model=None, supervisor=supervisor)
         assert any("Transcription is required" in r.message for r in caplog.records)
 
 
@@ -269,27 +269,19 @@ class TestPrepare:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_prepares_subagents(self) -> None:
+    async def test_prewarm_prepares_supervisor(self) -> None:
         supervisor = MagicMock()
-        supervisor.name = "helper"
+        supervisor.name = "supervisor"
         supervisor.description = "Helps"
         supervisor.handoff_instructions = None
         supervisor.result_instructions = None
         supervisor.holding_instruction = None
         supervisor.prewarm = AsyncMock()
-        other = MagicMock()
-        other.name = "other"
-        other.description = "Other"
-        other.handoff_instructions = None
-        other.result_instructions = None
-        other.holding_instruction = None
-        other.prewarm = AsyncMock()
-        agent = make_agent(subagents=[supervisor, other])
+        agent = make_agent(supervisor=supervisor)
 
         await agent.prewarm()
 
         supervisor.prewarm.assert_called_once()
-        other.prewarm.assert_called_once()
 
 
 class TestListenerWiring:
@@ -401,22 +393,22 @@ class TestListenerWiring:
         listener.on_assistant_stopped_responding.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_on_subagent_started_is_called_with_agent_name(self) -> None:
+    async def test_on_supervisor_started_is_called(self) -> None:
         listener = AsyncMock(spec=AgentListener)
         agent = make_agent(listener=listener)
 
-        await agent._event_bus.dispatch(SubAgentStartedEvent(agent_name="research"))
+        await agent._event_bus.dispatch(SupervisorStartedEvent())
 
-        listener.on_subagent_started.assert_called_once_with("research")
+        listener.on_supervisor_started.assert_called_once_with()
 
     @pytest.mark.asyncio
-    async def test_on_subagent_finished_is_called_with_agent_name(self) -> None:
+    async def test_on_supervisor_finished_is_called(self) -> None:
         listener = AsyncMock(spec=AgentListener)
         agent = make_agent(listener=listener)
 
-        await agent._event_bus.dispatch(SubAgentFinishedEvent(agent_name="research"))
+        await agent._event_bus.dispatch(SupervisorFinishedEvent())
 
-        listener.on_subagent_finished.assert_called_once_with("research")
+        listener.on_supervisor_finished.assert_called_once_with()
 
     @pytest.mark.asyncio
     async def test_no_listener_events_do_not_raise(self) -> None:

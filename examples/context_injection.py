@@ -19,7 +19,7 @@ load_dotenv(override=True)
 
 async def main() -> None:
     agent = RealtimeAgent(
-        extends_system_prompt=(
+        instructions=(
             "Du bist ein knapper Support-Agent. "
             "Nutze den vorhandenen Kontext, ohne ihn erneut abzufragen."
         ),

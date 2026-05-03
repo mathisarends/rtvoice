@@ -53,11 +53,11 @@ class LifecycleLogger(AgentListener):
     async def on_assistant_stopped_responding(self) -> None:
         print("[lifecycle] on_assistant_stopped_responding")
 
-    async def on_subagent_started(self, agent_name: str) -> None:
-        print(f"[lifecycle] on_subagent_started: {agent_name!r}")
+    async def on_supervisor_started(self) -> None:
+        print("[lifecycle] on_supervisor_started")
 
-    async def on_subagent_finished(self, agent_name: str) -> None:
-        print(f"[lifecycle] on_subagent_finished: {agent_name!r}")
+    async def on_supervisor_finished(self) -> None:
+        print("[lifecycle] on_supervisor_finished")
 
 
 async def main():
@@ -83,7 +83,7 @@ You're not a tool. You're the dev he can think out loud with at 2am when the GKE
 """
 
     agent = RealtimeAgent(
-        override_system_promt=prompt,
+        instructions=prompt,
         listener=LifecycleLogger(),
     )
     await agent.run()

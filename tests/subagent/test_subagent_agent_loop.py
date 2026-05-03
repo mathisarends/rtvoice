@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from rtvoice import Supervisor
+from rtvoice.agent.views import SupervisorClarificationNeeded, SupervisorDone
 from rtvoice.llm import (
     AssistantMessage,
     ChatInvokeCompletion,
@@ -13,12 +15,10 @@ from rtvoice.llm import (
     ToolCall,
     ToolResultMessage,
 )
-from rtvoice.subagent import SubAgent
-from rtvoice.subagent.views import AgentClarificationNeeded, AgentDone
 from rtvoice.tools import Tools
 
 
-class TestSubAgentRunAndLoop:
+class TestSupervisorRunAndLoop:
     @pytest.mark.asyncio
     async def test_run_returns_completion_when_no_tool_calls(self) -> None:
         llm = MagicMock()
@@ -36,8 +36,7 @@ class TestSubAgentRunAndLoop:
             )
         )
 
-        agent = SubAgent(
-            name="planner",
+        agent = Supervisor(
             description="Planning helper",
             instructions="You are a planner.",
             llm=llm,
@@ -45,7 +44,7 @@ class TestSubAgentRunAndLoop:
 
         result = await agent.run(task="Plan my day")
 
-        assert isinstance(result, AgentDone)
+        assert isinstance(result, SupervisorDone)
         assert result.message == "Final answer"
         assert llm.invoke.await_count == 1
 
@@ -56,8 +55,7 @@ class TestSubAgentRunAndLoop:
             return_value=ChatInvokeCompletion(completion="Done", tool_calls=[])
         )
 
-        agent = SubAgent(
-            name="planner",
+        agent = Supervisor(
             description="Planning helper",
             instructions="You are a planner.",
             llm=llm,
@@ -87,8 +85,7 @@ class TestSubAgentRunAndLoop:
             )
         )
 
-        agent = SubAgent(
-            name="planner",
+        agent = Supervisor(
             description="Planning helper",
             instructions="You are a planner.",
             llm=llm,
@@ -96,7 +93,7 @@ class TestSubAgentRunAndLoop:
 
         result = await agent.run(task="Plan my day")
 
-        assert isinstance(result, AgentDone)
+        assert isinstance(result, SupervisorDone)
         assert result.message == "Done via tool"
 
     @pytest.mark.asyncio
@@ -118,8 +115,7 @@ class TestSubAgentRunAndLoop:
             )
         )
 
-        agent = SubAgent(
-            name="planner",
+        agent = Supervisor(
             description="Planning helper",
             instructions="You are a planner.",
             llm=llm,
@@ -127,7 +123,7 @@ class TestSubAgentRunAndLoop:
 
         result = await agent.run(task="Plan my day")
 
-        assert isinstance(result, AgentClarificationNeeded)
+        assert isinstance(result, SupervisorClarificationNeeded)
         assert result.question == "Which day should I optimize?"
         assert result.clarify_call_id == "call_clarify"
         assert isinstance(result.resume_history[-1], AssistantMessage)
@@ -153,8 +149,7 @@ class TestSubAgentRunAndLoop:
         async def search_schedule(query: str) -> str:
             return f"result:{query}"
 
-        agent = SubAgent(
-            name="planner",
+        agent = Supervisor(
             description="Planning helper",
             instructions="You are a planner.",
             llm=llm,
@@ -164,7 +159,7 @@ class TestSubAgentRunAndLoop:
 
         result = await agent.run(task="Plan my day")
 
-        assert isinstance(result, AgentDone)
+        assert isinstance(result, SupervisorDone)
         assert result.message == "Found one appointment"
         assert llm.invoke.await_count == 2
 
@@ -200,8 +195,7 @@ class TestSubAgentRunAndLoop:
         async def echo(text: str) -> str:
             return text
 
-        agent = SubAgent(
-            name="planner",
+        agent = Supervisor(
             description="Planning helper",
             instructions="You are a planner.",
             llm=llm,
@@ -211,22 +205,21 @@ class TestSubAgentRunAndLoop:
 
         result = await agent.run(task="Plan my day")
 
-        assert isinstance(result, AgentDone)
+        assert isinstance(result, SupervisorDone)
         assert result.message == "Max iterations reached."
         assert result.success is False
         assert llm.invoke.await_count == 2
 
 
-class TestSubAgentResumeAndPrewarm:
-    def test_name_normalizes_spaces_to_underscores(self) -> None:
-        agent = SubAgent(
-            name="calendar helper",
+class TestSupervisorResumeAndPrewarm:
+    def test_name_is_fixed_to_supervisor(self) -> None:
+        agent = Supervisor(
             description="Planning helper",
             instructions="You are a planner.",
             llm=MagicMock(),
         )
 
-        assert agent.name == "calendar_helper"
+        assert agent.name == "supervisor"
 
     @pytest.mark.asyncio
     async def test_resume_appends_tool_result_message_with_clarification_answer(
@@ -237,8 +230,7 @@ class TestSubAgentResumeAndPrewarm:
             return_value=ChatInvokeCompletion(completion="Completed after answer")
         )
 
-        agent = SubAgent(
-            name="planner",
+        agent = Supervisor(
             description="Planning helper",
             instructions="You are a planner.",
             llm=llm,
@@ -252,7 +244,7 @@ class TestSubAgentResumeAndPrewarm:
             clarify_call_id="call_clarify_1",
         )
 
-        assert isinstance(result, AgentDone)
+        assert isinstance(result, SupervisorDone)
         assert result.message == "Completed after answer"
 
         invoke_messages = llm.invoke.await_args_list[0].args[0]
@@ -267,8 +259,7 @@ class TestSubAgentResumeAndPrewarm:
             return_value=ChatInvokeCompletion(completion="done", tool_calls=[])
         )
 
-        agent = SubAgent(
-            name="planner",
+        agent = Supervisor(
             description="Planning helper",
             instructions="You are a planner.",
             llm=llm,
@@ -283,8 +274,7 @@ class TestSubAgentResumeAndPrewarm:
             return_value=ChatInvokeCompletion(completion="done", tool_calls=[])
         )
 
-        agent = SubAgent(
-            name="planner",
+        agent = Supervisor(
             description="Planning helper",
             instructions="You are a planner.",
             llm=llm,
@@ -311,8 +301,7 @@ class TestSubAgentResumeAndPrewarm:
             )
         )
 
-        agent = SubAgent(
-            name="planner",
+        agent = Supervisor(
             description="Planning helper",
             instructions="You are a planner.",
             llm=llm,
@@ -324,12 +313,12 @@ class TestSubAgentResumeAndPrewarm:
             clarify_call_id="call_initial",
         )
 
-        assert isinstance(result, AgentClarificationNeeded)
+        assert isinstance(result, SupervisorClarificationNeeded)
         assert result.question == "Need one more detail"
         assert result.clarify_call_id == "call_follow_up"
 
 
-class TestSubAgentProgressReporting:
+class TestSupervisorProgressReporting:
     @pytest.mark.asyncio
     async def test_progress_tool_invokes_callback_and_continues_loop(self) -> None:
         llm = MagicMock()
@@ -356,8 +345,7 @@ class TestSubAgentProgressReporting:
         async def capture_progress(msg: str) -> None:
             progress_messages.append(msg)
 
-        agent = SubAgent(
-            name="planner",
+        agent = Supervisor(
             description="Planning helper",
             instructions="You are a planner.",
             llm=llm,
@@ -365,7 +353,7 @@ class TestSubAgentProgressReporting:
 
         result = await agent.run(task="Plan my day", on_progress=capture_progress)
 
-        assert isinstance(result, AgentDone)
+        assert isinstance(result, SupervisorDone)
         assert result.message == "All done"
         assert progress_messages == ["Loading calendar..."]
         assert llm.invoke.await_count == 2
@@ -387,8 +375,7 @@ class TestSubAgentProgressReporting:
             ]
         )
 
-        agent = SubAgent(
-            name="planner",
+        agent = Supervisor(
             description="Planning helper",
             instructions="You are a planner.",
             llm=llm,
@@ -426,8 +413,7 @@ class TestSubAgentProgressReporting:
             ]
         )
 
-        agent = SubAgent(
-            name="planner",
+        agent = Supervisor(
             description="Planning helper",
             instructions="You are a planner.",
             llm=llm,
@@ -435,7 +421,7 @@ class TestSubAgentProgressReporting:
 
         result = await agent.run(task="Plan my day")
 
-        assert isinstance(result, AgentDone)
+        assert isinstance(result, SupervisorDone)
         assert result.message == "Done"
 
     @pytest.mark.asyncio
@@ -462,8 +448,7 @@ class TestSubAgentProgressReporting:
         instance_callback = AsyncMock()
         param_callback = AsyncMock()
 
-        agent = SubAgent(
-            name="planner",
+        agent = Supervisor(
             description="Planning helper",
             instructions="You are a planner.",
             llm=llm,
@@ -498,8 +483,7 @@ class TestSubAgentProgressReporting:
 
         instance_callback = AsyncMock()
 
-        agent = SubAgent(
-            name="planner",
+        agent = Supervisor(
             description="Planning helper",
             instructions="You are a planner.",
             llm=llm,
@@ -533,8 +517,7 @@ class TestSubAgentProgressReporting:
 
         callback = AsyncMock()
 
-        agent = SubAgent(
-            name="planner",
+        agent = Supervisor(
             description="Planning helper",
             instructions="You are a planner.",
             llm=llm,
@@ -547,6 +530,6 @@ class TestSubAgentProgressReporting:
             on_progress=callback,
         )
 
-        assert isinstance(result, AgentDone)
+        assert isinstance(result, SupervisorDone)
         assert result.message == "Resumed"
         callback.assert_awaited_once_with("Resuming...")

@@ -5,8 +5,8 @@ import pytest
 from rtvoice.events.bus import EventBus
 from rtvoice.events.views import (
     AudioPlaybackCompletedEvent,
-    SubAgentFinishedEvent,
-    SubAgentStartedEvent,
+    SupervisorFinishedEvent,
+    SupervisorStartedEvent,
     UserInactivityCountdownEvent,
     UserInactivityTimeoutEvent,
 )
@@ -113,7 +113,7 @@ class TestMonitoringStateTransitions:
     ) -> None:
         wt = UserInactivityTimeoutHandler(event_bus, timeout_seconds=10.0)
 
-        await event_bus.dispatch(SubAgentStartedEvent(agent_name="planner"))
+        await event_bus.dispatch(SupervisorStartedEvent())
         await event_bus.dispatch(make_speech_stopped())
 
         assert wt._is_monitoring is False
@@ -227,7 +227,7 @@ class TestBusyStateTransitions:
         wt._assistant_is_speaking = False
         wt._user_has_stopped_speaking = True
 
-        await event_bus.dispatch(SubAgentFinishedEvent(agent_name="planner"))
+        await event_bus.dispatch(SupervisorFinishedEvent())
 
         assert wt._agent_is_busy is False
         assert wt._is_monitoring is True
@@ -241,7 +241,7 @@ class TestBusyStateTransitions:
         wt._assistant_is_speaking = True
         wt._user_has_stopped_speaking = True
 
-        await event_bus.dispatch(SubAgentFinishedEvent(agent_name="planner"))
+        await event_bus.dispatch(SupervisorFinishedEvent())
 
         assert wt._agent_is_busy is False
         assert wt._is_monitoring is False

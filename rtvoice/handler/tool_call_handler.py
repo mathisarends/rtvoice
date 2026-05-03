@@ -20,17 +20,17 @@ class ToolCallHandler:
         event_bus: EventBus,
         tools: Tools,
         websocket: RealtimeWebSocket,
-        subagent_tool_names: set[str] | None = None,
+        supervisor_tool_name: str | None = None,
     ) -> None:
         self._tools = tools
         self._websocket = websocket
-        self._subagent_tool_names: set[str] = subagent_tool_names or set()
+        self._supervisor_tool_name = supervisor_tool_name
 
         event_bus.subscribe(FunctionCallItem, self._handle_tool_call)
         logger.debug("ToolCallHandler initialized")
 
     async def _handle_tool_call(self, event: FunctionCallItem) -> None:
-        if self._is_subagent_tool(event.name):
+        if self._is_supervisor_tool(event.name):
             return
 
         tool = self._tools.get(event.name)
@@ -51,5 +51,5 @@ class ToolCallHandler:
         await send_function_call_output(self._websocket, event.call_id, serialized)
         await send_response_event(self._websocket, tool)
 
-    def _is_subagent_tool(self, tool_name: str) -> bool:
-        return tool_name in self._subagent_tool_names
+    def _is_supervisor_tool(self, tool_name: str) -> bool:
+        return tool_name == self._supervisor_tool_name

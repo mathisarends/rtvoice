@@ -9,7 +9,7 @@ load_dotenv(override=True)
 
 async def main() -> None:
     agent = RealtimeAgent(
-        extends_system_prompt="Du bist ein hilfreicher Voice-Assistent.",
+        instructions="Du bist ein hilfreicher Voice-Assistent.",
         inactivity_timeout_enabled=True,
         inactivity_timeout_seconds=5.0,
     )

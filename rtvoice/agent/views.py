@@ -6,6 +6,7 @@ from typing import Literal, Self
 from pydantic import BaseModel
 
 from rtvoice.conversation.views import ConversationTurn
+from rtvoice.llm import Message
 
 type OutputModality = Literal["text", "audio"]
 
@@ -133,3 +134,21 @@ class AgentResult(BaseModel):
 class ClarificationCheckpoint:
     resume_history: list
     clarify_call_id: str
+
+
+class SupervisorDone(BaseModel):
+    """The supervisor completed the task."""
+
+    message: str
+    success: bool = True
+
+
+class SupervisorClarificationNeeded(BaseModel):
+    """The supervisor cannot proceed without an answer from the user."""
+
+    question: str
+    resume_history: list[Message]
+    clarify_call_id: str
+
+
+type SupervisorResult = SupervisorDone | SupervisorClarificationNeeded

@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 
 async def main():
     agent = RealtimeAgent(
-        extends_system_prompt="Du bist ein hilfreicher Assistent.",
+        instructions="Du bist ein hilfreicher Assistent.",
         voice=AssistantVoice.MARIN,
         recording_path=Path("recordings/session.wav"),
         inactivity_timeout_seconds=5,

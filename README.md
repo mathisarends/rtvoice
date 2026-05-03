@@ -45,8 +45,7 @@ Run it, speak into your microphone, and the agent responds through your speakers
   - [Status templates](#status-templates)
   - [Context injection](#context-injection)
   - [Custom application context](#custom-application-context)
-- [Subagents](#subagents)
-- [MCP servers](#mcp-servers)
+- [Supervisor](#supervisor)
 - [Conversation seeds](#conversation-seeds)
 - [Lifecycle listener](#lifecycle-listener)
 - [Custom audio devices](#custom-audio-devices)
@@ -230,12 +229,12 @@ agent = RealtimeAgent(
 
 ---
 
-## Subagents
+## Supervisor
 
-Delegate complex, multi-step tasks to a dedicated LLM-driven subagent. The voice agent hands off, speaks a holding phrase, and presents the result when done.
+Delegate complex, multi-step tasks to one LLM-driven supervisor. The voice agent hands off, speaks a holding phrase, and presents the result when done.
 
 ```python
-from rtvoice import RealtimeAgent, SubAgent, Tools
+from rtvoice import RealtimeAgent, Supervisor, Tools
 from rtvoice.llm import ChatOpenAI
 
 tools = Tools()
@@ -249,8 +248,7 @@ async def book_table(
 ) -> str:
     return f"Booked for {party_size} at {restaurant} on {date} at {time}."
 
-booking_agent = SubAgent(
-    name="Booking Assistant",
+supervisor = Supervisor(
     description="Books restaurant tables on behalf of the user.",
     holding_instruction="I'm checking availability, just a moment.",
     instructions="Use book_table to complete booking requests. Call done() when finished.",
@@ -259,68 +257,26 @@ booking_agent = SubAgent(
 )
 
 agent = RealtimeAgent(
-    instructions="Delegate restaurant bookings to the Booking Assistant.",
-    subagents=[booking_agent],
+    instructions="Delegate restaurant bookings to the supervisor.",
+    supervisor=supervisor,
 )
 ```
 
-**How it works:** the realtime agent registers each `SubAgent` as a callable tool. When invoked, the subagent runs its own agentic loop (tool calls → LLM → tool calls …) until it either calls `done()` or needs a clarification from the user via `clarify()`. Clarifications are automatically routed back through the voice agent and the loop resumes.
+**How it works:** the realtime agent registers the `Supervisor` as a callable `supervisor` tool. When invoked, the supervisor runs its own agentic loop (tool calls → LLM → tool calls …) until it either calls `done()` or needs a clarification from the user via `clarify()`. Clarifications are automatically routed back through the voice agent and the loop resumes.
 
-**`SubAgent` parameters:**
+**`Supervisor` parameters:**
 
-| Parameter              | Description                                                 |
-| ---------------------- | ----------------------------------------------------------- |
-| `name`                 | Unique name; becomes the tool name the realtime model calls |
-| `description`          | Shown to the realtime model to decide when to delegate      |
-| `instructions`         | System prompt for the subagent's own LLM loop               |
-| `llm`                  | `ChatOpenAI(model=...)` or any `ChatModel` implementation   |
-| `tools`                | `Tools` instance with the actions the subagent may call     |
-| `mcp_servers`          | MCP servers to connect to during prewarm                    |
-| `holding_instruction`  | Spoken while the subagent works                             |
-| `result_instructions`  | Tells the realtime model how to present the result          |
-| `handoff_instructions` | Extra guidance appended to the tool description             |
-| `max_iterations`       | Loop iteration cap (default: 10)                            |
-| `context`              | Arbitrary object injectable inside subagent tools           |
-
----
-
-## MCP servers
-
-Connect any MCP-compatible tool server via `MCPServerStdio`. Tools are discovered automatically during startup.
-
-```python
-from rtvoice import RealtimeAgent
-from rtvoice import MCPServerStdio
-
-agent = RealtimeAgent(
-    instructions="You can read and write files in /tmp.",
-    mcp_servers=[
-        MCPServerStdio(
-            command="npx",
-            args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
-        )
-    ],
-)
-```
-
-For heavy tool sets, attach the MCP server to a `SubAgent` instead. This keeps the realtime model's tool list short and avoids latency on every turn:
-
-```python
-research_agent = SubAgent(
-    name="Researcher",
-    description="Searches the web and reads URLs.",
-    instructions="Use the available tools to answer research questions.",
-    llm=ChatOpenAI(model="gpt-4o"),
-    mcp_servers=[
-        MCPServerStdio(command="uvx", args=["mcp-server-fetch"]),
-    ],
-)
-
-agent = RealtimeAgent(
-    instructions="Delegate research tasks to the Researcher.",
-    subagents=[research_agent],
-)
-```
+| Parameter              | Description                                               |
+| ---------------------- | --------------------------------------------------------- |
+| `description`          | Shown to the realtime model to decide when to delegate    |
+| `instructions`         | System prompt for the supervisor's own LLM loop           |
+| `llm`                  | `ChatOpenAI(model=...)` or any `ChatModel` implementation |
+| `tools`                | `Tools` instance with the actions the supervisor may call |
+| `holding_instruction`  | Spoken while the supervisor works                         |
+| `result_instructions`  | Tells the realtime model how to present the result        |
+| `handoff_instructions` | Extra guidance appended to the tool description           |
+| `max_iterations`       | Loop iteration cap (default: 10)                          |
+| `context`              | Arbitrary object injectable inside supervisor tools       |
 
 ---
 
@@ -398,8 +354,8 @@ agent = RealtimeAgent(
 | `on_assistant_transcript_delta(delta)`            | Incremental assistant text chunk (requires `"text"` in `output_modalities`) |
 | `on_agent_interrupted()`                          | User interrupted the assistant mid-response                                 |
 | `on_agent_error(error)`                           | Session or API error                                                        |
-| `on_subagent_started(agent_name)`                 | A subagent began running                                                    |
-| `on_subagent_finished(agent_name)`                | A subagent finished                                                         |
+| `on_supervisor_started()`                         | The supervisor began running                                                |
+| `on_supervisor_finished()`                        | The supervisor finished                                                     |
 | `on_user_inactivity_countdown(remaining_seconds)` | Fires each second before inactivity timeout                                 |
 
 ---

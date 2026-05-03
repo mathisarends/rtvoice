@@ -1,4 +1,4 @@
-from .agent import AgentListener, RealtimeAgent
+from .agent import AgentListener, RealtimeAgent, Supervisor
 from .agent.views import (
     AssistantVoice,
     ConversationSeed,
@@ -13,7 +13,6 @@ from .agent.views import (
     TurnDetection,
 )
 from .realtime import AzureOpenAIProvider, OpenAIProvider, RealtimeProvider
-from .subagent import SubAgent
 from .tools import Inject, ToolContext, Tools
 
 __all__ = [
@@ -32,7 +31,7 @@ __all__ = [
     "SemanticEagerness",
     "SemanticVAD",
     "ServerVAD",
-    "SubAgent",
+    "Supervisor",
     "ToolContext",
     "Tools",
     "TranscriptionModel",

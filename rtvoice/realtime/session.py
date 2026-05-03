@@ -30,7 +30,7 @@ from rtvoice.handler import (
     AudioRecorder,
     InterruptionHandler,
     SpeechStateTracker,
-    SubAgentCoordinator,
+    SupervisorCoordinator,
     ToolCallHandler,
     TranscriptionAccumulator,
     UserInactivityTimeoutHandler,
@@ -58,10 +58,10 @@ from rtvoice.realtime.schemas import (
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
-from rtvoice.watchdogs.error import ErrorWatchdog
+from rtvoice.watchdogs import ErrorWatchdog
 
 if TYPE_CHECKING:
-    from rtvoice.subagent import SubAgent
+    from rtvoice.agent.supervisor import Supervisor
     from rtvoice.tools import Tools
 
 logger = logging.getLogger(__name__)
@@ -82,7 +82,7 @@ class RealtimeSession:
         turn_detection: TurnDetection,
         tools: Tools,
         audio_session: AudioSession,
-        subagents: list[SubAgent],
+        supervisor: Supervisor | None,
         conversation_seed: ConversationSeed | None,
         inactivity_timeout_enabled: bool,
         inactivity_timeout_seconds: float | None,
@@ -100,7 +100,7 @@ class RealtimeSession:
         self._turn_detection = turn_detection
         self._tools = tools
         self._audio_session = audio_session
-        self._subagents = subagents
+        self._supervisor = supervisor
         self._conversation_seed = conversation_seed
         self._assistant_text_enabled = "text" in self._output_modalities
         self._transcription_enabled = self._transcription_model is not None
@@ -144,17 +144,16 @@ class RealtimeSession:
             event_bus=self._event_bus,
             tools=self._tools,
             websocket=self._websocket,
-            subagent_tool_names={s.name for s in self._subagents} or None,
+            supervisor_tool_name=self._supervisor.name if self._supervisor else None,
         )
 
-        if self._subagents:
-            self._subagent_coordinator = SubAgentCoordinator(
+        if self._supervisor:
+            self._supervisor_coordinator = SupervisorCoordinator(
                 event_bus=self._event_bus,
                 tools=self._tools,
                 websocket=self._websocket,
+                supervisor=self._supervisor,
             )
-            for subagent in self._subagents:
-                self._subagent_coordinator.register_subagent(subagent.name, subagent)
 
         self._error_watchdog = ErrorWatchdog(event_bus=self._event_bus)
         self._speech_state_tracker = SpeechStateTracker(event_bus=self._event_bus)

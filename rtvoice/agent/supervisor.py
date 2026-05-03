@@ -91,7 +91,7 @@ class Supervisor[T]:
         def clarify(question: str) -> ClarifySignal:
             return ClarifySignal(question)
 
-    async def run(
+    async def start(
         self,
         task: str,
         context: str | None = None,

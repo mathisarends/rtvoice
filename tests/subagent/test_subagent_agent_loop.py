@@ -42,7 +42,7 @@ class TestSupervisorRunAndLoop:
             llm=llm,
         )
 
-        result = await agent.run(task="Plan my day")
+        result = await agent.start(task="Plan my day")
 
         assert isinstance(result, SupervisorDone)
         assert result.message == "Final answer"
@@ -61,7 +61,7 @@ class TestSupervisorRunAndLoop:
             llm=llm,
         )
 
-        await agent.run(task="Plan my day", context="User asked for morning focus")
+        await agent.start(task="Plan my day", context="User asked for morning focus")
 
         invoke_messages = llm.invoke.await_args_list[0].args[0]
         assert invoke_messages[0].content == "You are a planner."
@@ -91,7 +91,7 @@ class TestSupervisorRunAndLoop:
             llm=llm,
         )
 
-        result = await agent.run(task="Plan my day")
+        result = await agent.start(task="Plan my day")
 
         assert isinstance(result, SupervisorDone)
         assert result.message == "Done via tool"
@@ -121,7 +121,7 @@ class TestSupervisorRunAndLoop:
             llm=llm,
         )
 
-        result = await agent.run(task="Plan my day")
+        result = await agent.start(task="Plan my day")
 
         assert isinstance(result, SupervisorClarificationNeeded)
         assert result.question == "Which day should I optimize?"
@@ -157,7 +157,7 @@ class TestSupervisorRunAndLoop:
             max_iterations=3,
         )
 
-        result = await agent.run(task="Plan my day")
+        result = await agent.start(task="Plan my day")
 
         assert isinstance(result, SupervisorDone)
         assert result.message == "Found one appointment"
@@ -203,7 +203,7 @@ class TestSupervisorRunAndLoop:
             max_iterations=2,
         )
 
-        result = await agent.run(task="Plan my day")
+        result = await agent.start(task="Plan my day")
 
         assert isinstance(result, SupervisorDone)
         assert result.message == "Max iterations reached."
@@ -265,7 +265,7 @@ class TestSupervisorResumeAndPrewarm:
             llm=llm,
         )
 
-        await agent.run(task="Plan my day")
+        await agent.start(task="Plan my day")
 
         assert llm.invoke.await_count == 1
 

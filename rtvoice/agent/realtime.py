@@ -224,7 +224,7 @@ class RealtimeAgent[T]:
                 context = (
                     conversation_history.format() if conversation_history else None
                 )
-                result = await supervisor.run(task, context=context)
+                result = await supervisor.start(task, context=context)
 
             if isinstance(result, SupervisorClarificationNeeded):
                 paused_for_clarification = ClarificationCheckpoint(

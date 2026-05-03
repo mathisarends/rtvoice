@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
-from typing import TYPE_CHECKING
 
 from rtvoice.llm import (
     AssistantMessage,
@@ -26,9 +24,6 @@ from rtvoice.subagent.views import (
 from rtvoice.tools import Tools
 from rtvoice.tools.di import ToolContext
 
-if TYPE_CHECKING:
-    from rtvoice.mcp import MCPServer
-
 logger = logging.getLogger(__name__)
 
 
@@ -40,7 +35,6 @@ class SubAgent[T]:
         instructions: str,
         llm: ChatModel | None = None,
         tools: Tools | None = None,
-        mcp_servers: list[MCPServer] | None = None,
         max_iterations: int = 10,
         handoff_instructions: str | None = None,
         result_instructions: str | None = None,
@@ -55,13 +49,10 @@ class SubAgent[T]:
         if tools:
             self._tools.merge(tools)
 
-        self._mcp_servers = mcp_servers or []
         self._max_iterations = max_iterations
         self.handoff_instructions = handoff_instructions
         self.result_instructions = result_instructions
         self.holding_instruction = holding_instruction
-
-        self._mcp_ready = asyncio.Event()
 
         self._tools.set_context(ToolContext(context=context))
 
@@ -99,33 +90,8 @@ class SubAgent[T]:
 
     @timed()
     async def prewarm(self) -> None:
-        if not self._mcp_ready.is_set():
-            await self._connect_mcp_servers()
+        pass
 
-    async def _connect_mcp_servers(self) -> None:
-        if not self._mcp_servers:
-            self._mcp_ready.set()
-            return
-
-        results = await asyncio.gather(
-            *[self._connect_server(s) for s in self._mcp_servers],
-            return_exceptions=True,
-        )
-
-        for result in results:
-            if isinstance(result, Exception):
-                logger.error("MCP server connection failed: %s", result)
-
-        self._mcp_ready.set()
-
-    async def _connect_server(self, server: MCPServer) -> None:
-        await server.connect()
-        tools = await server.list_tools()
-        for tool in tools:
-            self._tools.register_mcp(tool, server)
-        logger.info("MCP server connected: %d tools loaded", len(tools))
-
-    @timed()
     async def run(
         self,
         task: str,

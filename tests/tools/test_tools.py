@@ -1,5 +1,3 @@
-from unittest.mock import AsyncMock, MagicMock
-
 import pytest
 from pydantic import BaseModel
 
@@ -212,33 +210,6 @@ class TestClone:
         clone = realtime.clone()
 
         assert type(clone) is Tools
-
-
-class TestRegisterMcp:
-    def test_registers_mcp_tool(self, tools: Tools) -> None:
-        mcp_tool = MagicMock()
-        mcp_tool.name = "mcp_action"
-        mcp_tool.description = "MCP tool"
-        mcp_tool.parameters = MagicMock()
-        server = MagicMock()
-
-        tools.register_mcp(mcp_tool, server)
-
-        assert tools.get("mcp_action") is not None
-
-    @pytest.mark.asyncio
-    async def test_mcp_tool_is_executable(self, tools: Tools) -> None:
-        mcp_tool = MagicMock()
-        mcp_tool.name = "mcp_action"
-        mcp_tool.description = "MCP tool"
-        mcp_tool.parameters = MagicMock()
-        server = MagicMock()
-        server.call_tool = AsyncMock(return_value="mcp_result")
-
-        tools.register_mcp(mcp_tool, server)
-        result = await tools.execute("mcp_action", {"key": "value"})
-
-        assert result == "mcp_result"
 
 
 class TestRealtimeTools:

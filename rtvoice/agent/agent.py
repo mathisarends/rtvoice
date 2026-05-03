@@ -27,7 +27,6 @@ from rtvoice.events.views import (
     AgentStoppedEvent,
     UserInactivityTimeoutEvent,
 )
-from rtvoice.mcp import MCPServer
 from rtvoice.realtime import OpenAIProvider, RealtimeProvider, RealtimeSession
 from rtvoice.shared.decorators import timed
 from rtvoice.subagent import SubAgent
@@ -51,7 +50,6 @@ class RealtimeAgent[T]:
         turn_detection: TurnDetection | None = None,
         tools: Tools | None = None,
         subagents: list[SubAgent] | None = None,
-        mcp_servers: list[MCPServer] | None = None,
         audio_input: AudioInputDevice | None = None,
         audio_output: AudioOutputDevice | None = None,
         context: T | None = None,
@@ -65,12 +63,6 @@ class RealtimeAgent[T]:
     ):
         self._subagents = list(subagents or [])
         self._validate_subagent_names(self._subagents)
-
-        if self._subagents and mcp_servers:
-            logger.warning(
-                "mcp_servers are set on RealtimeAgent alongside subagents. "
-                "Consider attaching MCP servers to subagents instead."
-            )
 
         if api_key and provider:
             raise ValueError("Pass either `provider` or `api_key`, not both.")
@@ -90,7 +82,6 @@ class RealtimeAgent[T]:
         )
         assistant_text_enabled = "text" in normalized_output_modalities
         effective_turn_detection: TurnDetection = turn_detection or SemanticVAD()
-        self._mcp_servers = mcp_servers or []
 
         if inactivity_timeout_seconds is not None and not inactivity_timeout_enabled:
             raise ValueError(
@@ -108,7 +99,6 @@ class RealtimeAgent[T]:
 
         self._stopped = asyncio.Event()
         self._stop_called = False
-        self._mcp_ready = asyncio.Event()
 
         self._event_bus = EventBus()
         self._conversation_history = ConversationHistory(self._event_bus)
@@ -304,33 +294,8 @@ class RealtimeAgent[T]:
 
     @timed()
     async def prewarm(self) -> None:
-        tasks = [self._connect_mcp_servers()]
-        tasks.extend(subagent.prewarm() for subagent in self._subagents)
-
+        tasks = [subagent.prewarm() for subagent in self._subagents]
         await asyncio.gather(*tasks, return_exceptions=True)
-
-    async def _connect_mcp_servers(self) -> None:
-        if self._mcp_ready.is_set() or not self._mcp_servers:
-            self._mcp_ready.set()
-            return
-
-        results = await asyncio.gather(
-            *[self._connect_and_register_mcp_server(s) for s in self._mcp_servers],
-            return_exceptions=True,
-        )
-
-        for result in results:
-            if isinstance(result, Exception):
-                logger.error("MCP server connection failed: %s", result)
-
-        self._mcp_ready.set()
-
-    async def _connect_and_register_mcp_server(self, server: MCPServer) -> None:
-        await server.connect()
-        tools = await server.list_tools()
-        for tool in tools:
-            self._tools.register_mcp(tool, server)
-        logger.info("MCP server connected: %d tools loaded", len(tools))
 
     async def set_speech_speed(
         self,
@@ -349,9 +314,6 @@ class RealtimeAgent[T]:
         self._stop_called = True
 
         logger.info("Stopping agent...")
-
-        for server in self._mcp_servers:
-            await server.cleanup()
 
         await self._event_bus.dispatch(AgentStoppedEvent())
 

@@ -8,7 +8,6 @@ from pydantic import (
     TypeAdapter,
     computed_field,
     field_validator,
-    model_validator,
 )
 
 from rtvoice.agent.views import RealtimeModel
@@ -79,14 +78,6 @@ class RealtimeServerEvent(StrEnum):
     RESPONSE_OUTPUT_AUDIO_DONE = "response.output_audio.done"
     RESPONSE_FUNCTION_CALL_ARGUMENTS_DELTA = "response.function_call_arguments.delta"
     RESPONSE_FUNCTION_CALL_ARGUMENTS_DONE = "response.function_call_arguments.done"
-    MCP_CALL_ARGUMENTS_DELTA = "response.mcp_call_arguments.delta"
-    MCP_CALL_ARGUMENTS_DONE = "response.mcp_call_arguments.done"
-    MCP_LIST_TOOLS_IN_PROGRESS = "mcp_list_tools.in_progress"
-    MCP_LIST_TOOLS_COMPLETED = "mcp_list_tools.completed"
-    MCP_LIST_TOOLS_FAILED = "mcp_list_tools.failed"
-    RESPONSE_MCP_CALL_IN_PROGRESS = "response.mcp_call.in_progress"
-    RESPONSE_MCP_CALL_COMPLETED = "response.mcp_call.completed"
-    RESPONSE_MCP_CALL_FAILED = "response.mcp_call.failed"
     RATE_LIMITS_UPDATED = "rate_limits.updated"
     ERROR = "error"
 
@@ -136,24 +127,6 @@ class ToolChoiceMode(StrEnum):
     NONE = "none"
     AUTO = "auto"
     REQUIRED = "required"
-
-
-class MCPConnectorId(StrEnum):
-    DROPBOX = "connector_dropbox"
-    GMAIL = "connector_gmail"
-    GOOGLE_CALENDAR = "connector_googlecalendar"
-    GOOGLE_DRIVE = "connector_googledrive"
-    MICROSOFT_TEAMS = "connector_microsoftteams"
-    OUTLOOK_CALENDAR = "connector_outlookcalendar"
-    OUTLOOK_EMAIL = "connector_outlookemail"
-    SHAREPOINT = "connector_sharepoint"
-
-
-class MCPRequireApprovalMode(StrEnum):
-    NEVER = "never"
-    AUTO = "auto"
-    ALWAYS = "always"
-    FIRST_USE = "first_use"
 
 
 # ============================================================================
@@ -260,38 +233,9 @@ class FunctionTool(BaseModel):
     parameters: FunctionParameters
 
 
-class MCPToolFilter(BaseModel):
-    patterns: list[str] | None = None
-    exclude: list[str] | None = None
-
-
-class MCPRequireApproval(BaseModel):
-    tools: list[str] | None = None
-    all: bool | None = None
-
-
-class MCPTool(BaseModel):
-    type: Literal["mcp"] = "mcp"
-    server_label: str
-    allowed_tools: list[str] | MCPToolFilter | None = None
-    authorization: str | None = None
-    connector_id: MCPConnectorId | str | None = None
-    headers: dict[str, Any] | None = None
-    require_approval: MCPRequireApproval | str | None = None
-    server_description: str | None = None
-    server_url: str | None = None
-
-    @model_validator(mode="after")
-    def validate_server_config(self) -> Self:
-        if not self.server_url and not self.connector_id:
-            raise ValueError("Either 'server_url' or 'connector_id' must be provided")
-        return self
-
-
 class ToolChoice(BaseModel):
     mode: ToolChoiceMode = ToolChoiceMode.AUTO
     function: FunctionTool | None = None
-    mcp: MCPTool | None = None
 
 
 # ============================================================================
@@ -399,7 +343,7 @@ class RealtimeSessionConfig(BaseModel):
     max_output_tokens: int | Literal["inf"] = "inf"
     output_modalities: list[OutputModality] = Field(default_factory=lambda: ["audio"])
     tool_choice: ToolChoice | ToolChoiceMode = ToolChoiceMode.AUTO
-    tools: list[FunctionTool | MCPTool] | None = None
+    tools: list[FunctionTool] | None = None
 
 
 # ============================================================================

@@ -13,7 +13,6 @@ from rtvoice.llm import (
     ToolCall,
     ToolResultMessage,
 )
-from rtvoice.realtime.schemas import FunctionTool
 from rtvoice.subagent import SubAgent
 from rtvoice.subagent.views import AgentClarificationNeeded, AgentDone
 from rtvoice.tools import Tools
@@ -277,8 +276,6 @@ class TestSubAgentResumeAndPrewarm:
 
         await agent.prewarm()
 
-        assert agent._mcp_ready.is_set() is True
-
     @pytest.mark.asyncio
     async def test_run_calls_prewarm_before_first_invoke(self) -> None:
         llm = MagicMock()
@@ -295,71 +292,7 @@ class TestSubAgentResumeAndPrewarm:
 
         await agent.run(task="Plan my day")
 
-        assert agent._mcp_ready.is_set() is True
         assert llm.invoke.await_count == 1
-
-    @pytest.mark.asyncio
-    async def test_prewarm_registers_tools_from_mcp_server_once(self) -> None:
-        llm = MagicMock()
-        llm.invoke = AsyncMock(
-            return_value=ChatInvokeCompletion(completion="done", tool_calls=[])
-        )
-        server = MagicMock()
-        server.connect = AsyncMock()
-        server.list_tools = AsyncMock(
-            return_value=[
-                FunctionTool(name="calendar_lookup", parameters={"type": "object"})
-            ]
-        )
-
-        agent = SubAgent(
-            name="planner",
-            description="Planning helper",
-            instructions="You are a planner.",
-            llm=llm,
-            mcp_servers=[server],
-        )
-
-        await agent.prewarm()
-        await agent.prewarm()
-
-        assert server.connect.await_count == 1
-        assert server.list_tools.await_count == 1
-        assert agent._tools.get("calendar_lookup") is not None
-
-    @pytest.mark.asyncio
-    async def test_prewarm_continues_when_one_mcp_server_fails(self) -> None:
-        llm = MagicMock()
-        llm.invoke = AsyncMock(
-            return_value=ChatInvokeCompletion(completion="done", tool_calls=[])
-        )
-
-        failing_server = MagicMock()
-        failing_server.connect = AsyncMock(side_effect=RuntimeError("boom"))
-        failing_server.list_tools = AsyncMock(return_value=[])
-
-        healthy_server = MagicMock()
-        healthy_server.connect = AsyncMock()
-        healthy_server.list_tools = AsyncMock(
-            return_value=[
-                FunctionTool(name="weather_lookup", parameters={"type": "object"})
-            ]
-        )
-
-        agent = SubAgent(
-            name="planner",
-            description="Planning helper",
-            instructions="You are a planner.",
-            llm=llm,
-            mcp_servers=[failing_server, healthy_server],
-        )
-
-        await agent.prewarm()
-
-        assert agent._mcp_ready.is_set() is True
-        assert healthy_server.connect.await_count == 1
-        assert healthy_server.list_tools.await_count == 1
-        assert agent._tools.get("weather_lookup") is not None
 
     @pytest.mark.asyncio
     async def test_run_after_resume_handles_follow_up_clarification(self) -> None:

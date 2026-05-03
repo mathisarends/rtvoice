@@ -4,7 +4,6 @@ import inspect
 import logging
 from collections.abc import Callable
 from typing import (
-    TYPE_CHECKING,
     Annotated,
     Any,
     Self,
@@ -14,9 +13,6 @@ from typing import (
 )
 
 from pydantic import BaseModel
-
-if TYPE_CHECKING:
-    from rtvoice.mcp.server import MCPServer
 
 from rtvoice.realtime.schemas import FunctionTool
 from rtvoice.tools.di import ToolContext, _Inject
@@ -63,21 +59,6 @@ class Tools:
 
     def eject_tool(self, name: str) -> None:
         self.tools.pop(name, None)
-
-    def register_mcp(self, tool: FunctionTool, server: MCPServer) -> None:
-        async def handler(**kwargs):
-            return await server.call_tool(tool.name, kwargs or None)
-
-        handler.__name__ = tool.name
-        handler.__signature__ = inspect.Signature()
-
-        mcp_tool = Tool(
-            name=tool.name,
-            description=tool.description or "",
-            function=handler,
-            schema=tool.parameters,
-        )
-        self._register_tool(mcp_tool)
 
     def get(self, name: str) -> Tool | None:
         return self.tools.get(name)

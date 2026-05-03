@@ -111,27 +111,6 @@ class TestInitDefaults:
         agent = make_agent(transcription_model=None, output_modalities=["text"])
         assert not hasattr(agent, "_transcription_watchdog")
 
-    def test_default_system_prompt_is_loaded_from_markdown(self) -> None:
-        agent = make_agent()
-        assert (
-            agent._realtime_session._instructions
-            == "You are a helpful voice assistant."
-        )
-
-    def test_extend_system_prompt_appends_to_default_prompt(self) -> None:
-        agent = make_agent(extends_system_prompt="Antworte kurz.")
-        assert (
-            agent._realtime_session._instructions
-            == "You are a helpful voice assistant.\n\nAntworte kurz."
-        )
-
-    def test_override_system_prompt_replaces_default_prompt(self) -> None:
-        agent = make_agent(
-            extends_system_prompt="Should be ignored.",
-            override_system_promt="Custom override prompt.",
-        )
-        assert agent._realtime_session._instructions == "Custom override prompt."
-
 
 class TestSpeechSpeedClipping:
     def test_value_within_range_is_unchanged(self) -> None:
@@ -208,20 +187,6 @@ class TestInitWarnings:
             make_agent(transcription_model=None, subagents=[supervisor])
         assert any("Transcription is required" in r.message for r in caplog.records)
 
-    def test_mcp_servers_with_subagents_logs_warning(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        supervisor = MagicMock()
-        supervisor.name = "supervisor"
-        supervisor.description = "A supervisor"
-        supervisor.handoff_instructions = None
-        supervisor.result_instructions = None
-        supervisor.holding_instruction = None
-        mcp_server = MagicMock()
-        with caplog.at_level(logging.WARNING, logger="rtvoice.service"):
-            make_agent(subagents=[supervisor], mcp_servers=[mcp_server])
-        assert any("mcp_servers are set" in r.message for r in caplog.records)
-
 
 class TestInactivityTimeoutFlag:
     def test_enabled_when_both_flag_and_seconds_are_set(self) -> None:
@@ -295,15 +260,6 @@ class TestStop:
         agent = make_agent()
         await agent.stop()
 
-    @pytest.mark.asyncio
-    async def test_cleans_up_mcp_servers(self) -> None:
-        mcp_server = AsyncMock()
-        agent = make_agent(mcp_servers=[mcp_server])
-
-        await agent.stop()
-
-        mcp_server.cleanup.assert_called_once()
-
 
 class TestPrepare:
     @pytest.mark.asyncio
@@ -311,27 +267,6 @@ class TestPrepare:
         agent = make_agent()
         result = await agent.prewarm()
         assert result is None
-
-    @pytest.mark.asyncio
-    async def test_prepare_is_idempotent_for_mcp_servers(self) -> None:
-        mcp_server = AsyncMock()
-        mcp_server.list_tools.return_value = []
-        agent = make_agent(mcp_servers=[mcp_server])
-
-        await agent.prewarm()
-        await agent.prewarm()
-
-        mcp_server.connect.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_connects_mcp_server_on_prepare(self) -> None:
-        mcp_server = AsyncMock()
-        mcp_server.list_tools.return_value = []
-        agent = make_agent(mcp_servers=[mcp_server])
-
-        await agent.prewarm()
-
-        mcp_server.connect.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_prepares_subagents(self) -> None:

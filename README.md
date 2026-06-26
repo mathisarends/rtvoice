@@ -1,7 +1,7 @@
 # rtvoice
 
 [![PyPI version](https://badge.fury.io/py/rtvoice.svg)](https://badge.fury.io/py/rtvoice)
-[![Python Version](https://img.shields.io/badge/python-3.13%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![Python Version](https://img.shields.io/badge/python-3.14%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
 
 A Python library for building real-time voice agents powered by the OpenAI Realtime API. It handles the full session lifecycle — microphone input, WebSocket streaming, turn detection, tool calling, and audio playback — so you can focus on what your agent does, not how it talks.
 
@@ -13,7 +13,7 @@ A Python library for building real-time voice agents powered by the OpenAI Realt
 pip install rtvoice[audio]
 ```
 
-Requires Python 3.13+ and an `OPENAI_API_KEY` environment variable (or pass `api_key=` directly).
+Requires Python 3.14+ and an `OPENAI_API_KEY` environment variable (or pass `api_key=` directly).
 
 ---
 

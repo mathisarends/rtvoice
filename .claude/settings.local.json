@@ -12,7 +12,12 @@
       "Bash(cat backend/requirements.txt)",
       "Bash(cat backend/setup.py)",
       "Bash(uv sync *)",
-      "Bash(uv run *)"
+      "Bash(uv run *)",
+      "Bash(uv python *)",
+      "Bash(.venv/Scripts/python.exe --version)",
+      "Bash(uv add *)",
+      "Bash(.venv/Scripts/python.exe *)",
+      "Bash(unset VIRTUAL_ENV)"
     ]
   }
 }

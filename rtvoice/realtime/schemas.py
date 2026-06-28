@@ -10,7 +10,7 @@ from pydantic import (
     field_validator,
 )
 
-from rtvoice.agent.views import RealtimeModel
+from rtvoice.agent.views import RealtimeModel, ReasoningEffort
 
 # ============================================================================
 # Enums
@@ -326,6 +326,10 @@ class ResponseInstructions(BaseModel):
     tool_choice: ToolChoiceMode = ToolChoiceMode.AUTO
 
 
+class ReasoningSettings(BaseModel):
+    effort: ReasoningEffort = ReasoningEffort.LOW
+
+
 class ErrorDetails(BaseModel):
     message: str
     type: str
@@ -336,7 +340,8 @@ class ErrorDetails(BaseModel):
 
 class RealtimeSessionSettings(BaseModel):
     type: Literal["realtime"] = "realtime"
-    model: RealtimeModel = RealtimeModel.GPT_REALTIME
+    model: RealtimeModel = RealtimeModel.GPT_REALTIME_2
+    reasoning: ReasoningSettings | None = None
     instructions: str | None = None
     audio: AudioSettings = Field(default_factory=AudioSettings)
     include: list[str] | None = None

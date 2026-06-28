@@ -12,6 +12,7 @@ from rtvoice.agent.views import (
     NoiseReduction,
     OutputModality,
     RealtimeModel,
+    ReasoningEffort,
     SeedMessage,
     SemanticVAD,
     ServerVAD,
@@ -73,6 +74,7 @@ class RealtimeSession:
         *,
         event_bus: EventBus,
         model: RealtimeModel,
+        reasoning_effort: ReasoningEffort | None,
         instructions: str,
         voice: AssistantVoice,
         speech_speed: float,
@@ -91,6 +93,7 @@ class RealtimeSession:
     ):
         self._event_bus = event_bus
         self._model = model
+        self._reasoning_effort = reasoning_effort
         self._instructions = instructions
         self._voice = voice
         self._speech_speed = speech_speed
@@ -210,8 +213,9 @@ class RealtimeSession:
 
     async def _send_session_update(self) -> None:
         logger.info(
-            "Applying session settings [model=%s, voice=%s, speed=%s, turn_detection=%s, transcription=%s, output_modalities=%s]",
+            "Applying session settings [model=%s, reasoning_effort=%s, voice=%s, speed=%s, turn_detection=%s, transcription=%s, output_modalities=%s]",
             self._model,
+            self._reasoning_effort,
             self._voice,
             self._speech_speed,
             type(self._turn_detection).__name__,
@@ -310,6 +314,11 @@ class RealtimeSession:
 
         return RealtimeSessionSettings(
             model=self._model,
+            reasoning=(
+                None
+                if self._reasoning_effort is None
+                else {"effort": self._reasoning_effort}
+            ),
             instructions=self._instructions,
             output_modalities=self._output_modalities,
             tool_choice=ToolChoiceMode.AUTO,

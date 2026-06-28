@@ -12,9 +12,18 @@ type OutputModality = Literal["text", "audio"]
 
 
 class RealtimeModel(StrEnum):
+    GPT_REALTIME_2 = "gpt-realtime-2"
     GPT_REALTIME = "gpt-realtime"
     GPT_REALTIME_MINI = "gpt-realtime-mini"
     GPT_REALTIME_1_5 = "gpt-realtime-1.5"
+
+
+class ReasoningEffort(StrEnum):
+    MINIMAL = "minimal"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    XHIGH = "xhigh"
 
 
 class AssistantVoice(StrEnum):
@@ -108,7 +117,7 @@ class ConversationSeed:
     messages: list[SeedMessage]
 
     @classmethod
-    def from_pairs(cls, *pairs: tuple[str, str]) -> "ConversationSeed":
+    def from_pairs(cls, *pairs: tuple[str, str]) -> Self:
         messages: list[SeedMessage] = []
         for user_text, assistant_text in pairs:
             messages.append(SeedMessage.user(user_text))

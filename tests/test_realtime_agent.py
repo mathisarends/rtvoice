@@ -12,6 +12,7 @@ from rtvoice.agent.views import (
     ConversationSeed,
     NoiseReduction,
     RealtimeModel,
+    ReasoningEffort,
     SeedMessage,
     SemanticVAD,
     ServerVAD,
@@ -47,9 +48,13 @@ def make_agent(**kwargs) -> RealtimeAgent:
 
 
 class TestInitDefaults:
-    def test_default_model_is_mini(self) -> None:
+    def test_default_model_is_realtime_2(self) -> None:
         agent = make_agent()
-        assert agent._realtime_session._model == RealtimeModel.GPT_REALTIME_MINI
+        assert agent._realtime_session._model == RealtimeModel.GPT_REALTIME_2
+
+    def test_default_reasoning_effort_is_low(self) -> None:
+        agent = make_agent()
+        assert agent._realtime_session._reasoning_effort == ReasoningEffort.LOW
 
     def test_default_voice_is_marin(self) -> None:
         agent = make_agent()
@@ -90,6 +95,10 @@ class TestInitDefaults:
     def test_custom_model_is_stored(self) -> None:
         agent = make_agent(model=RealtimeModel.GPT_REALTIME)
         assert agent._realtime_session._model == RealtimeModel.GPT_REALTIME
+
+    def test_custom_reasoning_effort_is_stored(self) -> None:
+        agent = make_agent(reasoning_effort=ReasoningEffort.MINIMAL)
+        assert agent._realtime_session._reasoning_effort == ReasoningEffort.MINIMAL
 
     def test_recording_path_is_converted_to_path_object(self, tmp_path) -> None:
         agent = make_agent(recording_path=str(tmp_path / "rec.wav"))

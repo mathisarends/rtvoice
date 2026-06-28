@@ -475,15 +475,18 @@ agent = RealtimeAgent(
 ## Voice and model
 
 ```python
-from rtvoice import RealtimeAgent, AssistantVoice, RealtimeModel
+from rtvoice import AssistantVoice, RealtimeAgent, RealtimeModel, ReasoningEffort
 
 agent = RealtimeAgent(
-    model=RealtimeModel.GPT_REALTIME,       # or GPT_REALTIME_MINI, GPT_REALTIME_1_5
+    model=RealtimeModel.GPT_REALTIME_2,     # default; or GPT_REALTIME, GPT_REALTIME_MINI, GPT_REALTIME_1_5
+    reasoning_effort=ReasoningEffort.LOW,   # default for gpt-realtime-2
     voice=AssistantVoice.CORAL,
     speech_speed=1.2,                       # 0.25–1.5, default 1.0
     instructions="...",
 )
 ```
+
+`gpt-realtime-2` is the default model. It supports reasoning controls; start with `ReasoningEffort.LOW` for most voice agents and increase only for workflows that need deeper planning. Set `reasoning_effort=None` if you need to omit the `reasoning` session setting.
 
 Available voices: `ALLOY`, `ASH`, `BALLAD`, `CORAL`, `ECHO`, `FABLE`, `ONYX`, `NOVA`, `SAGE`, `SHIMMER`, `VERSE`, `CEDAR`, `MARIN`.
 

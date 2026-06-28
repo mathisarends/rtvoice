@@ -8,6 +8,7 @@ from rtvoice.agent.views import (
     ConversationSeed,
     NoiseReduction,
     RealtimeModel,
+    ReasoningEffort,
     SeedMessage,
     SemanticVAD,
     TranscriptionModel,
@@ -58,6 +59,7 @@ def make_session(
         session = RealtimeSession(
             event_bus=event_bus,
             model=RealtimeModel.GPT_REALTIME_MINI,
+            reasoning_effort=ReasoningEffort.LOW,
             instructions="Test assistant",
             voice=AssistantVoice.MARIN,
             speech_speed=1.0,
@@ -131,3 +133,12 @@ class TestConversationSeedInjection:
         assert payload["item"]["content"] == [
             {"type": "output_text", "text": "Hallo Max."}
         ]
+
+
+class TestSessionSettings:
+    def test_build_session_settings_includes_reasoning_effort(self) -> None:
+        session, _, _ = make_session()
+
+        payload = session._build_session_settings().model_dump(exclude_none=True)
+
+        assert payload["reasoning"] == {"effort": ReasoningEffort.LOW}

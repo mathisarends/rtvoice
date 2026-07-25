@@ -53,12 +53,6 @@ class LifecycleLogger(AgentListener):
     async def on_assistant_stopped_responding(self) -> None:
         print("[lifecycle] on_assistant_stopped_responding")
 
-    async def on_supervisor_started(self) -> None:
-        print("[lifecycle] on_supervisor_started")
-
-    async def on_supervisor_finished(self) -> None:
-        print("[lifecycle] on_supervisor_finished")
-
 
 async def main():
     prompt = """

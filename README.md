@@ -148,9 +148,6 @@ Optionally add `result_instruction` to tell the model how to present the result 
 async def get_headlines() -> str: ...
 ```
 
-`holding_instruction` is retained as a deprecated no-op for source
-compatibility.
-
 ### Status templates
 
 `status` is a spoken update for tools registered with `param_model=`. Use `{field_name}` placeholders from the Pydantic model — rtvoice validates them at registration time.
@@ -321,7 +318,7 @@ async def book_table(
 
 supervisor = Supervisor(
     description="Books restaurant tables on behalf of the user.",
-    instructions="Use book_table to complete booking requests. Call done() when finished.",
+    instructions="Use book_table to complete booking requests.",
     tools=tools,
     llm=ChatOpenAI(model="gpt-4o-mini"),
 )
@@ -332,7 +329,10 @@ agent = RealtimeAgent(
 )
 ```
 
-**How it works:** the realtime agent registers the `Supervisor` as a callable `supervisor` tool. When invoked, the supervisor runs its own agentic loop (tool calls → LLM → tool calls …) until it either calls `done()` or needs a clarification from the user via `clarify()`. Clarifications are automatically routed back through the voice agent and the loop resumes.
+**How it works:** the realtime agent provides the `Supervisor` through tool
+dependency injection and registers it as a regular `supervisor` tool. When
+invoked, the supervisor runs its own tool-calling loop and returns the final LLM
+completion as the tool result.
 
 **`Supervisor` parameters:**
 
@@ -344,7 +344,6 @@ agent = RealtimeAgent(
 | `tools`                | `Tools` instance with the actions the supervisor may call |
 | `skills`               | Local Agent Skills exposed through progressive disclosure |
 | `allowed_commands`     | Commands the skill `bash` tool may execute                 |
-| `holding_instruction`  | Deprecated no-op retained for source compatibility        |
 | `result_instructions`  | Tells the realtime model how to present the result        |
 | `handoff_instructions` | Extra guidance appended to the tool description           |
 | `max_iterations`       | Loop iteration cap (default: 10)                          |
@@ -426,8 +425,6 @@ agent = RealtimeAgent(
 | `on_assistant_transcript_delta(delta)`            | Incremental assistant text chunk (requires `"text"` in `output_modalities`) |
 | `on_agent_interrupted()`                          | User interrupted the assistant mid-response                                 |
 | `on_agent_error(error)`                           | Session or API error                                                        |
-| `on_supervisor_started()`                         | The supervisor began running                                                |
-| `on_supervisor_finished()`                        | The supervisor finished                                                     |
 | `on_user_inactivity_countdown(remaining_seconds)` | Fires each second before inactivity timeout                                 |
 
 ---

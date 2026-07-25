@@ -1,13 +1,6 @@
-import asyncio
 import json
 import logging
-from dataclasses import dataclass
 
-from rtvoice.agent.views import (
-    SupervisorClarificationNeeded,
-    SupervisorDone,
-    SupervisorResult,
-)
 from rtvoice.llm import (
     AssistantMessage,
     ChatModel,
@@ -20,20 +13,8 @@ from rtvoice.skills import SkillManager, Skills
 from rtvoice.skills.bash import BashRunner
 from rtvoice.tools import Tools
 from rtvoice.tools.di import ToolContext
-from rtvoice.tools.params import ClarifyParams, DoneParams
-from rtvoice.tools.results import ActionResult
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class DoneSignal:
-    result: str
-
-
-@dataclass
-class ClarifySignal:
-    question: str
 
 
 class Supervisor[T]:
@@ -75,44 +56,12 @@ class Supervisor[T]:
         self._tools.set_context(
             ToolContext(context, self._skill_manager, self._bash_runner)
         )
-        self._pending_updates: asyncio.Queue[str] = asyncio.Queue()
-
-        self._register_done_tool()
-        self._register_clarify_tool()
-
-    async def update(self, message: str) -> None:
-        await self._pending_updates.put(message)
-
-    def discard_pending_updates(self) -> None:
-        while not self._pending_updates.empty():
-            self._pending_updates.get_nowait()
-            self._pending_updates.task_done()
-
-    def _register_done_tool(self) -> None:
-        @self._tools.action(
-            "Signal that the task is complete and return the final result to the user. "
-            "Only call this once you have gathered all necessary information or took the appropriate action.",
-            params=DoneParams,
-        )
-        def done(params: DoneParams) -> ActionResult:
-            return ActionResult.success(DoneSignal(params.result))
-
-    def _register_clarify_tool(self) -> None:
-        @self._tools.action(
-            "Ask the user a clarifying question when essential information is missing. "
-            "Use sparingly - only when you cannot proceed without the answer. "
-            "Calling this tool immediately returns control to the user; "
-            "you will be called again once they answer.",
-            params=ClarifyParams,
-        )
-        def clarify(params: ClarifyParams) -> ActionResult:
-            return ActionResult.success(ClarifySignal(params.question))
 
     async def start(
         self,
         task: str,
         context: str | None = None,
-    ) -> SupervisorResult:
+    ) -> str:
         messages = self._build_messages(task=task, context=context)
         return await self._loop(messages)
 
@@ -127,30 +76,14 @@ class Supervisor[T]:
         messages.append(UserMessage(content=f"<task>\n{task}\n</task>"))
         return messages
 
-    async def resume(
-        self,
-        clarification_answer: str,
-        resume_history: list[Message],
-        clarify_call_id: str,
-    ) -> SupervisorResult:
-        messages = list(resume_history)
-        messages.append(
-            ToolResultMessage(
-                tool_call_id=clarify_call_id,
-                content=clarification_answer,
-            )
-        )
-        return await self._loop(messages)
-
-    async def _loop(self, messages: list[Message]) -> SupervisorResult:
+    async def _loop(self, messages: list[Message]) -> str:
         tool_schema = self._tools.get_json_tool_schema()
 
         for _ in range(self._max_iterations):
-            self._append_pending_updates(messages)
             response = await self._llm.invoke(messages, tools=tool_schema)
 
             if not response.tool_calls:
-                return SupervisorDone(message=response.completion)
+                return response.completion
 
             messages.append(
                 AssistantMessage(
@@ -188,31 +121,9 @@ class Supervisor[T]:
                     )
                     continue
 
-                match result.value:
-                    case DoneSignal(result=message):
-                        return SupervisorDone(message=message)
-                    case ClarifySignal(question=question):
-                        return SupervisorClarificationNeeded(
-                            question=question,
-                            resume_history=list(messages),
-                            clarify_call_id=tool_call.id,
-                        )
                 content = "OK" if result.value is None else str(result.value)
                 messages.append(
                     ToolResultMessage(tool_call_id=tool_call.id, content=content)
                 )
 
-        return SupervisorDone(
-            message="Max iterations reached.",
-            success=False,
-        )
-
-    def _append_pending_updates(self, messages: list[Message]) -> None:
-        while not self._pending_updates.empty():
-            update = self._pending_updates.get_nowait()
-            messages.append(
-                UserMessage(
-                    content=f"<supervisor_update>\n{update}\n</supervisor_update>"
-                )
-            )
-            self._pending_updates.task_done()
+        return "Max iterations reached."

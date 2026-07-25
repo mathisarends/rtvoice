@@ -71,7 +71,6 @@ def make_session(
             turn_detection=SemanticVAD(),
             tools=Tools(),
             audio_session=MagicMock(spec=AudioSession),
-            supervisor=None,
             conversation_seed=conversation_seed,
             inactivity_timeout_enabled=False,
             inactivity_timeout_seconds=None,

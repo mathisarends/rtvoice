@@ -25,28 +25,5 @@ class BashParams(ToolParams, BashArgs):
     pass
 
 
-class DoneParams(ToolParams):
-    result: str = Field(description="The final result to return to the user.")
-
-
-class ClarifyParams(ToolParams):
-    question: str = Field(
-        description="The clarifying question to ask the user.",
-    )
-
-
-class HandoffParams(ToolParams):
+class SupervisorParams(ToolParams):
     task: str = Field(description="The task to hand off to the supervisor.")
-    clarification_answer: str | None = Field(
-        default=None,
-        description=(
-            "The user's answer to a previously asked clarification question. "
-            "Only set this when resuming a paused supervisor task."
-        ),
-    )
-
-
-class UpdateSupervisorParams(ToolParams):
-    message: str = Field(
-        description="New context, corrections, or instructions for the running supervisor.",
-    )

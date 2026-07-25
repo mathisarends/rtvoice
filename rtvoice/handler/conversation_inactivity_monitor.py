@@ -7,8 +7,6 @@ from rtvoice.conversation.inactivity_timer import ConversationInactivityTimer
 from rtvoice.events.views import (
     AgentSessionConnectedEvent,
     AudioPlaybackCompletedEvent,
-    SupervisorFinishedEvent,
-    SupervisorStartedEvent,
     UserInactivityCountdownEvent,
     UserInactivityTimeoutEvent,
 )
@@ -31,10 +29,6 @@ class ConversationInactivityMonitor:
         self._check_task: asyncio.Task | None = None
         self._assistant_is_speaking = False
         self._user_has_stopped_speaking = False
-        self._agent_is_busy = False
-
-        self.event_bus.on(SupervisorStartedEvent, self._handle_supervisor_started)
-        self.event_bus.on(SupervisorFinishedEvent, self._handle_supervisor_finished)
         self.event_bus.on(AgentSessionConnectedEvent, self._handle_session_connected)
         self.event_bus.on(
             InputAudioBufferSpeechStoppedEvent, self._handle_user_speech_ended
@@ -44,16 +38,6 @@ class ConversationInactivityMonitor:
         )
         self.event_bus.on(ResponseCreatedEvent, self._handle_assistant_started)
         self.event_bus.on(AudioPlaybackCompletedEvent, self._handle_assistant_done)
-
-    async def _handle_supervisor_started(self, _: SupervisorStartedEvent) -> None:
-        self._agent_is_busy = True
-        self._is_monitoring = False
-        logger.debug("Agent is busy - pausing inactivity timeout monitoring")
-
-    async def _handle_supervisor_finished(self, _: SupervisorFinishedEvent) -> None:
-        self._agent_is_busy = False
-        logger.debug("Agent no longer busy - resuming inactivity timeout monitoring")
-        self._try_start_monitoring()
 
     async def _handle_session_connected(self, _: AgentSessionConnectedEvent) -> None:
         self._user_has_stopped_speaking = True
@@ -88,11 +72,7 @@ class ConversationInactivityMonitor:
         self._try_start_monitoring()
 
     def _try_start_monitoring(self) -> None:
-        if (
-            not self._user_has_stopped_speaking
-            or self._assistant_is_speaking
-            or self._agent_is_busy
-        ):
+        if not self._user_has_stopped_speaking or self._assistant_is_speaking:
             return
 
         self._timer.reset()

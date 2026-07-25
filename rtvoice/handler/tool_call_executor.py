@@ -41,11 +41,9 @@ class ToolCallExecutor:
         event_bus: EventBus,
         tools: Tools,
         websocket: RealtimeWebSocket,
-        supervisor_tool_name: str | None = None,
     ) -> None:
         self._tools = tools
         self._websocket = websocket
-        self._supervisor_tool_name = supervisor_tool_name
         self._batches: dict[str, _ResponseBatch] = {}
 
         event_bus.on(FunctionCallItem, self._on_function_call)
@@ -53,9 +51,6 @@ class ToolCallExecutor:
         logger.debug("ToolCallExecutor initialized")
 
     async def _on_function_call(self, event: FunctionCallItem) -> None:
-        if self._is_supervisor_tool(event.name):
-            return
-
         tool = self._tools.get(event.name)
         if not tool:
             logger.error("Tool '%s' not found", event.name)
@@ -91,6 +86,3 @@ class ToolCallExecutor:
                 result_instructions.append(call.tool.result_instruction)
 
         await send_batched_response(self._websocket, result_instructions)
-
-    def _is_supervisor_tool(self, tool_name: str | None) -> bool:
-        return tool_name == self._supervisor_tool_name

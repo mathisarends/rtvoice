@@ -129,7 +129,7 @@ def build_supervisor() -> Supervisor:
             "'IKEA <city> opening hours' to retrieve the store's schedule.\n"
             "4. Compare the current time against the opening hours for today's weekday.\n"
             "5. Call report_progress() with a brief intermediate status if steps 1–3 took a while.\n"
-            "6. Call done() with a clear spoken answer: is the store open right now, "
+            "6. Return a clear answer: is the store open right now, "
             "when does it close (or when does it next open), and how far away it is."
         ),
         tools=build_tools(),

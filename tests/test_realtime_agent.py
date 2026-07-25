@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from rtvoice.agent import RealtimeAgent
+from rtvoice.agent import RealtimeAgent, Supervisor
 from rtvoice.agent.listener import AgentListener
 from rtvoice.agent.views import (
     AgentError,
@@ -27,8 +27,6 @@ from rtvoice.events.views import (
     AssistantStoppedRespondingEvent,
     AssistantTranscriptCompletedEvent,
     AssistantTranscriptDeltaEvent,
-    SupervisorFinishedEvent,
-    SupervisorStartedEvent,
     UserInactivityTimeoutEvent,
     UserStartedSpeakingEvent,
     UserStoppedSpeakingEvent,
@@ -77,6 +75,23 @@ class TestInitDefaults:
     def test_default_inactivity_timeout_disabled(self) -> None:
         agent = make_agent()
         assert agent._realtime_session._inactivity_timeout_enabled is False
+
+    @pytest.mark.asyncio
+    async def test_supervisor_is_executed_as_injected_regular_tool(self) -> None:
+        supervisor = Supervisor(
+            description="A supervisor",
+            instructions="Do the task.",
+            llm=MagicMock(),
+        )
+        supervisor.start = AsyncMock(return_value="final result")
+        agent = make_agent(supervisor=supervisor)
+
+        result = await agent._tools.execute("supervisor", {"task": "Plan my day"})
+
+        assert result.value == "final result"
+        supervisor.start.assert_awaited_once_with(
+            "Plan my day", context="(no conversation yet)"
+        )
 
     def test_default_conversation_seed_is_none(self) -> None:
         agent = make_agent()
@@ -178,31 +193,6 @@ class TestInitWarnings:
         assert not any(
             "inactivity_timeout_enabled is False" in r.message for r in caplog.records
         )
-
-    def test_transcription_none_with_supervisor_defaults_to_whisper(self) -> None:
-        supervisor = MagicMock()
-        supervisor.name = "supervisor"
-        supervisor.description = "A supervisor"
-        supervisor.handoff_instructions = None
-        supervisor.result_instructions = None
-        supervisor.holding_instruction = None
-        agent = make_agent(transcription_model=None, supervisor=supervisor)
-        assert (
-            agent._realtime_session._transcription_model == TranscriptionModel.WHISPER_1
-        )
-
-    def test_transcription_none_with_supervisor_logs_warning(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        supervisor = MagicMock()
-        supervisor.name = "supervisor"
-        supervisor.description = "A supervisor"
-        supervisor.handoff_instructions = None
-        supervisor.result_instructions = None
-        supervisor.holding_instruction = None
-        with caplog.at_level(logging.WARNING, logger="rtvoice.service"):
-            make_agent(transcription_model=None, supervisor=supervisor)
-        assert any("Transcription is required" in r.message for r in caplog.records)
 
 
 class TestInactivityTimeoutFlag:
@@ -385,24 +375,6 @@ class TestListenerWiring:
         await agent._event_bus.dispatch(AssistantStoppedRespondingEvent())
 
         listener.on_assistant_stopped_responding.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_on_supervisor_started_is_called(self) -> None:
-        listener = AsyncMock(spec=AgentListener)
-        agent = make_agent(listener=listener)
-
-        await agent._event_bus.dispatch(SupervisorStartedEvent())
-
-        listener.on_supervisor_started.assert_called_once_with()
-
-    @pytest.mark.asyncio
-    async def test_on_supervisor_finished_is_called(self) -> None:
-        listener = AsyncMock(spec=AgentListener)
-        agent = make_agent(listener=listener)
-
-        await agent._event_bus.dispatch(SupervisorFinishedEvent())
-
-        listener.on_supervisor_finished.assert_called_once_with()
 
     @pytest.mark.asyncio
     async def test_no_listener_events_do_not_raise(self) -> None:

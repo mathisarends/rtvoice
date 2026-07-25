@@ -25,7 +25,6 @@ from rtvoice.audio import AudioSession
 from rtvoice.events.views import (
     AgentSessionConnectedEvent,
     AgentStoppedEvent,
-    UpdateSessionToolsCommand,
 )
 from rtvoice.handler import (
     AudioBridge,
@@ -33,7 +32,6 @@ from rtvoice.handler import (
     ConversationAudioRecorder,
     ConversationInactivityMonitor,
     SpeechActivityEventAdapter,
-    SupervisorCallCoordinator,
     ToolCallExecutor,
     TranscriptEventAdapter,
 )
@@ -53,7 +51,6 @@ from rtvoice.realtime.schemas import (
     SessionUpdateEvent,
     SpeedUpdateEvent,
     ToolChoiceMode,
-    ToolsUpdateEvent,
     TurnDetectionSettings,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
@@ -64,7 +61,6 @@ from rtvoice.tokens.tracker import TokenTracker
 from rtvoice.watchdogs import ErrorWatchdog
 
 if TYPE_CHECKING:
-    from rtvoice.agent.supervisor import Supervisor
     from rtvoice.tools import Tools
 
 logger = logging.getLogger(__name__)
@@ -92,7 +88,6 @@ class RealtimeSession:
         turn_detection: TurnDetection,
         tools: Tools,
         audio_session: AudioSession,
-        supervisor: Supervisor | None,
         conversation_seed: ConversationSeed | None,
         inactivity_timeout_enabled: bool,
         inactivity_timeout_seconds: float | None,
@@ -114,7 +109,6 @@ class RealtimeSession:
         self._turn_detection = turn_detection
         self._tools = tools
         self._audio_session = audio_session
-        self._supervisor = supervisor
         self._conversation_seed = conversation_seed
         self._assistant_text_enabled = "text" in self._output_modalities
         self._transcription_enabled = self._transcription_model is not None
@@ -136,7 +130,6 @@ class RealtimeSession:
         self._stopped = False
         self._setup_handlers()
 
-        self._event_bus.on(UpdateSessionToolsCommand, self._on_update_session_tools)
         self._event_bus.on(AgentStoppedEvent, self._on_agent_stopped)
 
     def _setup_handlers(self) -> None:
@@ -160,16 +153,7 @@ class RealtimeSession:
             event_bus=self._event_bus,
             tools=self._tools,
             websocket=self._websocket,
-            supervisor_tool_name=self._supervisor.name if self._supervisor else None,
         )
-
-        if self._supervisor:
-            self._supervisor_call_coordinator = SupervisorCallCoordinator(
-                event_bus=self._event_bus,
-                tools=self._tools,
-                websocket=self._websocket,
-                supervisor=self._supervisor,
-            )
 
         self._error_watchdog = ErrorWatchdog(event_bus=self._event_bus)
         self._speech_activity_event_adapter = SpeechActivityEventAdapter(
@@ -269,17 +253,6 @@ class RealtimeSession:
             ConversationItemCreateEvent.user_message_with_image(text, image_data_url)
         )
         await self._websocket.send(ConversationResponseCreateEvent())
-
-    async def _on_update_session_tools(
-        self, command: UpdateSessionToolsCommand
-    ) -> None:
-        tool_names = [t.name for t in command.tools]
-        logger.info(
-            "Updating session tools [count=%d, tools=%s]",
-            len(command.tools),
-            tool_names,
-        )
-        await self._websocket.send(ToolsUpdateEvent.from_tools(command.tools))
 
     async def _forward_events(self) -> None:
         async for event in self._websocket.events():

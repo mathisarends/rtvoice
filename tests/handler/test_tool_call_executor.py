@@ -234,7 +234,7 @@ class TestToolBatching:
         tools.execute.assert_awaited_once_with("get_weather", {"city": "Berlin"})
 
 
-class TestUnknownAndSupervisorTools:
+class TestUnknownTools:
     @pytest.mark.asyncio
     async def test_unknown_tool_is_ignored(
         self,
@@ -244,20 +244,6 @@ class TestUnknownAndSupervisorTools:
         tools: MagicMock,
     ) -> None:
         await event_bus.dispatch(make_function_call_item(name="missing"))
-        await event_bus.dispatch(make_response_done())
-        websocket.send.assert_not_called()
-        tools.execute.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_supervisor_tool_is_skipped(
-        self,
-        event_bus: EventBus,
-        websocket: AsyncMock,
-        tools: MagicMock,
-    ) -> None:
-        ToolCallExecutor(event_bus, tools, websocket, supervisor_tool_name="slow_job")
-        tools.get.return_value = make_tool("slow_job")
-        await event_bus.dispatch(make_function_call_item(name="slow_job"))
         await event_bus.dispatch(make_response_done())
         websocket.send.assert_not_called()
         tools.execute.assert_not_called()

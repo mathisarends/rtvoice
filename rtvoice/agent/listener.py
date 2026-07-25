@@ -12,8 +12,6 @@ from rtvoice.events.views import (
     AssistantStoppedRespondingEvent,
     AssistantTranscriptCompletedEvent,
     AssistantTranscriptDeltaEvent,
-    SupervisorFinishedEvent,
-    SupervisorStartedEvent,
     UserInactivityCountdownEvent,
     UserStartedSpeakingEvent,
     UserStoppedSpeakingEvent,
@@ -71,12 +69,6 @@ class AgentListener:
     async def on_assistant_stopped_responding(self) -> None:
         """Assistant finished streaming its audio response."""
 
-    async def on_supervisor_started(self) -> None:
-        """Supervisor started running."""
-
-    async def on_supervisor_finished(self) -> None:
-        """Supervisor finished running."""
-
 
 class AgentListenerBridge:
     def __init__(
@@ -85,18 +77,15 @@ class AgentListenerBridge:
         event_bus: EventBus,
         listener: AgentListener,
         inactivity_timeout_enabled: bool,
-        has_supervisor: bool,
         assistant_text_enabled: bool,
     ) -> None:
         self._event_bus = event_bus
         self._listener = listener
         self._inactivity_timeout_enabled = inactivity_timeout_enabled
-        self._has_supervisor = has_supervisor
         self._assistant_text_enabled = assistant_text_enabled
 
     def setup(self) -> None:
         self._warn_countdown_mismatch_if_necessary()
-        self._warn_supervisor_mismatch_if_necessary()
         self._warn_text_modality_mismatch_if_necessary()
 
         self._event_bus.on(
@@ -140,8 +129,6 @@ class AgentListenerBridge:
             UserInactivityCountdownEvent,
             self._on_user_inactivity_countdown,
         )
-        self._event_bus.on(SupervisorStartedEvent, self._on_supervisor_started)
-        self._event_bus.on(SupervisorFinishedEvent, self._on_supervisor_finished)
 
     async def _on_user_transcript_completed(
         self, event: UserTranscriptCompletedEvent
@@ -191,12 +178,6 @@ class AgentListenerBridge:
     ) -> None:
         await self._listener.on_user_inactivity_countdown(event.remaining_seconds)
 
-    async def _on_supervisor_started(self, _: SupervisorStartedEvent) -> None:
-        await self._listener.on_supervisor_started()
-
-    async def _on_supervisor_finished(self, _: SupervisorFinishedEvent) -> None:
-        await self._listener.on_supervisor_finished()
-
     def _warn_countdown_mismatch_if_necessary(self) -> None:
         overrides_countdown = self._listener_overrides_countdown()
         listener_name = type(self._listener).__name__
@@ -222,14 +203,6 @@ class AgentListenerBridge:
             return False
         return listener_method is not AgentListener.on_user_inactivity_countdown
 
-    def _warn_supervisor_mismatch_if_necessary(self) -> None:
-        if self._listener_overrides_supervisor_callbacks() and not self._has_supervisor:
-            logger.warning(
-                "Listener '%s' overrides on_supervisor_started or on_supervisor_finished "
-                "but no supervisor is configured - callbacks will never fire.",
-                type(self._listener).__name__,
-            )
-
     def _warn_text_modality_mismatch_if_necessary(self) -> None:
         if (
             self._listener_overrides_assistant_transcript_delta()
@@ -247,15 +220,4 @@ class AgentListenerBridge:
         return (
             delta is not None
             and delta is not AgentListener.on_assistant_transcript_delta
-        )
-
-    def _listener_overrides_supervisor_callbacks(self) -> bool:
-        cls = type(self._listener)
-        started = getattr(cls, "on_supervisor_started", None)
-        finished = getattr(cls, "on_supervisor_finished", None)
-        return (
-            started is not None and started is not AgentListener.on_supervisor_started
-        ) or (
-            finished is not None
-            and finished is not AgentListener.on_supervisor_finished
         )

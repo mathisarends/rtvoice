@@ -5,8 +5,6 @@ from transitbus import EventBus
 
 from rtvoice.events.views import (
     AudioPlaybackCompletedEvent,
-    SupervisorFinishedEvent,
-    SupervisorStartedEvent,
     UserInactivityCountdownEvent,
     UserInactivityTimeoutEvent,
 )
@@ -107,17 +105,6 @@ class TestMonitoringStateTransitions:
         await event_bus.dispatch(make_response_created())
         assert wt._is_monitoring is False
 
-    @pytest.mark.asyncio
-    async def test_monitoring_does_not_start_while_agent_is_busy(
-        self, event_bus: EventBus
-    ) -> None:
-        wt = ConversationInactivityMonitor(event_bus, timeout_seconds=10.0)
-
-        await event_bus.dispatch(SupervisorStartedEvent())
-        await event_bus.dispatch(make_speech_stopped())
-
-        assert wt._is_monitoring is False
-
 
 class TestTimeoutFiring:
     @pytest.mark.asyncio
@@ -215,33 +202,3 @@ class TestCountdownDispatch:
         await wt._monitor_timeout()
 
         assert received == [5, 4, 3]
-
-
-class TestBusyStateTransitions:
-    @pytest.mark.asyncio
-    async def test_supervisor_finished_starts_monitoring_when_idle(
-        self, event_bus: EventBus
-    ) -> None:
-        wt = ConversationInactivityMonitor(event_bus, timeout_seconds=10.0)
-        wt._agent_is_busy = True
-        wt._assistant_is_speaking = False
-        wt._user_has_stopped_speaking = True
-
-        await event_bus.dispatch(SupervisorFinishedEvent())
-
-        assert wt._agent_is_busy is False
-        assert wt._is_monitoring is True
-
-    @pytest.mark.asyncio
-    async def test_supervisor_finished_does_not_start_monitoring_if_assistant_speaking(
-        self, event_bus: EventBus
-    ) -> None:
-        wt = ConversationInactivityMonitor(event_bus, timeout_seconds=10.0)
-        wt._agent_is_busy = True
-        wt._assistant_is_speaking = True
-        wt._user_has_stopped_speaking = True
-
-        await event_bus.dispatch(SupervisorFinishedEvent())
-
-        assert wt._agent_is_busy is False
-        assert wt._is_monitoring is False

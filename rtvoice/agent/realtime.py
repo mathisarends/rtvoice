@@ -5,14 +5,10 @@ from pathlib import Path
 from transitbus import EventBus
 
 from rtvoice.agent.listener import AgentListener, AgentListenerBridge
-from rtvoice.agent.supervisor import (
-    Supervisor,
-    SupervisorClarificationNeeded,
-)
+from rtvoice.agent.supervisor import Supervisor
 from rtvoice.agent.views import (
     AgentResult,
     AssistantVoice,
-    ClarificationCheckpoint,
     ConversationSeed,
     NoiseReduction,
     OutputModality,
@@ -39,8 +35,7 @@ from rtvoice.skills import SkillManager, Skills
 from rtvoice.skills.bash import BashRunner
 from rtvoice.tokens import PricingCatalog, UsageReport
 from rtvoice.tools import Inject, ToolContext, Tools
-from rtvoice.tools.params import HandoffParams
-from rtvoice.tools.results import ActionResult
+from rtvoice.tools.params import SupervisorParams
 
 logger = logging.getLogger(__name__)
 
@@ -81,14 +76,6 @@ class RealtimeAgent[T]:
             raise ValueError("Pass either `provider` or `api_key`, not both.")
 
         clipped_speech_speed = self._clip_speech_speed(speech_speed)
-
-        if transcription_model is None and self._supervisor:
-            logger.warning(
-                "transcription_model is None but a supervisor is attached. "
-                "Transcription is required for supervisor handoffs - "
-                "defaulting to TranscriptionModel.WHISPER_1."
-            )
-            transcription_model = TranscriptionModel.WHISPER_1
 
         normalized_output_modalities = self._normalize_output_modalities(
             output_modalities
@@ -137,6 +124,7 @@ class RealtimeAgent[T]:
                 context,
                 self._skill_manager,
                 self._bash_runner,
+                self._supervisor,
             )
         )
         if self._supervisor:
@@ -160,7 +148,6 @@ class RealtimeAgent[T]:
             turn_detection=effective_turn_detection,
             tools=self._tools,
             audio_session=audio_session,
-            supervisor=self._supervisor,
             conversation_seed=conversation_seed,
             inactivity_timeout_enabled=should_enable_inactivity_timeout,
             inactivity_timeout_seconds=inactivity_timeout_seconds,
@@ -213,52 +200,21 @@ class RealtimeAgent[T]:
                 f"Handoff instructions: {supervisor.handoff_instructions}"
             )
 
-        self._register_supervisor_handoff(supervisor, description)
-
-    def _register_supervisor_handoff(
-        self, supervisor: Supervisor, description: str
-    ) -> None:
-        paused_for_clarification: ClarificationCheckpoint | None = None
-
         @self._tools.action(
             description,
             name=supervisor.name,
-            params=HandoffParams,
+            params=SupervisorParams,
             result_instruction=supervisor.result_instructions,
         )
-        async def _handoff(
-            params: HandoffParams,
+        async def _run_supervisor(
+            params: SupervisorParams,
+            supervisor: Inject[Supervisor],
             conversation_history: Inject[ConversationHistory],
-        ) -> ActionResult:
-            nonlocal paused_for_clarification
-
-            clarification_answer = params.clarification_answer
-            is_resuming = (
-                paused_for_clarification is not None
-                and clarification_answer is not None
+        ) -> str:
+            return await supervisor.start(
+                params.task,
+                context=conversation_history.format(),
             )
-
-            if is_resuming:
-                checkpoint = paused_for_clarification
-                paused_for_clarification = None
-                result = await supervisor.resume(
-                    clarification_answer=clarification_answer,
-                    resume_history=checkpoint.resume_history,
-                    clarify_call_id=checkpoint.clarify_call_id,
-                )
-            else:
-                context = (
-                    conversation_history.format() if conversation_history else None
-                )
-                result = await supervisor.start(params.task, context=context)
-
-            if isinstance(result, SupervisorClarificationNeeded):
-                paused_for_clarification = ClarificationCheckpoint(
-                    resume_history=result.resume_history,
-                    clarify_call_id=result.clarify_call_id,
-                )
-
-            return ActionResult.success(result)
 
     def _setup_shutdown_handlers(self) -> None:
         self._event_bus.on(UserInactivityTimeoutEvent, self._on_inactivity_timeout)
@@ -273,7 +229,6 @@ class RealtimeAgent[T]:
             event_bus=self._event_bus,
             listener=self._listener,
             inactivity_timeout_enabled=inactivity_timeout_enabled,
-            has_supervisor=bool(self._supervisor),
             assistant_text_enabled=assistant_text_enabled,
         )
         self._listener_bridge.setup()

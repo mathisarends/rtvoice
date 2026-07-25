@@ -4,14 +4,12 @@ from transitbus import Event
 
 if TYPE_CHECKING:
     from rtvoice.agent.views import AgentError
-    from rtvoice.realtime.schemas import FunctionTool, ToolChoiceMode
+    from rtvoice.realtime.schemas import ToolChoiceMode
 
     type AgentErrorValue = AgentError
-    type FunctionToolValue = FunctionTool
     type ToolChoiceValue = ToolChoiceMode
 else:
     type AgentErrorValue = Any
-    type FunctionToolValue = Any
     type ToolChoiceValue = Any
 
 
@@ -21,18 +19,6 @@ class UpdateSpeechSpeedCommand(Event):
 
 class UpdateToolChoiceCommand(Event):
     tool_choice: ToolChoiceValue
-
-
-class CancelSupervisorCommand(Event):
-    pass
-
-
-class UpdateSupervisorCommand(Event):
-    message: str
-
-
-class UpdateSessionToolsCommand(Event):
-    tools: list[FunctionToolValue]
 
 
 class AgentSessionConnectedEvent(Event):
@@ -80,14 +66,6 @@ class UserInactivityCountdownEvent(Event):
 
 class UserInactivityTimeoutEvent(Event):
     timeout_seconds: float
-
-
-class SupervisorStartedEvent(Event):
-    pass
-
-
-class SupervisorFinishedEvent(Event):
-    pass
 
 
 class AssistantInterruptedEvent(Event):

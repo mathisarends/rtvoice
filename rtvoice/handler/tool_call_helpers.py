@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import json
-from typing import Any
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
@@ -8,20 +10,27 @@ from rtvoice.realtime.schemas import (
     ConversationResponseCreateEvent,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
-from rtvoice.tools.views import Tool, VoidResult
+
+if TYPE_CHECKING:
+    from rtvoice.tools.results import ActionResult
+    from rtvoice.tools.views import Tool
 
 
-def serialize_tool_result(result: Any) -> str:
-    if isinstance(result, VoidResult):
-        return str(result)
-    if isinstance(result, str):
-        return result
-    if isinstance(result, BaseModel):
-        return result.model_dump_json(exclude_none=True)
+def serialize_tool_result(result: ActionResult) -> str:
+    if not result.ok:
+        return result.error or "Tool execution failed."
+
+    value = result.value
+    if value is None:
+        return "OK"
+    if isinstance(value, str):
+        return value
+    if isinstance(value, BaseModel):
+        return value.model_dump_json(exclude_none=True)
     try:
-        return json.dumps(result)
+        return json.dumps(value)
     except (TypeError, ValueError):
-        return str(result)
+        return str(value)
 
 
 async def send_function_call_output(
@@ -40,7 +49,6 @@ async def send_response_event(ws: RealtimeWebSocket, tool: Tool) -> None:
 async def send_batched_response(
     ws: RealtimeWebSocket, result_instructions: list[str]
 ) -> None:
-    """Send exactly one follow-up response for a completed tool-call batch."""
     if not result_instructions:
         await ws.send(ConversationResponseCreateEvent())
         return

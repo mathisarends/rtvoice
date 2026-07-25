@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -42,31 +41,21 @@ class ToolCallExecutor:
         event_bus: EventBus,
         tools: Tools,
         websocket: RealtimeWebSocket,
-        supervisor_tool_name: str | None = None,
     ) -> None:
+        self.event_bus = event_bus
         self._tools = tools
         self._websocket = websocket
-        self._supervisor_tool_name = supervisor_tool_name
         self._batches: dict[str, _ResponseBatch] = {}
 
-        event_bus.on(FunctionCallItem, self._on_function_call)
-        event_bus.on(ResponseDoneEvent, self._on_response_done)
+        self.event_bus.on(FunctionCallItem, self._on_function_call)
+        self.event_bus.on(ResponseDoneEvent, self._on_response_done)
         logger.debug("ToolCallExecutor initialized")
 
     async def _on_function_call(self, event: FunctionCallItem) -> None:
-        if self._is_supervisor_tool(event.name):
-            return
-
         tool = self._tools.get(event.name)
         if not tool:
             logger.error("Tool '%s' not found", event.name)
             return
-
-        logger.info(
-            "Tool call: '%s' [args=%s]",
-            event.name,
-            json.dumps(event.arguments or {}, ensure_ascii=False),
-        )
 
         task = asyncio.create_task(
             self._tools.execute(event.name, event.arguments or {})
@@ -88,17 +77,13 @@ class ToolCallExecutor:
 
         for call, result in zip(batch.calls, results, strict=True):
             if isinstance(result, BaseException):
-                logger.error("Tool '%s' failed: %s", call.tool.name, result)
+                logger.error("Tool '%s' crashed: %s", call.tool.name, result)
                 serialized = f"Tool execution failed: {result}"
             else:
                 serialized = serialize_tool_result(result)
-                logger.info("Tool result: '%s' [result=%s]", call.tool.name, serialized)
 
             await send_function_call_output(self._websocket, call.call_id, serialized)
             if call.tool.result_instruction:
                 result_instructions.append(call.tool.result_instruction)
 
         await send_batched_response(self._websocket, result_instructions)
-
-    def _is_supervisor_tool(self, tool_name: str | None) -> bool:
-        return tool_name == self._supervisor_tool_name

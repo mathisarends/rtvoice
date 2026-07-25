@@ -286,31 +286,143 @@ class ConversationContent(BaseModel):
     text: str
 
 
+class OutputAudioConversationContent(BaseModel):
+    type: Literal["output_audio"]
+    audio: str | None = None
+    transcript: str | None = None
+
+
 class InputConversationContent(BaseModel):
     type: Literal["input_text"] = "input_text"
     text: str
 
 
+class InputAudioConversationContent(BaseModel):
+    type: Literal["input_audio"]
+    audio: str | None = None
+    transcript: str | None = None
+
+
 class InputImageConversationContent(BaseModel):
     type: Literal["input_image"] = "input_image"
     image_url: str
+    detail: Literal["auto", "low", "high"] | None = None
+
+
+ConversationContentItem = Annotated[
+    ConversationContent
+    | OutputAudioConversationContent
+    | InputConversationContent
+    | InputAudioConversationContent
+    | InputImageConversationContent,
+    Field(discriminator="type"),
+]
+
+type ConversationItemStatus = Literal["completed", "incomplete", "in_progress"]
 
 
 class MessageConversationItem(BaseModel):
     type: Literal["message"] = "message"
     role: MessageRole
-    content: list[
-        ConversationContent | InputConversationContent | InputImageConversationContent
-    ]
+    content: list[ConversationContentItem]
+    id: str | None = None
+    object: Literal["realtime.item"] | None = None
+    status: ConversationItemStatus | None = None
+
+
+class FunctionCallConversationItem(BaseModel):
+    type: Literal["function_call"] = "function_call"
+    arguments: str
+    name: str
+    id: str | None = None
+    call_id: str | None = None
+    object: Literal["realtime.item"] | None = None
+    status: ConversationItemStatus | None = None
 
 
 class FunctionCallOutputConversationItem(BaseModel):
     type: Literal["function_call_output"] = "function_call_output"
     call_id: str
     output: str
+    id: str | None = None
+    object: Literal["realtime.item"] | None = None
+    status: ConversationItemStatus | None = None
 
 
-ConversationItem = MessageConversationItem | FunctionCallOutputConversationItem
+class McpApprovalResponseConversationItem(BaseModel):
+    type: Literal["mcp_approval_response"] = "mcp_approval_response"
+    id: str
+    approval_request_id: str
+    approve: bool
+    reason: str | None = None
+
+
+class McpTool(BaseModel):
+    input_schema: dict[str, Any]
+    name: str
+    annotations: dict[str, Any] | None = None
+    description: str | None = None
+
+
+class McpListToolsConversationItem(BaseModel):
+    type: Literal["mcp_list_tools"] = "mcp_list_tools"
+    server_label: str
+    tools: list[McpTool]
+    id: str | None = None
+
+
+class McpProtocolError(BaseModel):
+    type: Literal["protocol_error"] = "protocol_error"
+    code: int
+    message: str
+
+
+class McpToolExecutionError(BaseModel):
+    type: Literal["tool_execution_error"] = "tool_execution_error"
+    message: str
+
+
+class McpHttpError(BaseModel):
+    type: Literal["http_error"] = "http_error"
+    code: int
+    message: str
+
+
+McpToolCallError = Annotated[
+    McpProtocolError | McpToolExecutionError | McpHttpError,
+    Field(discriminator="type"),
+]
+
+
+class McpToolCallConversationItem(BaseModel):
+    type: Literal["mcp_call"] = "mcp_call"
+    id: str
+    arguments: str
+    name: str
+    server_label: str
+    approval_request_id: str | None = None
+    error: McpToolCallError | None = None
+    output: str | None = None
+
+
+class McpApprovalRequestConversationItem(BaseModel):
+    type: Literal["mcp_approval_request"] = "mcp_approval_request"
+    id: str
+    arguments: str
+    name: str
+    server_label: str
+
+
+ConversationItem = Annotated[
+    MessageConversationItem
+    | FunctionCallConversationItem
+    | FunctionCallOutputConversationItem
+    | McpApprovalResponseConversationItem
+    | McpListToolsConversationItem
+    | McpToolCallConversationItem
+    | McpApprovalRequestConversationItem,
+    Field(discriminator="type"),
+]
 
 
 # ============================================================================
@@ -664,14 +776,15 @@ class RealtimeResponseObject(BaseModel):
     id: str
     status: str | None = None
     usage: TokenUsage | None = None
-    output: list[dict[str, Any]] = Field(default_factory=list)
+    output: list[ConversationItem] = Field(default_factory=list)
 
     @property
     def function_call_ids(self) -> list[str]:
         return [
-            item["call_id"]
+            item.call_id
             for item in self.output
-            if item.get("type") == "function_call" and "call_id" in item
+            if isinstance(item, FunctionCallConversationItem)
+            and item.call_id is not None
         ]
 
 

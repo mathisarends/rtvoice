@@ -4,6 +4,7 @@ import asyncio
 import logging
 import shutil
 import subprocess
+from collections.abc import Iterable
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -12,6 +13,8 @@ from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     from tree_sitter import Node, Parser
+
+    from rtvoice.skills.manager import SkillManager
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +84,19 @@ class BashRunner:
                 raise ValueError(
                     f"Allowed command {command!r} must be one executable token."
                 )
+
+    @classmethod
+    def for_skills(
+        cls,
+        skill_manager: SkillManager | None,
+        allowed_commands: Iterable[str],
+    ) -> BashRunner | None:
+        if skill_manager is None or skill_manager.size == 0:
+            return None
+        return cls(
+            allowed_commands=tuple(dict.fromkeys(allowed_commands)),
+            allowed_script_dirs=skill_manager.directories,
+        )
 
     async def execute(self, args: BashArgs) -> str:
         error = validate_command(

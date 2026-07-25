@@ -1,84 +1,91 @@
 from __future__ import annotations
 
-import inspect
 import logging
-from collections.abc import Callable, Iterable
-from typing import (
-    Annotated,
-    Any,
-    Self,
-    get_args,
-    get_origin,
-    get_type_hints,
-)
+from collections.abc import Callable
+from typing import Any, Self
 
 from pydantic import BaseModel
 
+from rtvoice.agent.subagent import Subagent
+from rtvoice.conversation import ConversationHistory
 from rtvoice.realtime.schemas import FunctionTool
-from rtvoice.skills.bash import BashArgs, BashRunner
+from rtvoice.skills.bash import BashRunner
 from rtvoice.skills.manager import SkillManager
-from rtvoice.tools.di import ToolContext, _Inject
-from rtvoice.tools.views import Tool
+from rtvoice.tools.argument_resolver import resolve_arguments
+from rtvoice.tools.binding import (
+    ToolAvailability,
+    ToolDescription,
+    described,
+    provided,
+    requires,
+)
+from rtvoice.tools.di import Inject, ToolContext
+from rtvoice.tools.middleware import MiddlewareChain, ToolCall
+from rtvoice.tools.params import BashParams, LoadSkillParams, SubagentParams
+from rtvoice.tools.results import ActionResult
+from rtvoice.tools.views import ActionKind, Tool
 
 logger = logging.getLogger(__name__)
 
 
 class Tools:
-    def __init__(
-        self,
-        *,
-        skill_manager: SkillManager | None = None,
-        allowed_commands: Iterable[str] = (),
-    ):
-        self.tools: dict[str, Tool] = {}
+    def __init__(self):
+        self._tools: dict[str, Tool] = {}
         self._context: ToolContext | None = None
-        self._register_default_tools(skill_manager, allowed_commands)
+        self._handler = MiddlewareChain(self._tools).build(self._invoke)
+        self._register_default_tools()
+        self._default_tool_names = frozenset(self._tools)
 
     def action(
         self,
-        description: str,
+        description: str | ToolDescription,
         name: str | None = None,
-        param_model: type[BaseModel] | None = None,
+        *,
+        params: type[BaseModel] | None = None,
         result_instruction: str | None = None,
-        holding_instruction: str | None = None,
         status: str | Callable | None = None,
+        kind: ActionKind = ActionKind.GENERIC,
+        available_when: ToolAvailability | None = None,
     ) -> Callable:
-        """Register a tool.
-
-        ``holding_instruction`` is deprecated and retained as a no-op for API
-        compatibility. Configure native preambles in session instructions.
-        """
-
         def decorator(func: Callable) -> Callable:
-            bound_func = getattr(self, func.__name__, func)
-            tool = Tool(
-                name=name or func.__name__,
-                description=description,
-                function=bound_func,
-                param_model=param_model,
-                result_instruction=result_instruction,
-                holding_instruction=holding_instruction,
-                status=status,
+            self._register_tool(
+                Tool(
+                    name=name or func.__name__,
+                    description=description,
+                    fn=func,
+                    param_model=params,
+                    result_instruction=result_instruction,
+                    status=status,
+                    kind=kind,
+                    available_when=available_when,
+                )
             )
-            self._register_tool(tool)
             return func
 
         return decorator
 
     def set_context(self, context: ToolContext) -> None:
         self._context = context
+        subagent = context.resolve(Subagent)
+        self._tools["subagent"].result_instruction = (
+            subagent.result_instructions if subagent is not None else None
+        )
 
     def inject_tool(self, tool: Tool) -> None:
-        self.tools[tool.name] = tool
+        self._tools[tool.name] = tool
 
     def eject_tool(self, name: str) -> None:
-        self.tools.pop(name, None)
+        self._tools.pop(name, None)
 
     def get(self, name: str) -> Tool | None:
-        return self.tools.get(name)
+        return self._tools.get(name)
 
     def get_tool_schema(self) -> list[FunctionTool]:
-        return [tool.to_pydantic() for tool in self.tools.values()]
+        return [
+            tool.to_schema(self._context)
+            for tool in self._tools.values()
+            if tool.is_available(self._context)
+        ]
 
     def get_json_tool_schema(self) -> list[dict]:
         return [
@@ -90,154 +97,96 @@ class Tools:
         ]
 
     async def execute(
-        self,
-        name: str,
-        arguments: dict[str, Any],
-    ) -> Any:
-        tool = self.get(name)
-        if not tool:
-            raise KeyError(f"Tool '{name}' not found in registry")
+        self, name: str, arguments: dict[str, Any] | None = None
+    ) -> ActionResult:
+        return await self._handler(
+            ToolCall(name=name, raw_args=arguments or {}, context=self._context)
+        )
 
-        prepared = self._prepare_arguments(tool, arguments, self._context)
-        return await tool.execute(prepared)
+    async def _invoke(self, call: ToolCall) -> ActionResult:
+        resolved_args = resolve_arguments(
+            call.tool, call.raw_args, call.params, call.context
+        )
+        result = await call.tool.execute(resolved_args)
+        if isinstance(result, ActionResult):
+            return result
+        return ActionResult.success(result)
 
     def clone(self) -> Self:
         new = type(self)()
-        new.tools = self.tools.copy()
+        # mutate in place so the clone's handler chain keeps referencing this dict
+        new._tools.update(self._tools)
         return new
 
     def merge(self, other: Tools) -> None:
-        for tool in other.tools.values():
+        for tool in other._tools.values():
+            # every Tools carries the defaults, so merging must not collide on them
+            if tool.name in self._default_tool_names:
+                continue
             self._register_tool(tool)
 
     def is_registered(self, tool: Tool) -> bool:
-        return tool in self.tools.values()
+        return tool in self._tools.values()
 
     def _register_tool(self, tool: Tool) -> None:
-        if tool.name in self.tools:
+        if tool.name in self._tools:
             raise ValueError(f"Tool '{tool.name}' already registered")
-        self.tools[tool.name] = tool
+        self._tools[tool.name] = tool
 
-    def _register_default_tools(
-        self,
-        skill_manager: SkillManager | None,
-        allowed_commands: Iterable[str],
-    ) -> None:
-        if skill_manager is None or skill_manager.size == 0:
-            return
-
-        bash_runner = BashRunner(
-            allowed_commands=tuple(dict.fromkeys(allowed_commands)),
-            allowed_script_dirs=skill_manager.directories,
+    def _register_default_tools(self) -> None:
+        @self.action(
+            described(
+                Subagent,
+                render=_describe_subagent,
+                default="Delegate a task to the subagent.",
+            ),
+            name="subagent",
+            params=SubagentParams,
+            available_when=provided(Subagent),
         )
+        async def subagent(
+            params: SubagentParams,
+            subagent: Inject[Subagent],
+            conversation_history: Inject[ConversationHistory],
+        ) -> str:
+            conversation_summary = conversation_history.format_summary()
+            return await subagent.start(
+                params.task,
+                context=conversation_summary,
+            )
 
         @self.action(
             "Load a skill's full instructions or one bundled resource. Call this "
             "before using a skill. Pass only a relative resource path.",
-            name="load_skill",
+            params=LoadSkillParams,
+            available_when=requires(
+                SkillManager, predicate=lambda manager: manager.size > 0
+            ),
         )
-        def load_skill(name: str, path: str | None = "SKILL.md") -> str:
-            return skill_manager.load(name, path)
+        def load_skill(
+            params: LoadSkillParams, skill_manager: Inject[SkillManager]
+        ) -> ActionResult:
+            content = skill_manager.load(params.name, params.path)
+            return ActionResult.success(content)
 
         @self.action(
             "Execute a Bash command. Only explicitly allowed commands or "
             "scripts inside an available skill directory may run.",
-            name="bash",
-            param_model=BashArgs,
+            params=BashParams,
+            kind=ActionKind.DESTRUCTIVE,
+            available_when=provided(BashRunner),
         )
-        async def bash(args: BashArgs) -> str:
-            return await bash_runner.execute(args)
+        async def bash(
+            params: BashParams, bash_runner: Inject[BashRunner]
+        ) -> ActionResult:
+            output = await bash_runner.execute(params)
+            return ActionResult.success(output)
 
-    def _prepare_arguments(
-        self,
-        tool: Tool,
-        llm_arguments: dict[str, Any],
-        context: ToolContext | None,
-    ) -> dict[str, Any]:
-        signature = inspect.signature(tool.function)
-        type_hints = get_type_hints(tool.function, include_extras=True)
-        injectable_by_type = self._injectable_by_type_from_context(context)
 
-        if tool.param_model is not None:
-            return self._prepare_with_param_model(
-                tool, llm_arguments, signature, type_hints, injectable_by_type
-            )
-
-        arguments = llm_arguments.copy()
-        for param_name, param in signature.parameters.items():
-            if param_name in arguments or param_name in ("self", "cls"):
-                continue
-
-            hint = type_hints.get(param_name)
-            injected = self._resolve_inject(hint, injectable_by_type)
-            if injected is not None:
-                arguments[param_name] = injected
-            elif param.default is inspect.Parameter.empty:
-                raise ValueError(
-                    f"Missing required parameter '{param_name}' for tool '{tool.name}'"
-                )
-
-        return arguments
-
-    def _prepare_with_param_model(
-        self,
-        tool: Tool,
-        llm_arguments: dict[str, Any],
-        signature: inspect.Signature,
-        type_hints: dict[str, Any],
-        injectable_by_type: dict[type, Any],
-    ) -> dict[str, Any]:
-        model_instance = tool.param_model(**llm_arguments)
-        arguments: dict[str, Any] = {}
-
-        for param_name, param in signature.parameters.items():
-            if param_name in ("self", "cls"):
-                continue
-
-            hint = type_hints.get(param_name)
-            unwrapped = get_args(hint)[0] if get_origin(hint) is Annotated else hint
-
-            if unwrapped is tool.param_model:
-                arguments[param_name] = model_instance
-                continue
-
-            injected = self._resolve_inject(hint, injectable_by_type)
-            if injected is not None:
-                arguments[param_name] = injected
-            elif param.default is inspect.Parameter.empty:
-                raise ValueError(
-                    f"Missing required parameter '{param_name}' for tool '{tool.name}'"
-                )
-
-        return arguments
-
-    def _injectable_by_type_from_context(
-        self, context: ToolContext | None
-    ) -> dict[type, Any]:
-        result: dict[type, Any] = {}
-        if context is None:
-            return result
-
-        for field_name in ToolContext.model_fields:
-            value = getattr(context, field_name)
-            if value is None:
-                continue
-            result[type(value)] = value
-        return result
-
-    def _resolve_inject(
-        self, type_hint: Any, injectable_by_type: dict[type, Any]
-    ) -> Any | None:
-        if type_hint is None or get_origin(type_hint) is not Annotated:
-            return None
-
-        args = get_args(type_hint)
-        if not any(isinstance(arg, _Inject) for arg in args):
-            return None
-
-        requested_type = args[0]
-        for _, value in injectable_by_type.items():
-            if isinstance(value, requested_type):
-                return value
-
-        return None
+def _describe_subagent(subagent: Subagent) -> str:
+    if not subagent.handoff_instructions:
+        return subagent.description
+    return (
+        f"{subagent.description}\n\n"
+        f"Handoff instructions: {subagent.handoff_instructions}"
+    )

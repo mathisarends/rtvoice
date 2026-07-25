@@ -5,15 +5,10 @@ from pathlib import Path
 from transitbus import EventBus
 
 from rtvoice.agent.listener import AgentListener, AgentListenerBridge
-from rtvoice.agent.supervisor import (
-    Supervisor,
-    SupervisorClarificationNeeded,
-    SupervisorResult,
-)
+from rtvoice.agent.subagent import Subagent
 from rtvoice.agent.views import (
     AgentResult,
     AssistantVoice,
-    ClarificationCheckpoint,
     ConversationSeed,
     NoiseReduction,
     OutputModality,
@@ -37,7 +32,9 @@ from rtvoice.events.views import (
 from rtvoice.realtime import OpenAIProvider, RealtimeProvider, RealtimeSession
 from rtvoice.shared.decorators import timed
 from rtvoice.skills import SkillManager, Skills
-from rtvoice.tools import Inject, ToolContext, Tools
+from rtvoice.skills.bash import BashRunner
+from rtvoice.tokens import PricingCatalog, UsageReport
+from rtvoice.tools import ToolContext, Tools
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +55,7 @@ class RealtimeAgent[T]:
         tools: Tools | None = None,
         skills: Skills | None = None,
         allowed_commands: list[str] | None = None,
-        supervisor: Supervisor | None = None,
+        subagent: Subagent | None = None,
         audio_input: AudioInputDevice | None = None,
         audio_output: AudioOutputDevice | None = None,
         context: T | None = None,
@@ -70,21 +67,14 @@ class RealtimeAgent[T]:
         provider: RealtimeProvider | None = None,
         api_key: str | None = None,
         enable_preambles: bool = True,
+        pricing_catalog: PricingCatalog | None = None,
     ):
-        self._supervisor = supervisor
+        self._subagent = subagent
 
         if api_key and provider:
             raise ValueError("Pass either `provider` or `api_key`, not both.")
 
         clipped_speech_speed = self._clip_speech_speed(speech_speed)
-
-        if transcription_model is None and self._supervisor:
-            logger.warning(
-                "transcription_model is None but a supervisor is attached. "
-                "Transcription is required for supervisor handoffs - "
-                "defaulting to TranscriptionModel.WHISPER_1."
-            )
-            transcription_model = TranscriptionModel.WHISPER_1
 
         normalized_output_modalities = self._normalize_output_modalities(
             output_modalities
@@ -113,10 +103,10 @@ class RealtimeAgent[T]:
         self._conversation_history = ConversationHistory(self._event_bus)
 
         self._skill_manager = SkillManager(skills) if skills is not None else None
-        self._tools = Tools(
-            skill_manager=self._skill_manager,
-            allowed_commands=allowed_commands or (),
+        self._bash_runner = BashRunner.for_skills(
+            self._skill_manager, allowed_commands or ()
         )
+        self._tools = Tools()
         if tools:
             self._tools.merge(tools)
 
@@ -127,14 +117,15 @@ class RealtimeAgent[T]:
         )
 
         self._tools.set_context(
-            ToolContext(
-                event_bus=self._event_bus,
-                context=context,
-                conversation_history=self._conversation_history,
+            ToolContext().provide(
+                self._event_bus,
+                self._conversation_history,
+                context,
+                self._skill_manager,
+                self._bash_runner,
+                self._subagent,
             )
         )
-        if self._supervisor:
-            self._register_supervisor(self._supervisor)
 
         audio_session = AudioSession(
             input_device=audio_input or self._create_default_input(),
@@ -154,13 +145,13 @@ class RealtimeAgent[T]:
             turn_detection=effective_turn_detection,
             tools=self._tools,
             audio_session=audio_session,
-            supervisor=self._supervisor,
             conversation_seed=conversation_seed,
             inactivity_timeout_enabled=should_enable_inactivity_timeout,
             inactivity_timeout_seconds=inactivity_timeout_seconds,
             recording_path=recording_path_obj,
             provider=provider or OpenAIProvider(api_key=api_key),
             enable_preambles=enable_preambles,
+            pricing_catalog=pricing_catalog,
         )
 
         self._setup_shutdown_handlers()
@@ -198,61 +189,6 @@ class RealtimeAgent[T]:
         modalities = output_modalities or ["audio"]
         return list(dict.fromkeys(modalities))
 
-    def _register_supervisor(self, supervisor: Supervisor) -> None:
-        description = supervisor.description
-        if supervisor.handoff_instructions:
-            description = (
-                f"{supervisor.description}\n\n"
-                f"Handoff instructions: {supervisor.handoff_instructions}"
-            )
-
-        self._register_supervisor_handoff(supervisor, description)
-
-    def _register_supervisor_handoff(
-        self, supervisor: Supervisor, description: str
-    ) -> None:
-        paused_for_clarification: ClarificationCheckpoint | None = None
-
-        @self._tools.action(
-            description,
-            name=supervisor.name,
-            result_instruction=supervisor.result_instructions,
-            holding_instruction=supervisor.holding_instruction,
-        )
-        async def _handoff(
-            task: str,
-            conversation_history: Inject[ConversationHistory],
-            clarification_answer: str | None = None,
-        ) -> SupervisorResult:
-            nonlocal paused_for_clarification
-
-            is_resuming = (
-                paused_for_clarification is not None
-                and clarification_answer is not None
-            )
-
-            if is_resuming:
-                checkpoint = paused_for_clarification
-                paused_for_clarification = None
-                result = await supervisor.resume(
-                    clarification_answer=clarification_answer,
-                    resume_history=checkpoint.resume_history,
-                    clarify_call_id=checkpoint.clarify_call_id,
-                )
-            else:
-                context = (
-                    conversation_history.format() if conversation_history else None
-                )
-                result = await supervisor.start(task, context=context)
-
-            if isinstance(result, SupervisorClarificationNeeded):
-                paused_for_clarification = ClarificationCheckpoint(
-                    resume_history=result.resume_history,
-                    clarify_call_id=result.clarify_call_id,
-                )
-
-            return result
-
     def _setup_shutdown_handlers(self) -> None:
         self._event_bus.on(UserInactivityTimeoutEvent, self._on_inactivity_timeout)
 
@@ -266,7 +202,6 @@ class RealtimeAgent[T]:
             event_bus=self._event_bus,
             listener=self._listener,
             inactivity_timeout_enabled=inactivity_timeout_enabled,
-            has_supervisor=bool(self._supervisor),
             assistant_text_enabled=assistant_text_enabled,
         )
         self._listener_bridge.setup()
@@ -296,6 +231,7 @@ class RealtimeAgent[T]:
         return AgentResult(
             turns=self._conversation_history.turns,
             recording_path=self._realtime_session.recording_path,
+            usage=self._realtime_session.usage_report,
         )
 
     async def set_speech_speed(
@@ -307,6 +243,9 @@ class RealtimeAgent[T]:
 
     async def send_image(self, image_data_url: str, text: str = "") -> None:
         await self._realtime_session.send_image(image_data_url, text)
+
+    def usage_report(self) -> UsageReport:
+        return self._realtime_session.token_tracker.report()
 
     @timed()
     async def stop(self) -> None:

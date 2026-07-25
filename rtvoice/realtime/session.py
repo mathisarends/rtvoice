@@ -25,7 +25,6 @@ from rtvoice.audio import AudioSession
 from rtvoice.events.views import (
     AgentSessionConnectedEvent,
     AgentStoppedEvent,
-    UpdateSessionToolsCommand,
 )
 from rtvoice.handler import (
     AudioBridge,
@@ -33,7 +32,6 @@ from rtvoice.handler import (
     ConversationAudioRecorder,
     ConversationInactivityMonitor,
     SpeechActivityEventAdapter,
-    SupervisorCallCoordinator,
     ToolCallExecutor,
     TranscriptEventAdapter,
 )
@@ -45,25 +43,24 @@ from rtvoice.realtime.schemas import (
     ConversationItemCreateEvent,
     ConversationResponseCreateEvent,
     InputAudioNoiseReductionSettings,
-    InputAudioTranscriptionCompleted,
     InputAudioTranscriptionSettings,
     NoiseReductionType,
     RealtimeSessionSettings,
-    ResponseDoneEvent,
     SemanticVADSettings,
     ServerVADSettings,
     SessionUpdateEvent,
     SpeedUpdateEvent,
     ToolChoiceMode,
-    ToolsUpdateEvent,
     TurnDetectionSettings,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
+from rtvoice.tokens.models import UsageReport
+from rtvoice.tokens.pricing import PricingCatalog
+from rtvoice.tokens.tracker import TokenTracker
 from rtvoice.watchdogs import ErrorWatchdog
 
 if TYPE_CHECKING:
-    from rtvoice.agent.supervisor import Supervisor
     from rtvoice.tools import Tools
 
 logger = logging.getLogger(__name__)
@@ -91,13 +88,13 @@ class RealtimeSession:
         turn_detection: TurnDetection,
         tools: Tools,
         audio_session: AudioSession,
-        supervisor: Supervisor | None,
         conversation_seed: ConversationSeed | None,
         inactivity_timeout_enabled: bool,
         inactivity_timeout_seconds: float | None,
         recording_path: Path | None,
         provider: RealtimeProvider,
         enable_preambles: bool = True,
+        pricing_catalog: PricingCatalog | None = None,
     ):
         model.warn_if_deprecated(stacklevel=3)
         self._event_bus = event_bus
@@ -112,7 +109,6 @@ class RealtimeSession:
         self._turn_detection = turn_detection
         self._tools = tools
         self._audio_session = audio_session
-        self._supervisor = supervisor
         self._conversation_seed = conversation_seed
         self._assistant_text_enabled = "text" in self._output_modalities
         self._transcription_enabled = self._transcription_model is not None
@@ -122,16 +118,19 @@ class RealtimeSession:
         self._enable_preambles = enable_preambles
 
         self._websocket = RealtimeWebSocket(model=model, provider=provider)
+        self._token_tracker = TokenTracker(
+            event_bus=event_bus,
+            realtime_model=model.value,
+            transcription_model=(
+                transcription_model.value if transcription_model is not None else None
+            ),
+            pricing_catalog=pricing_catalog,
+        )
         self._forward_task: asyncio.Task | None = None
         self._stopped = False
         self._setup_handlers()
 
-        self._event_bus.on(UpdateSessionToolsCommand, self._on_update_session_tools)
         self._event_bus.on(AgentStoppedEvent, self._on_agent_stopped)
-        self._event_bus.on(ResponseDoneEvent, self._on_response_done)
-        self._event_bus.on(
-            InputAudioTranscriptionCompleted, self._on_transcription_completed
-        )
 
     def _setup_handlers(self) -> None:
         self._audio_bridge = AudioBridge(
@@ -154,16 +153,7 @@ class RealtimeSession:
             event_bus=self._event_bus,
             tools=self._tools,
             websocket=self._websocket,
-            supervisor_tool_name=self._supervisor.name if self._supervisor else None,
         )
-
-        if self._supervisor:
-            self._supervisor_call_coordinator = SupervisorCallCoordinator(
-                event_bus=self._event_bus,
-                tools=self._tools,
-                websocket=self._websocket,
-                supervisor=self._supervisor,
-            )
 
         self._error_watchdog = ErrorWatchdog(event_bus=self._event_bus)
         self._speech_activity_event_adapter = SpeechActivityEventAdapter(
@@ -188,6 +178,14 @@ class RealtimeSession:
     @property
     def recording_path(self) -> Path | None:
         return self._recording_path
+
+    @property
+    def usage_report(self) -> UsageReport:
+        return self._token_tracker.report()
+
+    @property
+    def token_tracker(self) -> TokenTracker:
+        return self._token_tracker
 
     @timed()
     async def start(self) -> None:
@@ -256,31 +254,12 @@ class RealtimeSession:
         )
         await self._websocket.send(ConversationResponseCreateEvent())
 
-    async def _on_update_session_tools(
-        self, command: UpdateSessionToolsCommand
-    ) -> None:
-        tool_names = [t.name for t in command.tools]
-        logger.info(
-            "Updating session tools [count=%d, tools=%s]",
-            len(command.tools),
-            tool_names,
-        )
-        await self._websocket.send(ToolsUpdateEvent.from_tools(command.tools))
-
     async def _forward_events(self) -> None:
         async for event in self._websocket.events():
             await self._event_bus.dispatch(event)
 
     async def _on_agent_stopped(self, _: AgentStoppedEvent) -> None:
         await self.stop()
-
-    async def _on_response_done(self, event: ResponseDoneEvent) -> None:
-        pass
-
-    async def _on_transcription_completed(
-        self, event: InputAudioTranscriptionCompleted
-    ) -> None:
-        pass
 
     async def stop(self) -> None:
         if self._stopped:

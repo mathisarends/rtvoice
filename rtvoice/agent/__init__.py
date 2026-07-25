@@ -1,5 +1,5 @@
 from .listener import AgentListener
 from .realtime import RealtimeAgent
-from .supervisor import Supervisor
+from .subagent import Subagent
 
-__all__ = ["AgentListener", "RealtimeAgent", "Supervisor"]
+__all__ = ["AgentListener", "RealtimeAgent", "Subagent"]

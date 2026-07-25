@@ -28,7 +28,21 @@
       "Bash(ffmpeg -i static/banner.png -vf \"alphaextract,signalstats,metadata=print\" -f null -)",
       "Bash(ffmpeg -i static/banner.png -vf scale=1600:-1 -compression_level 9 -pred mixed -y /tmp/banner_1600.png)",
       "Bash(ffmpeg -i static/banner.png -vf scale=1600:-1 -q:v 4 -y /tmp/banner_1600.jpg)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(rm \"C:/code/rtvoice/Agents.md\")",
+      "Bash(ln -s \"Claude.md\" \"C:/code/rtvoice/Agents.md\")",
+      "Bash(git *)",
+      "PowerShell(uv run *)",
+      "PowerShell(git add *)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/tools -q)",
+      "Bash(.venv/Scripts/python.exe -m pytest -q)",
+      "Read(//c/code/rtvoice/rtvoice/agent/**)",
+      "Read(//c/code/rtvoice/examples/**)",
+      "Read(//c/code/rtvoice/**)",
+      "Read(//c/code/rtvoice/tests/tools/**)",
+      "Read(//c/code/rtvoice/tests/subagent/**)",
+      "Read(//c/code/rtvoice/.venv/Lib/site-packages/llmify/providers/**)",
+      "Read(//c/code/rtvoice/rtvoice/llm/providers/**)"
     ]
   }
 }

@@ -1,3 +1,5 @@
+from collections.abc import Iterable
+
 from transitbus import EventBus
 
 from rtvoice.conversation.views import ConversationTurn
@@ -21,6 +23,9 @@ class ConversationHistory:
         self._turns.append(
             ConversationTurn(role="assistant", transcript=event.transcript)
         )
+
+    def seed(self, turns: Iterable[ConversationTurn]) -> None:
+        self._turns.extend(turns)
 
     @property
     def turns(self) -> list[ConversationTurn]:

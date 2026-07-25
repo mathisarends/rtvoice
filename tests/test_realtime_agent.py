@@ -9,6 +9,7 @@ from rtvoice.agent.listener import AgentListener
 from rtvoice.agent.views import (
     AgentError,
     AssistantVoice,
+    InjectedAssistantMessage,
     InjectedConversation,
     InjectedUserMessage,
     NoiseReduction,
@@ -124,6 +125,20 @@ class TestInitDefaults:
         conversation = InjectedConversation([InjectedUserMessage("Mein Name ist Max.")])
         agent = make_agent(injected_conversation=conversation)
         assert agent._realtime_session._injected_conversation is conversation
+
+    def test_injected_conversation_seeds_conversation_history(self) -> None:
+        conversation = InjectedConversation(
+            [
+                InjectedUserMessage("Mein Name ist Max."),
+                InjectedAssistantMessage("Hallo Max, wie kann ich helfen?"),
+            ]
+        )
+        agent = make_agent(injected_conversation=conversation)
+
+        turns = agent._conversation_history.turns
+        assert [t.role for t in turns] == ["user", "assistant"]
+        assert turns[0].transcript == "Mein Name ist Max."
+        assert turns[1].transcript == "Hallo Max, wie kann ich helfen?"
 
     def test_custom_turn_detection_is_stored(self) -> None:
         vad = ServerVAD(silence_duration_ms=800)

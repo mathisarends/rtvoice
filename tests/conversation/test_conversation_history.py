@@ -1,7 +1,7 @@
 import pytest
 from transitbus import EventBus
 
-from rtvoice.conversation import ConversationHistory
+from rtvoice.conversation import ConversationHistory, ConversationTurn
 from rtvoice.events.views import (
     AssistantTranscriptCompletedEvent,
     UserTranscriptCompletedEvent,
@@ -63,6 +63,30 @@ class TestSubscription:
 
         roles = [t.role for t in history.turns]
         assert roles == ["user", "assistant", "user"]
+
+
+class TestSeed:
+    def test_seed_prepends_turns(self, history: ConversationHistory) -> None:
+        history.seed(
+            [
+                ConversationTurn(role="user", transcript="Seeded question"),
+                ConversationTurn(role="assistant", transcript="Seeded answer"),
+            ]
+        )
+
+        assert [t.role for t in history.turns] == ["user", "assistant"]
+        assert history.turns[0].transcript == "Seeded question"
+
+    @pytest.mark.asyncio
+    async def test_seeded_turns_precede_live_turns(
+        self, bus: EventBus, history: ConversationHistory
+    ) -> None:
+        history.seed([ConversationTurn(role="user", transcript="Seeded")])
+        await bus.dispatch(
+            UserTranscriptCompletedEvent(transcript="Live", item_id="item-1")
+        )
+
+        assert [t.transcript for t in history.turns] == ["Seeded", "Live"]
 
 
 class TestTurns:

@@ -10,6 +10,7 @@ from rtvoice.agent.views import (
     AgentResult,
     AssistantVoice,
     InjectedConversation,
+    InjectedUserMessage,
     NoiseReduction,
     OutputModality,
     RealtimeModel,
@@ -24,7 +25,7 @@ from rtvoice.audio import (
     AudioSession,
     EchoCancellation,
 )
-from rtvoice.conversation import ConversationHistory
+from rtvoice.conversation import ConversationHistory, ConversationTurn
 from rtvoice.events.views import (
     AgentStartingEvent,
     AgentStoppedEvent,
@@ -91,6 +92,16 @@ class RealtimeAgent[T]:
 
         self._event_bus = EventBus()
         self._conversation_history = ConversationHistory(self._event_bus)
+        if injected_conversation:
+            self._conversation_history.seed(
+                ConversationTurn(
+                    role="user"
+                    if isinstance(message, InjectedUserMessage)
+                    else "assistant",
+                    transcript=message.text,
+                )
+                for message in injected_conversation.messages
+            )
 
         self._skill_manager = SkillManager(skills) if skills is not None else None
         self._tools = Tools()

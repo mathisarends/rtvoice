@@ -1,8 +1,11 @@
 from decimal import Decimal
 
 import pytest
+from tokenary import ModelName
+from tokenary.generator.schemas import GeneratedModelPricing
 from transitbus import EventBus
 
+import rtvoice.tokens.pricing as pricing_module
 from rtvoice.realtime.schemas import (
     DurationUsage,
     InputAudioTranscriptionCompleted,
@@ -12,7 +15,26 @@ from rtvoice.realtime.schemas import (
     TokenOutputTokenDetails,
     TokenUsage,
 )
-from rtvoice.tokens import Currency, TokenTracker
+from rtvoice.tokens import (
+    Currency,
+    PricingCatalog,
+    RealtimeRates,
+    RealtimeTokenTotals,
+    TokenTotals,
+    TokenTracker,
+)
+
+REALTIME_MODELS = [
+    "gpt-realtime",
+    "gpt-realtime-1.5",
+    "gpt-realtime-2",
+    "gpt-realtime-2.1",
+    "gpt-realtime-2.1-mini",
+    "gpt-realtime-2025-08-28",
+    "gpt-realtime-mini",
+    "gpt-realtime-mini-2025-10-06",
+    "gpt-realtime-mini-2025-12-15",
+]
 
 
 def response_done() -> ResponseDoneEvent:
@@ -173,6 +195,137 @@ async def test_prices_dated_realtime_model_from_tokenary() -> None:
     report = tracker.report()
     assert report.cost.total == Decimal("0.0010934")
     assert report.cost.pricing_source.startswith("tokenary ")
+    assert report.cost.is_complete
+
+
+@pytest.mark.parametrize("model", REALTIME_MODELS)
+def test_tokenary_realtime_model_is_configured(model: str) -> None:
+    totals = TokenTotals(
+        realtime=RealtimeTokenTotals(
+            responses=1,
+            total_tokens=2,
+            input_tokens=1,
+            output_tokens=1,
+            input_text_tokens=1,
+            output_text_tokens=1,
+        )
+    )
+
+    estimate = PricingCatalog().estimate(
+        totals,
+        realtime_model=model,
+        transcription_model=None,
+    )
+
+    assert estimate.total > 0
+    assert estimate.is_complete
+    assert {item.category for item in estimate.line_items} == {
+        "realtime.input.text",
+        "realtime.output.text",
+    }
+
+
+@pytest.mark.parametrize("audio_cache_read", [5e-6, None])
+def test_maps_tokenary_realtime_fields(
+    monkeypatch: pytest.MonkeyPatch,
+    audio_cache_read: float | None,
+) -> None:
+    pricing = GeneratedModelPricing(
+        input_cost_per_token=1e-6,
+        cache_read_input_token_cost=2e-6,
+        output_cost_per_token=3e-6,
+        input_cost_per_audio_token=4e-6,
+        cache_read_input_audio_token_cost=audio_cache_read,
+        cache_creation_input_audio_token_cost=6e-6,
+        output_cost_per_audio_token=7e-6,
+        input_cost_per_image=8e-6,
+        cache_read_input_image_token_cost=9e-6,
+    )
+    monkeypatch.setitem(
+        pricing_module.MODEL_PRICINGS_BY_NAME,
+        ModelName.GPT_REALTIME,
+        pricing,
+    )
+
+    rates = pricing_module._realtime_rates(ModelName.GPT_REALTIME)
+
+    assert rates == RealtimeRates(
+        text_input=Decimal(1),
+        text_cached_input=Decimal(2),
+        text_output=Decimal(3),
+        audio_input=Decimal(4),
+        # cache_creation_..., not cache_read_..., is litellm's actual field
+        # for the realtime audio-cache discount; cache_read_... is ignored.
+        audio_cached_input=Decimal(6),
+        audio_output=Decimal(7),
+        image_input=Decimal(8),
+        image_cached_input=Decimal(9),
+    )
+
+
+@pytest.mark.asyncio
+async def test_marks_missing_tokenary_rate_incomplete() -> None:
+    event_bus = EventBus()
+    tracker = TokenTracker(
+        event_bus=event_bus,
+        realtime_model="gpt-realtime-mini",
+    )
+
+    await event_bus.dispatch(response_done())
+
+    report = tracker.report()
+    assert not report.cost.is_complete
+    assert "No price configured for realtime.input.text.cached." in report.cost.notes
+    assert "No price configured for realtime.input.image." in report.cost.notes
+
+
+@pytest.mark.asyncio
+async def test_unknown_realtime_model_is_incomplete() -> None:
+    event_bus = EventBus()
+    tracker = TokenTracker(
+        event_bus=event_bus,
+        realtime_model="unknown-realtime-model",
+    )
+
+    await event_bus.dispatch(response_done())
+
+    report = tracker.report()
+    assert report.cost.total == 0
+    assert not report.cost.is_complete
+    assert report.cost.notes == [
+        "No realtime pricing configured for unknown-realtime-model."
+    ]
+
+
+@pytest.mark.asyncio
+async def test_custom_catalog_overrides_tokenary_rates() -> None:
+    event_bus = EventBus()
+    custom_rate = Decimal(1)
+    catalog = PricingCatalog(
+        realtime={
+            "custom-realtime": RealtimeRates(
+                text_input=custom_rate,
+                text_cached_input=custom_rate,
+                text_output=custom_rate,
+                audio_input=custom_rate,
+                audio_cached_input=custom_rate,
+                audio_output=custom_rate,
+                image_input=custom_rate,
+                image_cached_input=custom_rate,
+            )
+        },
+        transcription={},
+    )
+    tracker = TokenTracker(
+        event_bus=event_bus,
+        realtime_model="custom-realtime",
+        pricing_catalog=catalog,
+    )
+
+    await event_bus.dispatch(response_done())
+
+    report = tracker.report()
+    assert report.cost.total == Decimal("0.000205")
     assert report.cost.is_complete
 
 

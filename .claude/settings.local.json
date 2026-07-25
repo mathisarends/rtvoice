@@ -45,7 +45,9 @@
       "Read(//c/code/rtvoice/rtvoice/llm/providers/**)",
       "Bash(echo \"exit=$?\")",
       "Bash(xargs grep -liE \"usage|token|cost|price\")",
-      "Bash(.venv/Scripts/python.exe *)"
+      "Bash(.venv/Scripts/python.exe *)",
+      "Bash(xargs ls)",
+      "Bash(awk '/^PRICING_GPT_REALTIME/,/^\\\\\\)/' .venv/Lib/site-packages/tokenary/_generated.py)"
     ]
   }
 }

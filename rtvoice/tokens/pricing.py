@@ -5,6 +5,7 @@ from importlib.metadata import version
 
 from tokenary import ModelName
 from tokenary._generated import MODEL_PRICINGS_BY_NAME
+from tokenary.generator.schemas import GeneratedModelPricing
 
 from rtvoice.tokens.models import (
     CostEstimate,
@@ -322,19 +323,15 @@ def _required_per_million(value: float | None, field: str, model: str) -> Decima
     return rate
 
 
+def _extra_cost(pricing: GeneratedModelPricing, field: str) -> float | None:
+    # Audio/image costs aren't in GeneratedModelPricing's declared fields;
+    # litellm's raw data carries them as extras (extra="allow"), so they
+    # only show up in model_extra, never as typed attributes.
+    return (pricing.model_extra or {}).get(field)
+
+
 def _realtime_rates(model: ModelName) -> RealtimeRates:
     pricing = MODEL_PRICINGS_BY_NAME[model]
-    audio_cached = getattr(
-        pricing,
-        "cache_read_input_audio_token_cost",
-        None,
-    )
-    if audio_cached is None:
-        audio_cached = getattr(
-            pricing,
-            "cache_creation_input_audio_token_cost",
-            None,
-        )
     return RealtimeRates(
         text_input=_required_per_million(
             pricing.input_cost_per_token,
@@ -352,19 +349,22 @@ def _realtime_rates(model: ModelName) -> RealtimeRates:
             "audio input",
             model,
         ),
+        # litellm files this under "cache_creation_..." (populated for every
+        # current realtime model), not "cache_read_...", even though it's a
+        # cache-hit discount rather than a cache-write cost.
         audio_cached_input=_required_per_million(
-            audio_cached,
+            _extra_cost(pricing, "cache_creation_input_audio_token_cost"),
             "cached audio input",
             model,
         ),
         audio_output=_required_per_million(
-            getattr(pricing, "output_cost_per_audio_token", None),
+            _extra_cost(pricing, "output_cost_per_audio_token"),
             "audio output",
             model,
         ),
-        image_input=_per_million(getattr(pricing, "input_cost_per_image", None)),
+        image_input=_per_million(_extra_cost(pricing, "input_cost_per_image")),
         image_cached_input=_per_million(
-            getattr(pricing, "cache_read_input_image_token_cost", None)
+            _extra_cost(pricing, "cache_read_input_image_token_cost")
         ),
     )
 

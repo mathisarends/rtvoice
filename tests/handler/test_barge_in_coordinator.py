@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from transitbus import EventBus
 
-from rtvoice.events.views import AssistantInterruptedEvent
+from rtvoice.events.views import AssistantInterruptedEvent, InterruptAssistantCommand
 from rtvoice.handler import BargeInCoordinator
 from rtvoice.realtime.schemas import (
     ConversationItemTruncateEvent,
@@ -211,6 +211,45 @@ class TestBargeIn:
         audio_session.is_playing = False
 
         await event_bus.dispatch(make_speech_started())
+
+        websocket.send.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_interrupt_command_cancels_running_response(
+        self,
+        event_bus: EventBus,
+        coordinator: BargeInCoordinator,
+        websocket: AsyncMock,
+    ) -> None:
+        await event_bus.dispatch(make_response_created())
+        await event_bus.dispatch(InterruptAssistantCommand())
+
+        sent_types = [type(c.args[0]) for c in websocket.send.call_args_list]
+        assert ResponseCancelEvent in sent_types
+
+    @pytest.mark.asyncio
+    async def test_interrupt_command_dispatches_assistant_interrupted_event(
+        self, event_bus: EventBus, coordinator: BargeInCoordinator
+    ) -> None:
+        received: list[AssistantInterruptedEvent] = []
+
+        async def capture(e: AssistantInterruptedEvent) -> None:
+            received.append(e)
+
+        event_bus.on(AssistantInterruptedEvent, capture)
+        await event_bus.dispatch(make_response_created())
+        await event_bus.dispatch(InterruptAssistantCommand())
+
+        assert len(received) == 1
+
+    @pytest.mark.asyncio
+    async def test_interrupt_command_is_noop_when_nothing_is_playing(
+        self,
+        event_bus: EventBus,
+        coordinator: BargeInCoordinator,
+        websocket: AsyncMock,
+    ) -> None:
+        await event_bus.dispatch(InterruptAssistantCommand())
 
         websocket.send.assert_not_called()
 

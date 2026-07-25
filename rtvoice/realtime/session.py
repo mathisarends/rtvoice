@@ -25,6 +25,7 @@ from rtvoice.audio import AudioSession
 from rtvoice.events.views import (
     AgentSessionConnectedEvent,
     AgentStoppedEvent,
+    InterruptAssistantCommand,
 )
 from rtvoice.handler import (
     AudioBridge,
@@ -89,7 +90,6 @@ class RealtimeSession:
         tools: Tools,
         audio_session: AudioSession,
         conversation_seed: ConversationSeed | None,
-        inactivity_timeout_enabled: bool,
         inactivity_timeout_seconds: float | None,
         recording_path: Path | None,
         provider: RealtimeProvider,
@@ -112,7 +112,6 @@ class RealtimeSession:
         self._conversation_seed = conversation_seed
         self._assistant_text_enabled = "text" in self._output_modalities
         self._transcription_enabled = self._transcription_model is not None
-        self._inactivity_timeout_enabled = inactivity_timeout_enabled
         self._inactivity_timeout_seconds = inactivity_timeout_seconds
         self._recording_path = recording_path
         self._enable_preambles = enable_preambles
@@ -160,10 +159,7 @@ class RealtimeSession:
             event_bus=self._event_bus
         )
 
-        if (
-            self._inactivity_timeout_enabled
-            and self._inactivity_timeout_seconds is not None
-        ):
+        if self._inactivity_timeout_seconds is not None:
             self._conversation_inactivity_monitor = ConversationInactivityMonitor(
                 event_bus=self._event_bus,
                 timeout_seconds=self._inactivity_timeout_seconds,
@@ -242,6 +238,9 @@ class RealtimeSession:
 
         logger.info("Updating speech speed [speed=%s]", speed)
         await self._websocket.send(SpeedUpdateEvent.from_speed(speed))
+
+    async def interrupt(self) -> None:
+        await self._event_bus.dispatch(InterruptAssistantCommand())
 
     async def send_image(self, image_data_url: str, text: str = "") -> None:
         if not self._websocket.is_connected:

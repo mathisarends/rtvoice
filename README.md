@@ -57,6 +57,7 @@ Run it, speak into your microphone, and the agent responds through your speakers
 - [Recording](#recording)
 - [Token tracking](#token-tracking)
 - [Inactivity timeout](#inactivity-timeout)
+- [Stopping and interrupting](#stopping-and-interrupting)
 - [Azure OpenAI](#azure-openai)
 
 ---
@@ -622,13 +623,32 @@ Automatically stop the agent after a period of user silence:
 ```python
 agent = RealtimeAgent(
     instructions="...",
-    inactivity_timeout_enabled=True,
     inactivity_timeout_seconds=30.0,
     listener=MyListener(),   # on_user_inactivity_countdown fires each second 5→1
 )
 ```
 
 The countdown fires through `AgentListener.on_user_inactivity_countdown(remaining_seconds)` — useful for playing a "still there?" prompt before the session closes.
+
+---
+
+## Stopping and interrupting
+
+Every agent gets a built-in `stop` tool, so the model can end the conversation
+itself when the user says goodbye. The teardown waits until the assistant's
+farewell finished playing.
+
+Both actions are also available programmatically:
+
+```python
+await agent.interrupt()  # cut the assistant off mid-sentence, session stays open
+await agent.stop()       # end the session
+```
+
+`interrupt()` runs the same path as a user barge-in: the in-flight response is
+cancelled, buffered audio is dropped, and the conversation item is truncated to
+what was actually played, so the model knows how much the user heard.
+`AgentListener.on_agent_interrupted` fires either way.
 
 ---
 

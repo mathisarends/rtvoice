@@ -151,7 +151,6 @@ async def main() -> None:
         ),
         subagent=build_subagent(),
         inactivity_timeout_seconds=90,
-        inactivity_timeout_enabled=True,
     )
 
     print("🛒  Say: 'Is the IKEA near me open right now?'\n")

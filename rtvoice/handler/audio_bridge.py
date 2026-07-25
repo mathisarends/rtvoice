@@ -10,6 +10,7 @@ from rtvoice.events.views import (
     AgentSessionConnectedEvent,
     AgentStoppedEvent,
     AudioPlaybackCompletedEvent,
+    InterruptAssistantCommand,
 )
 from rtvoice.realtime.schemas import (
     InputAudioBufferAppendEvent,
@@ -40,6 +41,7 @@ class AudioBridge:
         self._event_bus.on(
             InputAudioBufferSpeechStartedEvent, self._on_user_started_speaking
         )
+        self._event_bus.on(InterruptAssistantCommand, self._on_interrupt_requested)
         self._event_bus.on(ResponseDoneEvent, self._on_response_done)
         self._event_bus.on(
             InputAudioBufferAppendEvent, self._on_input_audio_buffer_append
@@ -77,6 +79,9 @@ class AudioBridge:
     async def _on_user_started_speaking(
         self, _: InputAudioBufferSpeechStartedEvent
     ) -> None:
+        await self._audio_session.clear_output_buffer()
+
+    async def _on_interrupt_requested(self, _: InterruptAssistantCommand) -> None:
         await self._audio_session.clear_output_buffer()
 
     async def _on_response_done(self, _: ResponseDoneEvent) -> None:

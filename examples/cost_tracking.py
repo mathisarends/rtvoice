@@ -6,7 +6,10 @@ load_dotenv(override=True)
 
 
 async def main():
-    agent = RealtimeAgent(instructions="Du bist Jarvis. Antworte kurz und bündig.")
+    agent = RealtimeAgent(
+        instructions="Du bist Jarvis. Antworte kurz und bündig.",
+        inactivity_timeout_seconds=7,
+    )
     result = await agent.start()
 
     cost = result.usage.cost

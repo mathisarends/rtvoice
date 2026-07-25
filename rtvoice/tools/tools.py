@@ -5,9 +5,11 @@ from collections.abc import Callable
 from typing import Any, Self
 
 from pydantic import BaseModel
+from transitbus import EventBus
 
 from rtvoice.agent.subagent import Subagent
 from rtvoice.conversation import ConversationHistory
+from rtvoice.events.views import StopAgentCommand
 from rtvoice.realtime.schemas import FunctionTool
 from rtvoice.skills.manager import SkillManager
 from rtvoice.tools.argument_resolver import resolve_arguments
@@ -138,6 +140,16 @@ class Tools:
         self._tools[tool.name] = tool
 
     def _register_default_tools(self) -> None:
+        @self.action(
+            "End the conversation and shut the agent down. Call this when the user "
+            "says goodbye or asks you to stop. Say a short farewell first.",
+            name="stop",
+            kind=ActionKind.END_SESSION,
+        )
+        async def stop(event_bus: Inject[EventBus]) -> ActionResult:
+            await event_bus.dispatch(StopAgentCommand())
+            return ActionResult.success("Conversation ended.")
+
         @self.action(
             described(
                 Subagent,

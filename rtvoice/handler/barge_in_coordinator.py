@@ -4,7 +4,7 @@ import time
 from transitbus import EventBus
 
 from rtvoice.audio.session import AudioSession
-from rtvoice.events.views import AssistantInterruptedEvent
+from rtvoice.events.views import AssistantInterruptedEvent, InterruptAssistantCommand
 from rtvoice.realtime.schemas import (
     ConversationItemTruncateEvent,
     InputAudioBufferSpeechStartedEvent,
@@ -19,8 +19,9 @@ logger = logging.getLogger(__name__)
 
 
 class BargeInCoordinator:
-    """Handles barge-in: cancels the running response, clears the audio buffer,
-    and truncates the conversation item to what was actually played."""
+    """Handles interruptions - user barge-in as well as programmatic ones: cancels
+    the running response, clears the audio buffer, and truncates the conversation
+    item to what was actually played."""
 
     def __init__(
         self,
@@ -43,6 +44,7 @@ class BargeInCoordinator:
         self._event_bus.on(
             InputAudioBufferSpeechStartedEvent, self._on_user_started_speaking
         )
+        self._event_bus.on(InterruptAssistantCommand, self._on_interrupt_requested)
 
     @property
     def _elapsed_ms(self) -> int | None:
@@ -72,10 +74,16 @@ class BargeInCoordinator:
     async def _on_user_started_speaking(
         self, _: InputAudioBufferSpeechStartedEvent
     ) -> None:
+        await self._interrupt("Barge-in detected")
+
+    async def _on_interrupt_requested(self, _: InterruptAssistantCommand) -> None:
+        await self._interrupt("Interrupt requested")
+
+    async def _interrupt(self, cause: str) -> None:
         if not self._assistant_is_speaking and not self._audio_session.is_playing:
             return
 
-        logger.info("Barge-in detected - cancelling response")
+        logger.info("%s - cancelling response", cause)
 
         if self._assistant_is_speaking:
             await self._websocket.send(ResponseCancelEvent())

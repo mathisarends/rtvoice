@@ -27,6 +27,9 @@ from rtvoice.events.views import (
     AssistantStoppedRespondingEvent,
     AssistantTranscriptCompletedEvent,
     AssistantTranscriptDeltaEvent,
+    AudioPlaybackCompletedEvent,
+    InterruptAssistantCommand,
+    StopAgentCommand,
     UserInactivityTimeoutEvent,
     UserStartedSpeakingEvent,
     UserStoppedSpeakingEvent,
@@ -74,7 +77,7 @@ class TestInitDefaults:
 
     def test_default_inactivity_timeout_disabled(self) -> None:
         agent = make_agent()
-        assert agent._realtime_session._inactivity_timeout_enabled is False
+        assert agent._realtime_session._inactivity_timeout_seconds is None
 
     @pytest.mark.asyncio
     async def test_subagent_is_executed_as_injected_regular_tool(self) -> None:
@@ -179,36 +182,25 @@ class TestSpeechSpeedClipping:
 
 
 class TestInitWarnings:
-    def test_inactivity_seconds_without_enabled_raises(self) -> None:
-        with pytest.raises(ValueError, match="inactivity_timeout_enabled"):
-            make_agent(
-                inactivity_timeout_seconds=30.0, inactivity_timeout_enabled=False
-            )
-
-    def test_no_warning_when_inactivity_fully_disabled(
+    def test_no_warning_when_inactivity_timeout_is_unset(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         with caplog.at_level(logging.WARNING, logger="rtvoice.service"):
-            make_agent(inactivity_timeout_enabled=False)
+            make_agent()
         assert not any(
-            "inactivity_timeout_enabled is False" in r.message for r in caplog.records
+            "inactivity_timeout_seconds" in r.message for r in caplog.records
         )
 
 
-class TestInactivityTimeoutFlag:
-    def test_enabled_when_both_flag_and_seconds_are_set(self) -> None:
-        agent = make_agent(
-            inactivity_timeout_seconds=30.0, inactivity_timeout_enabled=True
-        )
-        assert agent._realtime_session._inactivity_timeout_enabled is True
+class TestInactivityTimeout:
+    def test_seconds_enable_the_monitor(self) -> None:
+        agent = make_agent(inactivity_timeout_seconds=30.0)
+        assert agent._realtime_session._inactivity_timeout_seconds == 30.0
+        assert hasattr(agent._realtime_session, "_conversation_inactivity_monitor")
 
-    def test_disabled_when_only_flag_is_set_without_seconds(self) -> None:
-        agent = make_agent(inactivity_timeout_enabled=True)
-        assert agent._realtime_session._inactivity_timeout_enabled is False
-
-    def test_raises_when_only_seconds_is_set_without_flag(self) -> None:
-        with pytest.raises(ValueError, match="inactivity_timeout_enabled"):
-            make_agent(inactivity_timeout_seconds=30.0)
+    def test_no_monitor_without_seconds(self) -> None:
+        agent = make_agent()
+        assert not hasattr(agent._realtime_session, "_conversation_inactivity_monitor")
 
 
 class TestStop:
@@ -266,6 +258,75 @@ class TestStop:
     async def test_no_listener_stop_does_not_raise(self) -> None:
         agent = make_agent()
         await agent.stop()
+
+
+class TestStopTool:
+    def test_stop_tool_is_registered_by_default(self) -> None:
+        agent = make_agent()
+        assert agent._tools.get("stop") is not None
+
+    def test_stop_tool_is_exposed_in_schema(self) -> None:
+        agent = make_agent()
+        assert "stop" in [tool.name for tool in agent._tools.get_tool_schema()]
+
+    @pytest.mark.asyncio
+    async def test_stop_tool_dispatches_stop_agent_command(self) -> None:
+        agent = make_agent()
+        received = []
+
+        async def capture(e: StopAgentCommand) -> None:
+            received.append(e)
+
+        agent._event_bus.on(StopAgentCommand, capture)
+
+        result = await agent._tools.execute("stop")
+
+        assert result.ok
+        assert len(received) == 1
+
+    @pytest.mark.asyncio
+    async def test_stop_tool_does_not_stop_before_playback_completed(self) -> None:
+        agent = make_agent()
+
+        await agent._tools.execute("stop")
+
+        assert agent._stop_requested is True
+        assert agent._stop_called is False
+
+    @pytest.mark.asyncio
+    async def test_agent_stops_once_playback_completed(self) -> None:
+        agent = make_agent()
+
+        await agent._tools.execute("stop")
+        await agent._event_bus.dispatch(AudioPlaybackCompletedEvent())
+
+        assert agent._stop_called is True
+
+    @pytest.mark.asyncio
+    async def test_playback_completed_without_stop_request_keeps_agent_running(
+        self,
+    ) -> None:
+        agent = make_agent()
+
+        await agent._event_bus.dispatch(AudioPlaybackCompletedEvent())
+
+        assert agent._stop_called is False
+
+
+class TestInterrupt:
+    @pytest.mark.asyncio
+    async def test_interrupt_dispatches_interrupt_command(self) -> None:
+        agent = make_agent()
+        received = []
+
+        async def capture(e: InterruptAssistantCommand) -> None:
+            received.append(e)
+
+        agent._event_bus.on(InterruptAssistantCommand, capture)
+
+        await agent.interrupt()
+
+        assert len(received) == 1
 
 
 class TestListenerWiring:
@@ -405,9 +466,7 @@ class TestListenerCountdownWarnings:
                 pass
 
         with caplog.at_level(logging.WARNING, logger="rtvoice.service"):
-            make_agent(
-                listener=ListenerWithCountdown(), inactivity_timeout_enabled=False
-            )
+            make_agent(listener=ListenerWithCountdown())
 
         assert any("callback will never fire" in r.message for r in caplog.records)
 
@@ -420,7 +479,6 @@ class TestListenerCountdownWarnings:
         with caplog.at_level(logging.WARNING, logger="rtvoice.service"):
             make_agent(
                 listener=ListenerWithoutCountdown(),
-                inactivity_timeout_enabled=True,
                 inactivity_timeout_seconds=10.0,
             )
 
@@ -438,7 +496,6 @@ class TestListenerCountdownWarnings:
         with caplog.at_level(logging.WARNING, logger="rtvoice.service"):
             make_agent(
                 listener=ListenerWithCountdown(),
-                inactivity_timeout_enabled=True,
                 inactivity_timeout_seconds=10.0,
             )
 

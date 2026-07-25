@@ -225,12 +225,12 @@ class TestRealtimeTools:
 
         schema = realtime.get_tool_schema()
 
-        assert len(schema) == 1
+        assert "my_tool" in [tool.name for tool in schema]
 
-    def test_get_tool_schema_empty_for_no_tools(self) -> None:
+    def test_get_tool_schema_only_defaults_for_no_tools(self) -> None:
         realtime = Tools()
 
-        assert realtime.get_tool_schema() == []
+        assert [tool.name for tool in realtime.get_tool_schema()] == ["stop"]
 
 
 class TestJsonToolSchema:
@@ -242,7 +242,7 @@ class TestJsonToolSchema:
 
         schema = tools.get_json_tool_schema()
 
-        assert len(schema) == 1
+        assert "my_tool" in [entry["function"]["name"] for entry in schema]
 
     def test_get_json_tool_schema_has_function_type(self) -> None:
         tools = Tools()
@@ -264,10 +264,12 @@ class TestJsonToolSchema:
 
         assert "function" in schema[0]
 
-    def test_get_json_tool_schema_empty_for_no_tools(self) -> None:
+    def test_get_json_tool_schema_only_defaults_for_no_tools(self) -> None:
         tools = Tools()
 
-        assert tools.get_json_tool_schema() == []
+        assert [
+            entry["function"]["name"] for entry in tools.get_json_tool_schema()
+        ] == ["stop"]
 
 
 class TestToolStatuses:

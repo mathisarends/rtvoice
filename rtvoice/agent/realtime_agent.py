@@ -27,6 +27,8 @@ from rtvoice.conversation import ConversationHistory
 from rtvoice.events.views import (
     AgentStartingEvent,
     AgentStoppedEvent,
+    AudioPlaybackCompletedEvent,
+    StopAgentCommand,
     UserInactivityTimeoutEvent,
 )
 from rtvoice.realtime import OpenAIProvider, RealtimeProvider, RealtimeSession
@@ -43,7 +45,7 @@ class RealtimeAgent[T]:
         self,
         *,
         instructions: str = "",
-        model: RealtimeModel = RealtimeModel.GPT_REALTIME_2_1,
+        model: RealtimeModel = RealtimeModel.GPT_REALTIME_2_1_MINI,
         reasoning_effort: ReasoningEffort | None = ReasoningEffort.LOW,
         voice: AssistantVoice = AssistantVoice.MARIN,
         speech_speed: float = 1.0,
@@ -60,7 +62,6 @@ class RealtimeAgent[T]:
         listener: AgentListener | None = None,
         conversation_seed: ConversationSeed | None = None,
         inactivity_timeout_seconds: float | None = None,
-        inactivity_timeout_enabled: bool = False,
         recording_path: str | Path | None = None,
         provider: RealtimeProvider | None = None,
         api_key: str | None = None,
@@ -80,22 +81,13 @@ class RealtimeAgent[T]:
         assistant_text_enabled = "text" in normalized_output_modalities
         effective_turn_detection: TurnDetection = turn_detection or SemanticVAD()
 
-        if inactivity_timeout_seconds is not None and not inactivity_timeout_enabled:
-            raise ValueError(
-                "inactivity_timeout_seconds is set but inactivity_timeout_enabled is False. "
-                "Set inactivity_timeout_enabled=True or remove inactivity_timeout_seconds."
-            )
-
-        should_enable_inactivity_timeout = (
-            inactivity_timeout_enabled and inactivity_timeout_seconds is not None
-        )
-
         self._listener = listener
         self._context = context
         recording_path_obj = Path(recording_path) if recording_path else None
 
         self._stopped = asyncio.Event()
         self._stop_called = False
+        self._stop_requested = False
 
         self._event_bus = EventBus()
         self._conversation_history = ConversationHistory(self._event_bus)
@@ -139,7 +131,6 @@ class RealtimeAgent[T]:
             tools=self._tools,
             audio_session=audio_session,
             conversation_seed=conversation_seed,
-            inactivity_timeout_enabled=should_enable_inactivity_timeout,
             inactivity_timeout_seconds=inactivity_timeout_seconds,
             recording_path=recording_path_obj,
             provider=provider or OpenAIProvider(api_key=api_key),
@@ -150,7 +141,7 @@ class RealtimeAgent[T]:
         self._setup_shutdown_handlers()
         self._listener_bridge: AgentListenerBridge | None = None
         self._setup_listener(
-            inactivity_timeout_enabled=should_enable_inactivity_timeout,
+            inactivity_timeout_enabled=inactivity_timeout_seconds is not None,
             assistant_text_enabled=assistant_text_enabled,
         )
 
@@ -184,6 +175,8 @@ class RealtimeAgent[T]:
 
     def _setup_shutdown_handlers(self) -> None:
         self._event_bus.on(UserInactivityTimeoutEvent, self._on_inactivity_timeout)
+        self._event_bus.on(StopAgentCommand, self._on_stop_requested)
+        self._event_bus.on(AudioPlaybackCompletedEvent, self._on_playback_completed)
 
     def _setup_listener(
         self, *, inactivity_timeout_enabled: bool, assistant_text_enabled: bool
@@ -198,6 +191,16 @@ class RealtimeAgent[T]:
             assistant_text_enabled=assistant_text_enabled,
         )
         self._listener_bridge.setup()
+
+    async def _on_stop_requested(self, _: StopAgentCommand) -> None:
+        # the stop tool is called while the farewell is still buffered, so defer
+        # the teardown until playback drained
+        logger.info("Stop requested - shutting down after playback finished")
+        self._stop_requested = True
+
+    async def _on_playback_completed(self, _: AudioPlaybackCompletedEvent) -> None:
+        if self._stop_requested:
+            await self.stop()
 
     async def _on_inactivity_timeout(self, event: UserInactivityTimeoutEvent) -> None:
         logger.info(
@@ -233,6 +236,9 @@ class RealtimeAgent[T]:
     ) -> None:
         clipped = self._clip_speech_speed(speed)
         await self._realtime_session.update_speech_speed(clipped)
+
+    async def interrupt(self) -> None:
+        await self._realtime_session.interrupt()
 
     async def send_image(self, image_data_url: str, text: str = "") -> None:
         await self._realtime_session.send_image(image_data_url, text)

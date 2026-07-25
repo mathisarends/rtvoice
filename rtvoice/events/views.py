@@ -21,6 +21,14 @@ class UpdateToolChoiceCommand(Event):
     tool_choice: ToolChoiceValue
 
 
+class InterruptAssistantCommand(Event):
+    pass
+
+
+class StopAgentCommand(Event):
+    pass
+
+
 class AgentSessionConnectedEvent(Event):
     pass
 

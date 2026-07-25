@@ -72,7 +72,6 @@ def make_session(
             tools=Tools(),
             audio_session=MagicMock(spec=AudioSession),
             conversation_seed=conversation_seed,
-            inactivity_timeout_enabled=False,
             inactivity_timeout_seconds=None,
             recording_path=None,
             provider=MagicMock(),

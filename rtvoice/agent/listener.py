@@ -185,13 +185,13 @@ class AgentListenerBridge:
         if overrides_countdown and not self._inactivity_timeout_enabled:
             logger.warning(
                 "Listener '%s' overrides on_user_inactivity_countdown "
-                "but inactivity_timeout_enabled is False - callback will never fire.",
+                "but no inactivity_timeout_seconds is set - callback will never fire.",
                 listener_name,
             )
 
         if self._inactivity_timeout_enabled and not overrides_countdown:
             logger.warning(
-                "inactivity_timeout_enabled is True but listener '%s' does not override "
+                "inactivity_timeout_seconds is set but listener '%s' does not override "
                 "on_user_inactivity_countdown - countdown events will be silently ignored.",
                 listener_name,
             )

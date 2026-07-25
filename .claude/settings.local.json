@@ -42,7 +42,10 @@
       "Read(//c/code/rtvoice/tests/tools/**)",
       "Read(//c/code/rtvoice/tests/subagent/**)",
       "Read(//c/code/rtvoice/.venv/Lib/site-packages/llmify/providers/**)",
-      "Read(//c/code/rtvoice/rtvoice/llm/providers/**)"
+      "Read(//c/code/rtvoice/rtvoice/llm/providers/**)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(xargs grep -liE \"usage|token|cost|price\")",
+      "Bash(.venv/Scripts/python.exe *)"
     ]
   }
 }

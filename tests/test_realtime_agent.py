@@ -37,7 +37,7 @@ from rtvoice.events.views import (
 def make_agent(**kwargs) -> RealtimeAgent:
     audio_input = MagicMock()
     audio_output = MagicMock()
-    with patch("rtvoice.agent.realtime.OpenAIProvider"):
+    with patch("rtvoice.agent.realtime_agent.OpenAIProvider"):
         return RealtimeAgent(
             audio_input=audio_input,
             audio_output=audio_output,

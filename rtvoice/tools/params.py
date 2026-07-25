@@ -1,7 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-from rtvoice.skills.bash import BashArgs
-
 
 class ToolParams(BaseModel):
     # forbid extras so malformed model output fails validation instead of being
@@ -9,20 +7,33 @@ class ToolParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class LoadSkillParams(ToolParams):
-    name: str = Field(description="Name of the skill to load, exactly as listed.")
-    path: str | None = Field(
-        default="SKILL.md",
-        description=(
-            "Relative path of a bundled resource to load instead of the skill's "
-            "instructions. Defaults to the skill's SKILL.md."
-        ),
+class SkillParams(ToolParams):
+    name: str = Field(description="Name of the skill, exactly as listed.")
+
+
+class LoadSkillParams(SkillParams):
+    pass
+
+
+class ReadSkillResourceParams(SkillParams):
+    path: str = Field(
+        description="Path of the bundled file, relative to the skill directory."
     )
 
 
-# reuses BashArgs fields so the runner and the tool schema share one definition
-class BashParams(ToolParams, BashArgs):
-    pass
+class RunSkillScriptParams(SkillParams):
+    path: str = Field(
+        description="Path of the bundled script, relative to the skill directory."
+    )
+    args: list[str] = Field(
+        default_factory=list, description="Arguments passed to the script."
+    )
+    timeout: int = Field(
+        default=60,
+        ge=1,
+        le=300,
+        description="Timeout in seconds. Defaults to 60; maximum 300.",
+    )
 
 
 class SubagentParams(ToolParams):

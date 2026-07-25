@@ -13,7 +13,6 @@ from rtvoice.llm import (
     UserMessage,
 )
 from rtvoice.skills import SkillManager, Skills
-from rtvoice.skills.bash import BashRunner
 
 if TYPE_CHECKING:
     from rtvoice.tools import Tools
@@ -30,7 +29,6 @@ class Subagent[T]:
         llm: ChatModel | None = None,
         tools: Tools | None = None,
         skills: Skills | None = None,
-        allowed_commands: list[str] | None = None,
         max_iterations: int = 10,
         handoff_instructions: str | None = None,
         result_instructions: str | None = None,
@@ -42,9 +40,6 @@ class Subagent[T]:
         self.description = description
         self._llm = llm or ChatModel(model="gpt-5.4-mini")
         self._skill_manager = SkillManager(skills) if skills is not None else None
-        self._bash_runner = BashRunner.for_skills(
-            self._skill_manager, allowed_commands or ()
-        )
         self._tools = Tools()
         if tools:
             self._tools.merge(tools)
@@ -59,9 +54,7 @@ class Subagent[T]:
         self.handoff_instructions = handoff_instructions
         self.result_instructions = result_instructions
 
-        self._tools.set_context(
-            ToolContext(context, self._skill_manager, self._bash_runner)
-        )
+        self._tools.set_context(ToolContext(context, self._skill_manager))
 
     async def start(
         self,

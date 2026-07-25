@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import base64
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from html import escape
 from pathlib import Path
 
 from rtvoice.skills.models import Skill, parse_skill
+from rtvoice.skills.scripts import run_script
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +68,9 @@ class SkillManager:
             "Skills provide specialized capabilities and domain knowledge. "
             "Use them when they match the current task.\n\n"
             'Load a skill with `load_skill(name="<skill-name>")` before '
-            "following its instructions. Load an individual resource with the "
-            "optional `path` argument. Relative paths are resolved from the "
-            "skill's base directory. Use `bash` only for allowed commands or "
-            "bundled scripts.\n"
+            "following its instructions. It lists the skill's bundled files. "
+            "Read one with `read_skill_resource`, run one with "
+            "`run_skill_script`. Both take paths relative to the skill.\n"
             "</usage>\n\n"
             "<available_skills>\n"
             f"{entries}\n"
@@ -84,33 +85,24 @@ class SkillManager:
             return prompt
         return f"{instructions.rstrip()}\n\n{prompt}"
 
-    def load(self, name: str, path: str | None = "SKILL.md") -> str:
-        discovered = self.get(name)
-        current = parse_skill(discovered.location)
-        if current.name != discovered.name:
-            raise ValueError(
-                f"Skill at '{discovered.location}' changed its name after discovery."
-            )
+    def load(self, name: str) -> str:
+        skill = self._current(name)
+        files = "\n".join(
+            f"<file>{escape(path)}</file>" for path in self._resource_paths(skill)
+        )
+        return (
+            f'<skill_content name="{escape(skill.name)}">\n'
+            f"# Skill: {skill.name}\n\n"
+            f"{skill.instructions}\n\n"
+            "<skill_files>\n"
+            f"{files}\n"
+            "</skill_files>\n"
+            "</skill_content>"
+        )
 
-        if path is None or path == "SKILL.md":
-            resources = self._resource_paths(current)
-            resource_lines = "\n".join(
-                f"<file>{escape(str(resource))}</file>" for resource in resources
-            )
-            return (
-                f'<skill_content name="{escape(current.name)}">\n'
-                f"# Skill: {current.name}\n\n"
-                f"{current.instructions}\n\n"
-                f"Base directory for this skill: {current.directory}\n"
-                "Relative paths in this skill are relative to this base "
-                "directory.\n"
-                "<skill_files>\n"
-                f"{resource_lines}\n"
-                "</skill_files>\n"
-                "</skill_content>"
-            )
-
-        resource = self._resolve_resource(current, path)
+    def read_resource(self, name: str, path: str) -> str:
+        skill = self._current(name)
+        resource = self._resolve(skill, path)
         try:
             content = resource.read_bytes()
         except OSError as exc:
@@ -122,6 +114,26 @@ class SkillManager:
             return content.decode("utf-8")
         except UnicodeDecodeError:
             return f"base64: {base64.b64encode(content).decode('ascii')}"
+
+    async def run_script(
+        self,
+        name: str,
+        path: str,
+        args: Sequence[str] = (),
+        timeout: int = 60,
+    ) -> str:
+        skill = self._current(name)
+        script = self._resolve(skill, path)
+        return await run_script(script, args, cwd=skill.directory, timeout=timeout)
+
+    def _current(self, name: str) -> Skill:
+        discovered = self.get(name)
+        skill = parse_skill(discovered.location)
+        if skill.name != discovered.name:
+            raise ValueError(
+                f"Skill at '{discovered.location}' changed its name after discovery."
+            )
+        return skill
 
     def _discover(self, config: Skills) -> None:
         for configured_path in config.paths:
@@ -146,8 +158,8 @@ class SkillManager:
                     )
                 self._skills[skill.name] = skill
 
-    def _resource_paths(self, skill: Skill) -> list[Path]:
-        resources: list[Path] = []
+    def _resource_paths(self, skill: Skill) -> list[str]:
+        resources: list[str] = []
         for candidate in skill.directory.rglob("*"):
             if candidate.name == "SKILL.md" or not candidate.is_file():
                 continue
@@ -156,14 +168,14 @@ class SkillManager:
             except OSError:
                 continue
             if _is_relative_to(resolved, skill.directory):
-                resources.append(resolved)
+                resources.append(resolved.relative_to(skill.directory).as_posix())
             else:
                 logger.warning(
                     "Skipping skill resource outside base directory: %s", candidate
                 )
-        return sorted(resources, key=str)
+        return sorted(resources)
 
-    def _resolve_resource(self, skill: Skill, resource_path: str) -> Path:
+    def _resolve(self, skill: Skill, resource_path: str) -> Path:
         candidate = Path(resource_path)
         if candidate.is_absolute():
             raise ValueError("Skill resource paths must be relative.")
@@ -171,10 +183,7 @@ class SkillManager:
         try:
             resolved = (skill.directory / candidate).resolve(strict=True)
         except OSError as exc:
-            available = [
-                str(path.relative_to(skill.directory))
-                for path in self._resource_paths(skill)
-            ]
+            available = self._resource_paths(skill)
             raise ValueError(
                 f"Resource '{resource_path}' not found in skill '{skill.name}'. "
                 f"Available resources: {available}."
@@ -185,7 +194,7 @@ class SkillManager:
                 f"Resource '{resource_path}' is outside skill '{skill.name}'."
             )
         if resolved == skill.location:
-            raise ValueError("Load SKILL.md without a resource path.")
+            raise ValueError("Use load_skill to read SKILL.md.")
         return resolved
 
 

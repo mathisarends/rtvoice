@@ -32,7 +32,6 @@ from rtvoice.events.views import (
 from rtvoice.realtime import OpenAIProvider, RealtimeProvider, RealtimeSession
 from rtvoice.shared.decorators import timed
 from rtvoice.skills import SkillManager, Skills
-from rtvoice.skills.bash import BashRunner
 from rtvoice.tokens import PricingCatalog, UsageReport
 from rtvoice.tools import ToolContext, Tools
 
@@ -54,7 +53,6 @@ class RealtimeAgent[T]:
         turn_detection: TurnDetection | None = None,
         tools: Tools | None = None,
         skills: Skills | None = None,
-        allowed_commands: list[str] | None = None,
         subagent: Subagent | None = None,
         audio_input: AudioInputDevice | None = None,
         audio_output: AudioOutputDevice | None = None,
@@ -103,9 +101,6 @@ class RealtimeAgent[T]:
         self._conversation_history = ConversationHistory(self._event_bus)
 
         self._skill_manager = SkillManager(skills) if skills is not None else None
-        self._bash_runner = BashRunner.for_skills(
-            self._skill_manager, allowed_commands or ()
-        )
         self._tools = Tools()
         if tools:
             self._tools.merge(tools)
@@ -116,16 +111,14 @@ class RealtimeAgent[T]:
             else instructions
         )
 
-        self._tools.set_context(
-            ToolContext().provide(
-                self._event_bus,
-                self._conversation_history,
-                context,
-                self._skill_manager,
-                self._bash_runner,
-                self._subagent,
-            )
+        tool_context = ToolContext(
+            self._event_bus,
+            self._conversation_history,
+            context,
+            self._skill_manager,
+            self._subagent,
         )
+        self._tools.set_context(tool_context)
 
         audio_session = AudioSession(
             input_device=audio_input or self._create_default_input(),

@@ -7,7 +7,6 @@ import pytest
 
 from rtvoice import RealtimeAgent, Skills, Subagent
 from rtvoice.skills import SkillManager
-from rtvoice.skills.bash import BashArgs, BashRunner, validate_command
 from rtvoice.tools import ToolContext, Tools
 
 
@@ -60,24 +59,22 @@ class TestSkillManager:
         assert instructions.startswith("You are helpful.")
         assert "<name>internet-research</name>" in instructions
 
-    def test_load_skill_returns_instructions_base_dir_and_resources(
+    def test_load_skill_lists_relative_resources_without_reading_them(
         self, tmp_path: Path
     ) -> None:
         skill_dir = make_skill(tmp_path)
         references = skill_dir / "references"
         references.mkdir()
-        resource = references / "guide.md"
-        resource.write_text("Only read me on demand.", encoding="utf-8")
+        (references / "guide.md").write_text("Only read me on demand.", "utf-8")
 
         manager = SkillManager(Skills.from_local_dir(tmp_path))
         result = manager.load("internet-research")
 
         assert "Use the bundled workflow" in result
-        assert f"Base directory for this skill: {skill_dir.resolve()}" in result
-        assert f"<file>{resource.resolve()}</file>" in result
+        assert "<file>references/guide.md</file>" in result
         assert "Only read me on demand." not in result
 
-    def test_load_specific_resource_on_demand(self, tmp_path: Path) -> None:
+    def test_read_resource_on_demand(self, tmp_path: Path) -> None:
         skill_dir = make_skill(tmp_path)
         references = skill_dir / "references"
         references.mkdir()
@@ -86,7 +83,8 @@ class TestSkillManager:
         manager = SkillManager(Skills.from_local_dir(tmp_path))
 
         assert (
-            manager.load("internet-research", "references/guide.md") == "Loaded later."
+            manager.read_resource("internet-research", "references/guide.md")
+            == "Loaded later."
         )
 
     def test_resource_path_cannot_escape_skill(self, tmp_path: Path) -> None:
@@ -95,7 +93,14 @@ class TestSkillManager:
         manager = SkillManager(Skills.from_local_dir(tmp_path))
 
         with pytest.raises(ValueError, match="outside skill"):
-            manager.load("internet-research", "../secret.txt")
+            manager.read_resource("internet-research", "../secret.txt")
+
+    def test_skill_md_is_not_readable_as_a_resource(self, tmp_path: Path) -> None:
+        make_skill(tmp_path)
+        manager = SkillManager(Skills.from_local_dir(tmp_path))
+
+        with pytest.raises(ValueError, match="load_skill"):
+            manager.read_resource("internet-research", "SKILL.md")
 
     def test_invalid_name_is_rejected(self, tmp_path: Path) -> None:
         make_skill(tmp_path, name="invalid--name")
@@ -138,76 +143,58 @@ class TestSkillManager:
         assert any("overrides skill" in record.message for record in caplog.records)
 
 
-class TestBash:
-    def test_allows_whitelisted_commands_and_bundled_scripts(
+def make_script(skill_dir: Path, body: str, name: str = "check.py") -> str:
+    scripts = skill_dir / "scripts"
+    scripts.mkdir(exist_ok=True)
+    (scripts / name).write_text(body, encoding="utf-8")
+    return f"scripts/{name}"
+
+
+class TestSkillScripts:
+    @pytest.mark.asyncio
+    async def test_runs_bundled_script_with_arguments(self, tmp_path: Path) -> None:
+        skill_dir = make_skill(tmp_path)
+        path = make_script(skill_dir, "import sys\nprint(' '.join(sys.argv[1:]))\n")
+        manager = SkillManager(Skills.from_local_dir(tmp_path))
+
+        result = await manager.run_script("internet-research", path, ["hello", "world"])
+
+        assert result == "hello world"
+
+    @pytest.mark.asyncio
+    async def test_runs_script_in_the_skill_directory(self, tmp_path: Path) -> None:
+        skill_dir = make_skill(tmp_path)
+        path = make_script(skill_dir, "from pathlib import Path\nprint(Path.cwd())\n")
+        manager = SkillManager(Skills.from_local_dir(tmp_path))
+
+        result = await manager.run_script("internet-research", path)
+
+        assert Path(result) == skill_dir.resolve()
+
+    @pytest.mark.asyncio
+    async def test_reports_failure_with_exit_code_and_stderr(
         self, tmp_path: Path
     ) -> None:
         skill_dir = make_skill(tmp_path)
-        scripts = skill_dir / "scripts"
-        scripts.mkdir()
-        script = scripts / "check.sh"
-        script.write_text("#!/usr/bin/env bash\necho ok\n", encoding="utf-8")
+        path = make_script(skill_dir, "import sys\nsys.exit('boom')\n")
+        manager = SkillManager(Skills.from_local_dir(tmp_path))
 
-        assert (
-            validate_command(
-                "cat SKILL.md",
-                allowed_commands=frozenset({"cat"}),
-                allowed_script_dirs=(skill_dir.resolve(),),
-                cwd=str(skill_dir),
-            )
-            is None
-        )
-        assert (
-            validate_command(
-                "scripts/check.sh",
-                allowed_commands=frozenset(),
-                allowed_script_dirs=(skill_dir.resolve(),),
-                cwd=str(skill_dir),
-            )
-            is None
-        )
+        result = await manager.run_script("internet-research", path)
 
-    def test_rejects_non_allowlisted_and_nested_commands(self, tmp_path: Path) -> None:
-        skill_dir = make_skill(tmp_path)
-
-        error = validate_command(
-            "cat $(rm secret.txt)",
-            allowed_commands=frozenset({"cat"}),
-            allowed_script_dirs=(skill_dir.resolve(),),
-            cwd=str(skill_dir),
-        )
-
-        assert error is not None
-        assert "command_substitution" in error
-
-    def test_rejects_cwd_outside_skill(self, tmp_path: Path) -> None:
-        skill_dir = make_skill(tmp_path)
-        outside = tmp_path / "outside"
-        outside.mkdir()
-
-        error = validate_command(
-            "echo hello",
-            allowed_commands=frozenset({"echo"}),
-            allowed_script_dirs=(skill_dir.resolve(),),
-            cwd=str(outside),
-        )
-
-        assert error is not None
-        assert "not under an allowed skill directory" in error
+        assert result.startswith("Error (exit code 1)")
+        assert "boom" in result
 
     @pytest.mark.asyncio
-    async def test_executes_allowlisted_command(self, tmp_path: Path) -> None:
-        skill_dir = make_skill(tmp_path)
-        runner = BashRunner(
-            allowed_commands=("echo",),
-            allowed_script_dirs=(skill_dir,),
-        )
+    async def test_script_path_cannot_escape_skill(self, tmp_path: Path) -> None:
+        make_skill(tmp_path)
+        (tmp_path / "outside.py").write_text("print('leaked')", encoding="utf-8")
+        manager = SkillManager(Skills.from_local_dir(tmp_path))
 
-        result = await runner.execute(
-            BashArgs(command="echo hello", cwd=str(skill_dir))
-        )
+        with pytest.raises(ValueError, match="outside skill"):
+            await manager.run_script("internet-research", "../outside.py")
 
-        assert result == "hello"
+
+_SKILL_TOOLS = {"load_skill", "read_skill_resource", "run_skill_script"}
 
 
 class TestDefaultTools:
@@ -216,19 +203,17 @@ class TestDefaultTools:
 
         exposed = {tool.name for tool in tools.get_tool_schema()}
 
-        assert "load_skill" not in exposed
-        assert "bash" not in exposed
+        assert exposed.isdisjoint(_SKILL_TOOLS)
 
     def test_skill_defaults_are_exposed_once_injected(self, tmp_path: Path) -> None:
         make_skill(tmp_path)
         manager = SkillManager(Skills.from_local_dir(tmp_path))
         tools = Tools()
-        tools.set_context(ToolContext(manager, BashRunner.for_skills(manager, ["cat"])))
+        tools.set_context(ToolContext(manager))
 
         exposed = {tool.name for tool in tools.get_tool_schema()}
 
-        assert "load_skill" in exposed
-        assert "bash" in exposed
+        assert exposed >= _SKILL_TOOLS
 
     def test_merge_keeps_the_receivers_defaults(self) -> None:
         tools = Tools()
@@ -248,6 +233,27 @@ class TestDefaultTools:
 
         assert "Use the bundled workflow" in loaded.value
 
+    @pytest.mark.asyncio
+    async def test_resource_and_script_tools_reach_the_manager(
+        self, tmp_path: Path
+    ) -> None:
+        skill_dir = make_skill(tmp_path)
+        (skill_dir / "notes.md").write_text("Read me.", encoding="utf-8")
+        script = make_script(skill_dir, "import sys\nprint(sys.argv[1].upper())\n")
+        tools = Tools()
+        tools.set_context(ToolContext(SkillManager(Skills.from_local_dir(tmp_path))))
+
+        resource = await tools.execute(
+            "read_skill_resource", {"name": "internet-research", "path": "notes.md"}
+        )
+        ran = await tools.execute(
+            "run_skill_script",
+            {"name": "internet-research", "path": script, "args": ["ok"]},
+        )
+
+        assert resource.value == "Read me."
+        assert ran.value == "OK"
+
 
 class TestAgentIntegration:
     def test_realtime_agent_gets_catalog_and_builtin_tools(
@@ -257,11 +263,10 @@ class TestAgentIntegration:
         audio_input = MagicMock()
         audio_output = MagicMock()
 
-        with patch("rtvoice.agent.realtime.OpenAIProvider"):
+        with patch("rtvoice.agent.realtime_agent.OpenAIProvider"):
             agent = RealtimeAgent(
                 instructions="You are helpful.",
                 skills=Skills.from_local_dir(tmp_path),
-                allowed_commands=["cat"],
                 audio_input=audio_input,
                 audio_output=audio_output,
             )
@@ -270,8 +275,7 @@ class TestAgentIntegration:
         assert instructions.startswith("You are helpful.")
         assert "<name>internet-research</name>" in instructions
         assert "Use the bundled workflow" not in instructions
-        assert agent._tools.get("load_skill") is not None
-        assert agent._tools.get("bash") is not None
+        assert {tool.name for tool in agent._tools.get_tool_schema()} >= _SKILL_TOOLS
 
     @pytest.mark.asyncio
     async def test_subagent_loads_skill_progressively(self, tmp_path: Path) -> None:
@@ -281,13 +285,11 @@ class TestAgentIntegration:
             instructions="Be accurate.",
             llm=MagicMock(),
             skills=Skills.from_local_dir(tmp_path),
-            allowed_commands=["cat"],
         )
 
         assert "<name>internet-research</name>" in subagent._instructions
         assert "Use the bundled workflow" not in subagent._instructions
-        assert subagent._tools.get("load_skill") is not None
-        assert subagent._tools.get("bash") is not None
+        assert {tool.name for tool in subagent._tools.get_tool_schema()} >= _SKILL_TOOLS
 
         loaded = await subagent._tools.execute(
             "load_skill", {"name": "internet-research"}

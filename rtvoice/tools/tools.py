@@ -9,7 +9,6 @@ from pydantic import BaseModel
 from rtvoice.agent.subagent import Subagent
 from rtvoice.conversation import ConversationHistory
 from rtvoice.realtime.schemas import FunctionTool
-from rtvoice.skills.bash import BashRunner
 from rtvoice.skills.manager import SkillManager
 from rtvoice.tools.argument_resolver import resolve_arguments
 from rtvoice.tools.binding import (
@@ -21,7 +20,12 @@ from rtvoice.tools.binding import (
 )
 from rtvoice.tools.di import Inject, ToolContext
 from rtvoice.tools.middleware import MiddlewareChain, ToolCall
-from rtvoice.tools.params import BashParams, LoadSkillParams, SubagentParams
+from rtvoice.tools.params import (
+    LoadSkillParams,
+    ReadSkillResourceParams,
+    RunSkillScriptParams,
+    SubagentParams,
+)
 from rtvoice.tools.results import ActionResult
 from rtvoice.tools.views import ActionKind, Tool
 
@@ -156,31 +160,46 @@ class Tools:
             )
 
         @self.action(
-            "Load a skill's full instructions or one bundled resource. Call this "
-            "before using a skill. Pass only a relative resource path.",
+            "Load a skill's instructions and the list of its bundled files. "
+            "Call this before using a skill.",
             params=LoadSkillParams,
-            available_when=requires(
-                SkillManager, predicate=lambda manager: manager.size > 0
-            ),
+            available_when=_with_skills(),
         )
         def load_skill(
             params: LoadSkillParams, skill_manager: Inject[SkillManager]
         ) -> ActionResult:
-            content = skill_manager.load(params.name, params.path)
+            return ActionResult.success(skill_manager.load(params.name))
+
+        @self.action(
+            "Read one file bundled with a skill, as listed by load_skill.",
+            params=ReadSkillResourceParams,
+            kind=ActionKind.READ,
+            available_when=_with_skills(),
+        )
+        def read_skill_resource(
+            params: ReadSkillResourceParams, skill_manager: Inject[SkillManager]
+        ) -> ActionResult:
+            content = skill_manager.read_resource(params.name, params.path)
             return ActionResult.success(content)
 
         @self.action(
-            "Execute a Bash command. Only explicitly allowed commands or "
-            "scripts inside an available skill directory may run.",
-            params=BashParams,
+            "Run one script bundled with a skill, as listed by load_skill. The "
+            "script runs in the skill's directory; no shell is involved.",
+            params=RunSkillScriptParams,
             kind=ActionKind.DESTRUCTIVE,
-            available_when=provided(BashRunner),
+            available_when=_with_skills(),
         )
-        async def bash(
-            params: BashParams, bash_runner: Inject[BashRunner]
+        async def run_skill_script(
+            params: RunSkillScriptParams, skill_manager: Inject[SkillManager]
         ) -> ActionResult:
-            output = await bash_runner.execute(params)
+            output = await skill_manager.run_script(
+                params.name, params.path, params.args, params.timeout
+            )
             return ActionResult.success(output)
+
+
+def _with_skills() -> ToolAvailability:
+    return requires(SkillManager, predicate=lambda manager: manager.size > 0)
 
 
 def _describe_subagent(subagent: Subagent) -> str:

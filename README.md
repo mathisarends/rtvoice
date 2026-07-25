@@ -272,28 +272,31 @@ subagent = Subagent(
     description="Handles research tasks.",
     instructions="Use the relevant skill before researching.",
     skills=skills,
-    allowed_commands=["cat", "python"],
 )
 
 agent = RealtimeAgent(
     instructions="Help the user and load relevant skills before using them.",
     skills=skills,
-    allowed_commands=["cat"],
     subagent=subagent,
 )
 ```
 
 At startup, only each skill's `name` and `description` are added to the agent
-prompt. When relevant, the model calls the automatically registered
-`load_skill` tool for the full instructions. Referenced resources are loaded
-individually with `load_skill(name=..., path=...)`, and bundled scripts or
-allowlisted commands can be executed with the automatically registered `bash`
-tool.
+prompt. Three tools are registered automatically as soon as at least one skill
+is available:
 
-`bash` is deny-by-default. Set `allowed_commands` narrowly for commands required
-by the selected skills. Direct script execution is limited to files inside an
-available skill directory, working directories cannot escape those directories,
-and command substitution and shell control-flow constructs are rejected.
+| Tool                                     | Purpose                                                        |
+| ---------------------------------------- | -------------------------------------------------------------- |
+| `load_skill(name)`                       | Full instructions plus the list of the skill's bundled files   |
+| `read_skill_resource(name, path)`        | Contents of one bundled file                                   |
+| `run_skill_script(name, path, args)`     | Runs one bundled script in the skill's directory               |
+
+Both `path` arguments are relative to the skill directory and cannot escape it.
+Scripts run through `subprocess` with an explicit argument list — no shell, so
+no command substitution or shell control flow. `.py` runs on the current
+interpreter, `.sh` and `.bash` on `bash`; any other suffix must be directly
+executable. Only skills you configure yourself are exposed, so treat a skill
+directory as trusted code.
 
 ---
 
@@ -344,7 +347,6 @@ completion as the tool result.
 | `llm`                  | `ChatOpenAI(model=...)` or any `ChatModel` implementation |
 | `tools`                | `Tools` instance with the actions the subagent may call   |
 | `skills`               | Local Agent Skills exposed through progressive disclosure |
-| `allowed_commands`     | Commands the skill `bash` tool may execute                 |
 | `result_instructions`  | Tells the realtime model how to present the result        |
 | `handoff_instructions` | Extra guidance appended to the tool description           |
 | `max_iterations`       | Loop iteration cap (default: 10)                          |

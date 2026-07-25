@@ -1,8 +1,12 @@
+import logging
+
 from dotenv import load_dotenv
 
 from rtvoice import RealtimeAgent
 
 load_dotenv(override=True)
+
+logging.basicConfig(level=logging.DEBUG)
 
 
 async def main():

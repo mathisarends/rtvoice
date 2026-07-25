@@ -201,7 +201,7 @@ class TestDefaultTools:
     def test_skill_defaults_are_hidden_without_dependencies(self) -> None:
         tools = Tools()
 
-        exposed = {tool.name for tool in tools.get_tool_schema()}
+        exposed = {tool.name for tool in tools.get_schema()}
 
         assert exposed.isdisjoint(_SKILL_TOOLS)
 
@@ -211,7 +211,7 @@ class TestDefaultTools:
         tools = Tools()
         tools.set_context(ToolContext(manager))
 
-        exposed = {tool.name for tool in tools.get_tool_schema()}
+        exposed = {tool.name for tool in tools.get_schema()}
 
         assert exposed >= _SKILL_TOOLS
 
@@ -275,7 +275,7 @@ class TestAgentIntegration:
         assert instructions.startswith("You are helpful.")
         assert "<name>internet-research</name>" in instructions
         assert "Use the bundled workflow" not in instructions
-        assert {tool.name for tool in agent._tools.get_tool_schema()} >= _SKILL_TOOLS
+        assert {tool.name for tool in agent._tools.get_schema()} >= _SKILL_TOOLS
 
     @pytest.mark.asyncio
     async def test_subagent_loads_skill_progressively(self, tmp_path: Path) -> None:
@@ -289,7 +289,7 @@ class TestAgentIntegration:
 
         assert "<name>internet-research</name>" in subagent._instructions
         assert "Use the bundled workflow" not in subagent._instructions
-        assert {tool.name for tool in subagent._tools.get_tool_schema()} >= _SKILL_TOOLS
+        assert {tool.name for tool in subagent._tools.get_schema()} >= _SKILL_TOOLS
 
         loaded = await subagent._tools.execute(
             "load_skill", {"name": "internet-research"}

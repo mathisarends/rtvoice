@@ -13,6 +13,7 @@ from .agent.views import (
     TranscriptionModel,
     TurnDetection,
 )
+from .audio import EchoCancellation, EchoCanceller
 from .realtime import (
     AzureOpenAIProvider,
     OpenAIProvider,
@@ -38,6 +39,8 @@ __all__ = [
     "CostEstimate",
     "CostLineItem",
     "Currency",
+    "EchoCancellation",
+    "EchoCanceller",
     "Inject",
     "NoiseReduction",
     "OpenAIProvider",

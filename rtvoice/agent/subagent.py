@@ -76,7 +76,7 @@ class Subagent[T]:
         return messages
 
     async def _loop(self, messages: list[Message]) -> str:
-        tool_schema = self._tools.get_json_tool_schema()
+        tool_schema = self._tools.get_json_schema()
 
         for _ in range(self._max_iterations):
             response = await self._llm.invoke(messages, tools=tool_schema)

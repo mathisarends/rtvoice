@@ -2,9 +2,9 @@ import warnings
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from rtvoice.conversation.views import ConversationTurn
 from rtvoice.tokens.models import UsageReport
@@ -99,21 +99,28 @@ class SemanticEagerness(StrEnum):
     AUTO = "auto"
 
 
+class TurnDetectionType(StrEnum):
+    SEMANTIC_VAD = "semantic_vad"
+    SERVER_VAD = "server_vad"
+
+
 class SemanticVAD(BaseModel):
     """Semantic VAD: waits for a complete thought before committing end-of-turn."""
 
+    type: Literal[TurnDetectionType.SEMANTIC_VAD] = TurnDetectionType.SEMANTIC_VAD
     eagerness: SemanticEagerness = SemanticEagerness.AUTO
 
 
 class ServerVAD(BaseModel):
     """Energy-based VAD: triggers end-of-turn on silence duration and audio threshold."""
 
+    type: Literal[TurnDetectionType.SERVER_VAD] = TurnDetectionType.SERVER_VAD
     threshold: float = 0.5
     prefix_padding_ms: int = 300
     silence_duration_ms: int = 500
 
 
-type TurnDetection = SemanticVAD | ServerVAD
+TurnDetection = Annotated[SemanticVAD | ServerVAD, Field(discriminator="type")]
 
 
 @dataclass

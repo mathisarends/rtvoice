@@ -13,6 +13,7 @@ dependencies = [
     "transitbus>=0.1.0",
     "py-llmify[openai]>=0.7.0",
     "tokenary>=0.1.1",
+    "numpy>=2.0",
 ]
 
 [project.optional-dependencies]

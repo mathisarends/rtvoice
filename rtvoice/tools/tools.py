@@ -86,20 +86,20 @@ class Tools:
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
 
-    def get_tool_schema(self) -> list[FunctionTool]:
+    def get_schema(self) -> list[FunctionTool]:
         return [
             tool.to_schema(self._context)
             for tool in self._tools.values()
             if tool.is_available(self._context)
         ]
 
-    def get_json_tool_schema(self) -> list[dict]:
+    def get_json_schema(self) -> list[dict]:
         return [
             {
                 "type": "function",
                 "function": tool.model_dump(exclude={"type"}, exclude_none=True),
             }
-            for tool in self.get_tool_schema()
+            for tool in self.get_schema()
         ]
 
     async def execute(

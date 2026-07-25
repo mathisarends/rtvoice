@@ -267,7 +267,7 @@ class TestStopTool:
 
     def test_stop_tool_is_exposed_in_schema(self) -> None:
         agent = make_agent()
-        assert "stop" in [tool.name for tool in agent._tools.get_tool_schema()]
+        assert "stop" in [tool.name for tool in agent._tools.get_schema()]
 
     @pytest.mark.asyncio
     async def test_stop_tool_dispatches_stop_agent_command(self) -> None:

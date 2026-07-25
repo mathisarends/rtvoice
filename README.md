@@ -52,6 +52,7 @@ Run it, speak into your microphone, and the agent responds through your speakers
 - [Conversation seeds](#conversation-seeds)
 - [Lifecycle listener](#lifecycle-listener)
 - [Custom audio devices](#custom-audio-devices)
+- [Echo cancellation](#echo-cancellation)
 - [Turn detection](#turn-detection)
 - [Voice and model](#voice-and-model)
 - [Recording](#recording)
@@ -499,6 +500,29 @@ agent = RealtimeAgent(
 ```
 
 Audio format: **16-bit PCM, 24 kHz, mono** in both directions.
+
+---
+
+## Echo cancellation
+
+When speaker and microphone are separate devices (e.g. a laptop's built-in
+hardware without headphones), the microphone picks up the assistant's own
+playback and the agent interrupts itself. Pass `enable_echo_cancellation=True`
+to subtract the assistant's speech from the captured audio before it reaches
+turn detection:
+
+```python
+agent = RealtimeAgent(
+    instructions="...",
+    enable_echo_cancellation=True,
+)
+```
+
+This is a core feature of rtvoice: an adaptive NLMS filter learns the
+loudspeaker-to-microphone path and removes it in real time, leaving barge-in
+intact — unlike simple gating, the user can still interrupt the assistant
+while it speaks. It works with any `AudioInputDevice`/`AudioOutputDevice`
+pair, including custom ones.
 
 ---
 

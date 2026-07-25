@@ -22,6 +22,7 @@ from rtvoice.audio import (
     AudioInputDevice,
     AudioOutputDevice,
     AudioSession,
+    EchoCancellation,
 )
 from rtvoice.conversation import ConversationHistory
 from rtvoice.events.views import (
@@ -58,6 +59,7 @@ class RealtimeAgent[T]:
         subagent: Subagent | None = None,
         audio_input: AudioInputDevice | None = None,
         audio_output: AudioOutputDevice | None = None,
+        enable_echo_cancellation: bool = False,
         context: T | None = None,
         listener: AgentListener | None = None,
         conversation_seed: ConversationSeed | None = None,
@@ -111,9 +113,17 @@ class RealtimeAgent[T]:
         )
         self._tools.set_context(tool_context)
 
+        input_device = audio_input or self._create_default_input()
+        output_device = audio_output or self._create_default_output()
+
+        if enable_echo_cancellation:
+            input_device, output_device = EchoCancellation().wrap(
+                input_device, output_device
+            )
+
         audio_session = AudioSession(
-            input_device=audio_input or self._create_default_input(),
-            output_device=audio_output or self._create_default_output(),
+            input_device=input_device,
+            output_device=output_device,
         )
 
         self._realtime_session = RealtimeSession(

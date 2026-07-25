@@ -270,18 +270,21 @@ class RealtimeSession:
     def _build_session_settings(
         self,
     ) -> RealtimeSessionSettings:
-        if isinstance(self._turn_detection, SemanticVAD):
-            turn_detection_settings: TurnDetectionSettings = SemanticVADSettings(
-                eagerness=self._turn_detection.eagerness
-            )
-        elif isinstance(self._turn_detection, ServerVAD):
-            turn_detection_settings = ServerVADSettings(
-                threshold=self._turn_detection.threshold,
-                prefix_padding_ms=self._turn_detection.prefix_padding_ms,
-                silence_duration_ms=self._turn_detection.silence_duration_ms,
-            )
-        else:
-            raise TypeError(f"Unknown TurnDetection type: {type(self._turn_detection)}")
+        match self._turn_detection:
+            case SemanticVAD(eagerness=eagerness):
+                turn_detection_settings: TurnDetectionSettings = SemanticVADSettings(
+                    eagerness=eagerness
+                )
+            case ServerVAD(
+                threshold=threshold,
+                prefix_padding_ms=prefix_padding_ms,
+                silence_duration_ms=silence_duration_ms,
+            ):
+                turn_detection_settings = ServerVADSettings(
+                    threshold=threshold,
+                    prefix_padding_ms=prefix_padding_ms,
+                    silence_duration_ms=silence_duration_ms,
+                )
 
         transcription_settings = (
             None
@@ -299,7 +302,7 @@ class RealtimeSession:
             instructions=self._instructions,
             output_modalities=self._output_modalities,
             tool_choice=ToolChoiceMode.AUTO,
-            tools=self._tools.get_tool_schema(),
+            tools=self._tools.get_schema(),
             audio=AudioSettings(
                 input=AudioInputSettings.with_noise_reduction(
                     turn_detection=turn_detection_settings,

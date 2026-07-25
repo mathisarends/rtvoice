@@ -217,59 +217,59 @@ class TestClone:
 
 
 class TestRealtimeTools:
-    def test_get_tool_schema_returns_list(self) -> None:
+    def test_get_schema_returns_list(self) -> None:
         realtime = Tools()
 
         @realtime.action(description="A tool")
         def my_tool(name: str) -> None: ...
 
-        schema = realtime.get_tool_schema()
+        schema = realtime.get_schema()
 
         assert "my_tool" in [tool.name for tool in schema]
 
-    def test_get_tool_schema_only_defaults_for_no_tools(self) -> None:
+    def test_get_schema_only_defaults_for_no_tools(self) -> None:
         realtime = Tools()
 
-        assert [tool.name for tool in realtime.get_tool_schema()] == ["stop"]
+        assert [tool.name for tool in realtime.get_schema()] == ["stop"]
 
 
 class TestJsonToolSchema:
-    def test_get_json_tool_schema_returns_list(self) -> None:
+    def test_get_json_schema_returns_list(self) -> None:
         tools = Tools()
 
         @tools.action(description="A tool")
         def my_tool(name: str) -> None: ...
 
-        schema = tools.get_json_tool_schema()
+        schema = tools.get_json_schema()
 
         assert "my_tool" in [entry["function"]["name"] for entry in schema]
 
-    def test_get_json_tool_schema_has_function_type(self) -> None:
+    def test_get_json_schema_has_function_type(self) -> None:
         tools = Tools()
 
         @tools.action(description="A tool")
         def my_tool(name: str) -> None: ...
 
-        schema = tools.get_json_tool_schema()
+        schema = tools.get_json_schema()
 
         assert schema[0]["type"] == "function"
 
-    def test_get_json_tool_schema_contains_function_key(self) -> None:
+    def test_get_json_schema_contains_function_key(self) -> None:
         tools = Tools()
 
         @tools.action(description="A tool")
         def my_tool(name: str) -> None: ...
 
-        schema = tools.get_json_tool_schema()
+        schema = tools.get_json_schema()
 
         assert "function" in schema[0]
 
-    def test_get_json_tool_schema_only_defaults_for_no_tools(self) -> None:
+    def test_get_json_schema_only_defaults_for_no_tools(self) -> None:
         tools = Tools()
 
-        assert [
-            entry["function"]["name"] for entry in tools.get_json_tool_schema()
-        ] == ["stop"]
+        assert [entry["function"]["name"] for entry in tools.get_json_schema()] == [
+            "stop"
+        ]
 
 
 class TestToolStatuses:

@@ -8,7 +8,6 @@ from rtvoice.agent.listener import AgentListener, AgentListenerBridge
 from rtvoice.agent.supervisor import (
     Supervisor,
     SupervisorClarificationNeeded,
-    SupervisorResult,
 )
 from rtvoice.agent.views import (
     AgentResult,
@@ -38,6 +37,8 @@ from rtvoice.realtime import OpenAIProvider, RealtimeProvider, RealtimeSession
 from rtvoice.shared.decorators import timed
 from rtvoice.skills import SkillManager, Skills
 from rtvoice.tools import Inject, ToolContext, Tools
+from rtvoice.tools.params import HandoffParams
+from rtvoice.tools.results import ActionResult
 
 logger = logging.getLogger(__name__)
 
@@ -127,11 +128,7 @@ class RealtimeAgent[T]:
         )
 
         self._tools.set_context(
-            ToolContext(
-                event_bus=self._event_bus,
-                context=context,
-                conversation_history=self._conversation_history,
-            )
+            ToolContext().provide(self._event_bus, self._conversation_history, context)
         )
         if self._supervisor:
             self._register_supervisor(self._supervisor)
@@ -216,16 +213,16 @@ class RealtimeAgent[T]:
         @self._tools.action(
             description,
             name=supervisor.name,
+            params=HandoffParams,
             result_instruction=supervisor.result_instructions,
-            holding_instruction=supervisor.holding_instruction,
         )
         async def _handoff(
-            task: str,
+            params: HandoffParams,
             conversation_history: Inject[ConversationHistory],
-            clarification_answer: str | None = None,
-        ) -> SupervisorResult:
+        ) -> ActionResult:
             nonlocal paused_for_clarification
 
+            clarification_answer = params.clarification_answer
             is_resuming = (
                 paused_for_clarification is not None
                 and clarification_answer is not None
@@ -243,7 +240,7 @@ class RealtimeAgent[T]:
                 context = (
                     conversation_history.format() if conversation_history else None
                 )
-                result = await supervisor.start(task, context=context)
+                result = await supervisor.start(params.task, context=context)
 
             if isinstance(result, SupervisorClarificationNeeded):
                 paused_for_clarification = ClarificationCheckpoint(
@@ -251,7 +248,7 @@ class RealtimeAgent[T]:
                     clarify_call_id=result.clarify_call_id,
                 )
 
-            return result
+            return ActionResult.success(result)
 
     def _setup_shutdown_handlers(self) -> None:
         self._event_bus.on(UserInactivityTimeoutEvent, self._on_inactivity_timeout)

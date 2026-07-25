@@ -28,11 +28,13 @@ from rtvoice.realtime.schemas import (
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.tools.di import Inject
-from rtvoice.tools.views import Tool
+from rtvoice.tools.params import UpdateSupervisorParams
+from rtvoice.tools.results import ActionResult
 
 if TYPE_CHECKING:
     from rtvoice.agent.supervisor import Supervisor
     from rtvoice.tools import Tools
+    from rtvoice.tools.views import Tool
 
 
 logger = logging.getLogger(__name__)
@@ -78,9 +80,9 @@ class SupervisorCallCoordinator:
             name="cancel_supervisor",
             result_instruction="Tell the user naturally that the task has been cancelled.",
         )
-        async def _cancel_supervisor(event_bus: Inject[EventBus]) -> str:
+        async def _cancel_supervisor(event_bus: Inject[EventBus]) -> ActionResult:
             await event_bus.dispatch(CancelSupervisorCommand())
-            return "The supervisor task has been cancelled."
+            return ActionResult.success("The supervisor task has been cancelled.")
 
         tool = self._tools.get("cancel_supervisor")
         if not tool:
@@ -92,11 +94,14 @@ class SupervisorCallCoordinator:
             "Send new context, corrections, or additional instructions to the currently running supervisor. "
             "Call this when the user adds information while the supervisor is still working, instead of restarting the task.",
             name="update_supervisor",
+            params=UpdateSupervisorParams,
             result_instruction="Briefly acknowledge that the update was added to the running task.",
         )
-        async def _update_supervisor(message: str, event_bus: Inject[EventBus]) -> str:
-            await event_bus.dispatch(UpdateSupervisorCommand(message=message))
-            return "The supervisor has received the update."
+        async def _update_supervisor(
+            params: UpdateSupervisorParams, event_bus: Inject[EventBus]
+        ) -> str:
+            await event_bus.dispatch(UpdateSupervisorCommand(message=params.message))
+            return ActionResult.success("The supervisor has received the update.")
 
         tool = self._tools.get("update_supervisor")
         if not tool:
@@ -202,11 +207,18 @@ class SupervisorCallCoordinator:
         await self._deliver_supervisor_result(active, result)
 
     async def _deliver_supervisor_result(
-        self, active: SupervisorCallState, result: object
+        self, active: SupervisorCallState, result: ActionResult
     ) -> None:
         try:
-            if isinstance(result, SupervisorClarificationNeeded):
-                await self._ask_user_for_clarification(active, result)
+            if not result.ok:
+                await self._handle_supervisor_failure(
+                    active, result.error or "Supervisor task failed."
+                )
+                return
+
+            value = result.value
+            if isinstance(value, SupervisorClarificationNeeded):
+                await self._ask_user_for_clarification(active, value)
                 return
 
             self._awaiting_clarification = False

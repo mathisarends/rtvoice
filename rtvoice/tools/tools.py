@@ -1,24 +1,20 @@
 from __future__ import annotations
 
-import inspect
 import logging
 from collections.abc import Callable, Iterable
-from typing import (
-    Annotated,
-    Any,
-    Self,
-    get_args,
-    get_origin,
-    get_type_hints,
-)
+from typing import Any, Self
 
 from pydantic import BaseModel
 
 from rtvoice.realtime.schemas import FunctionTool
-from rtvoice.skills.bash import BashArgs, BashRunner
+from rtvoice.skills.bash import BashRunner
 from rtvoice.skills.manager import SkillManager
-from rtvoice.tools.di import ToolContext, _Inject
-from rtvoice.tools.views import Tool
+from rtvoice.tools.binding import ToolAvailability, ToolDescription
+from rtvoice.tools.di import ToolContext
+from rtvoice.tools.executor import ToolExecutor
+from rtvoice.tools.params import BashParams, LoadSkillParams
+from rtvoice.tools.results import ActionResult
+from rtvoice.tools.views import ActionKind, Tool
 
 logger = logging.getLogger(__name__)
 
@@ -32,41 +28,40 @@ class Tools:
     ):
         self.tools: dict[str, Tool] = {}
         self._context: ToolContext | None = None
+        self._executor = ToolExecutor(self.tools, self._context)
         self._register_default_tools(skill_manager, allowed_commands)
 
     def action(
         self,
-        description: str,
+        description: str | ToolDescription,
         name: str | None = None,
-        param_model: type[BaseModel] | None = None,
+        *,
+        params: type[BaseModel] | None = None,
         result_instruction: str | None = None,
-        holding_instruction: str | None = None,
         status: str | Callable | None = None,
+        kind: ActionKind = ActionKind.GENERIC,
+        available_when: ToolAvailability | None = None,
     ) -> Callable:
-        """Register a tool.
-
-        ``holding_instruction`` is deprecated and retained as a no-op for API
-        compatibility. Configure native preambles in session instructions.
-        """
-
         def decorator(func: Callable) -> Callable:
-            bound_func = getattr(self, func.__name__, func)
-            tool = Tool(
-                name=name or func.__name__,
-                description=description,
-                function=bound_func,
-                param_model=param_model,
-                result_instruction=result_instruction,
-                holding_instruction=holding_instruction,
-                status=status,
+            self._register_tool(
+                Tool(
+                    name=name or func.__name__,
+                    description=description,
+                    fn=func,
+                    param_model=params,
+                    result_instruction=result_instruction,
+                    status=status,
+                    kind=kind,
+                    available_when=available_when,
+                )
             )
-            self._register_tool(tool)
             return func
 
         return decorator
 
     def set_context(self, context: ToolContext) -> None:
         self._context = context
+        self._executor.set_context(context)
 
     def inject_tool(self, tool: Tool) -> None:
         self.tools[tool.name] = tool
@@ -78,7 +73,11 @@ class Tools:
         return self.tools.get(name)
 
     def get_tool_schema(self) -> list[FunctionTool]:
-        return [tool.to_pydantic() for tool in self.tools.values()]
+        return [
+            tool.to_schema(self._context)
+            for tool in self.tools.values()
+            if tool.is_available(self._context)
+        ]
 
     def get_json_tool_schema(self) -> list[dict]:
         return [
@@ -90,20 +89,14 @@ class Tools:
         ]
 
     async def execute(
-        self,
-        name: str,
-        arguments: dict[str, Any],
-    ) -> Any:
-        tool = self.get(name)
-        if not tool:
-            raise KeyError(f"Tool '{name}' not found in registry")
-
-        prepared = self._prepare_arguments(tool, arguments, self._context)
-        return await tool.execute(prepared)
+        self, name: str, arguments: dict[str, Any] | None = None
+    ) -> ActionResult:
+        return await self._executor.execute(name, arguments)
 
     def clone(self) -> Self:
         new = type(self)()
-        new.tools = self.tools.copy()
+        # mutate in place so the clone's executor keeps referencing this dict
+        new.tools.update(self.tools)
         return new
 
     def merge(self, other: Tools) -> None:
@@ -135,109 +128,17 @@ class Tools:
             "Load a skill's full instructions or one bundled resource. Call this "
             "before using a skill. Pass only a relative resource path.",
             name="load_skill",
+            params=LoadSkillParams,
         )
-        def load_skill(name: str, path: str | None = "SKILL.md") -> str:
-            return skill_manager.load(name, path)
+        def load_skill(params: LoadSkillParams) -> ActionResult:
+            return ActionResult.success(skill_manager.load(params.name, params.path))
 
         @self.action(
             "Execute a Bash command. Only explicitly allowed commands or "
             "scripts inside an available skill directory may run.",
             name="bash",
-            param_model=BashArgs,
+            params=BashParams,
+            kind=ActionKind.DESTRUCTIVE,
         )
-        async def bash(args: BashArgs) -> str:
-            return await bash_runner.execute(args)
-
-    def _prepare_arguments(
-        self,
-        tool: Tool,
-        llm_arguments: dict[str, Any],
-        context: ToolContext | None,
-    ) -> dict[str, Any]:
-        signature = inspect.signature(tool.function)
-        type_hints = get_type_hints(tool.function, include_extras=True)
-        injectable_by_type = self._injectable_by_type_from_context(context)
-
-        if tool.param_model is not None:
-            return self._prepare_with_param_model(
-                tool, llm_arguments, signature, type_hints, injectable_by_type
-            )
-
-        arguments = llm_arguments.copy()
-        for param_name, param in signature.parameters.items():
-            if param_name in arguments or param_name in ("self", "cls"):
-                continue
-
-            hint = type_hints.get(param_name)
-            injected = self._resolve_inject(hint, injectable_by_type)
-            if injected is not None:
-                arguments[param_name] = injected
-            elif param.default is inspect.Parameter.empty:
-                raise ValueError(
-                    f"Missing required parameter '{param_name}' for tool '{tool.name}'"
-                )
-
-        return arguments
-
-    def _prepare_with_param_model(
-        self,
-        tool: Tool,
-        llm_arguments: dict[str, Any],
-        signature: inspect.Signature,
-        type_hints: dict[str, Any],
-        injectable_by_type: dict[type, Any],
-    ) -> dict[str, Any]:
-        model_instance = tool.param_model(**llm_arguments)
-        arguments: dict[str, Any] = {}
-
-        for param_name, param in signature.parameters.items():
-            if param_name in ("self", "cls"):
-                continue
-
-            hint = type_hints.get(param_name)
-            unwrapped = get_args(hint)[0] if get_origin(hint) is Annotated else hint
-
-            if unwrapped is tool.param_model:
-                arguments[param_name] = model_instance
-                continue
-
-            injected = self._resolve_inject(hint, injectable_by_type)
-            if injected is not None:
-                arguments[param_name] = injected
-            elif param.default is inspect.Parameter.empty:
-                raise ValueError(
-                    f"Missing required parameter '{param_name}' for tool '{tool.name}'"
-                )
-
-        return arguments
-
-    def _injectable_by_type_from_context(
-        self, context: ToolContext | None
-    ) -> dict[type, Any]:
-        result: dict[type, Any] = {}
-        if context is None:
-            return result
-
-        for field_name in ToolContext.model_fields:
-            value = getattr(context, field_name)
-            if value is None:
-                continue
-            result[type(value)] = value
-        return result
-
-    def _resolve_inject(
-        self, type_hint: Any, injectable_by_type: dict[type, Any]
-    ) -> Any | None:
-        if type_hint is None or get_origin(type_hint) is not Annotated:
-            return None
-
-        args = get_args(type_hint)
-        if not any(isinstance(arg, _Inject) for arg in args):
-            return None
-
-        requested_type = args[0]
-        for _, value in injectable_by_type.items():
-            if isinstance(value, requested_type):
-                return value
-
-        return None
+        async def bash(params: BashParams) -> ActionResult:
+            return ActionResult.success(await bash_runner.execute(params))

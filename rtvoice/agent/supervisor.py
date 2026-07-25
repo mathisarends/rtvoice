@@ -19,6 +19,8 @@ from rtvoice.llm import (
 from rtvoice.skills import SkillManager, Skills
 from rtvoice.tools import Tools
 from rtvoice.tools.di import ToolContext
+from rtvoice.tools.params import ClarifyParams, DoneParams
+from rtvoice.tools.results import ActionResult
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +48,6 @@ class Supervisor[T]:
         max_iterations: int = 10,
         handoff_instructions: str | None = None,
         result_instructions: str | None = None,
-        holding_instruction: str | None = None,
         context: T | None = None,
     ) -> None:
         self.name = "supervisor"
@@ -69,10 +70,8 @@ class Supervisor[T]:
         self._max_iterations = max_iterations
         self.handoff_instructions = handoff_instructions
         self.result_instructions = result_instructions
-        # Deprecated compatibility field; native realtime preambles replace it.
-        self.holding_instruction = holding_instruction
 
-        self._tools.set_context(ToolContext(context=context))
+        self._tools.set_context(ToolContext(context))
         self._pending_updates: asyncio.Queue[str] = asyncio.Queue()
 
         self._register_done_tool()
@@ -89,20 +88,22 @@ class Supervisor[T]:
     def _register_done_tool(self) -> None:
         @self._tools.action(
             "Signal that the task is complete and return the final result to the user. "
-            "Only call this once you have gathered all necessary information or took the appropriate action."
+            "Only call this once you have gathered all necessary information or took the appropriate action.",
+            params=DoneParams,
         )
-        def done(result: str) -> DoneSignal:
-            return DoneSignal(result)
+        def done(params: DoneParams) -> ActionResult:
+            return ActionResult.success(DoneSignal(params.result))
 
     def _register_clarify_tool(self) -> None:
         @self._tools.action(
             "Ask the user a clarifying question when essential information is missing. "
             "Use sparingly - only when you cannot proceed without the answer. "
             "Calling this tool immediately returns control to the user; "
-            "you will be called again once they answer."
+            "you will be called again once they answer.",
+            params=ClarifyParams,
         )
-        def clarify(question: str) -> ClarifySignal:
-            return ClarifySignal(question)
+        def clarify(params: ClarifyParams) -> ActionResult:
+            return ActionResult.success(ClarifySignal(params.question))
 
     async def start(
         self,
@@ -171,39 +172,31 @@ class Supervisor[T]:
                     )
                     continue
 
-                logger.debug("Executing supervisor tool call: '%s'", tool_name)
-                try:
-                    result = await self._tools.execute(tool_name, tool_args)
-                except Exception as exc:
-                    logger.warning(
-                        "Tool '%s' raised an error: %s", tool_name, exc, exc_info=True
-                    )
+                result = await self._tools.execute(tool_name, tool_args)
+                if not result.ok:
                     messages.append(
                         ToolResultMessage(
                             tool_call_id=tool_call.id,
-                            content=f"Error: tool '{tool_name}' failed with: {exc}. Please handle this and try again.",
+                            content=(
+                                f"Error: tool '{tool_name}' failed with: {result.error}. "
+                                "Please handle this and try again."
+                            ),
                         )
                     )
                     continue
 
-                match result:
+                match result.value:
                     case DoneSignal(result=message):
-                        logger.debug(
-                            "Supervisor tool 'done' called with result: %s", message
-                        )
                         return SupervisorDone(message=message)
                     case ClarifySignal(question=question):
-                        logger.debug(
-                            "Supervisor tool 'clarify' called with question: %s",
-                            question,
-                        )
                         return SupervisorClarificationNeeded(
                             question=question,
                             resume_history=list(messages),
                             clarify_call_id=tool_call.id,
                         )
+                content = "OK" if result.value is None else str(result.value)
                 messages.append(
-                    ToolResultMessage(tool_call_id=tool_call.id, content=str(result))
+                    ToolResultMessage(tool_call_id=tool_call.id, content=content)
                 )
 
         return SupervisorDone(

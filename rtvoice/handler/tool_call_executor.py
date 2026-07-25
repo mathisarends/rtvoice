@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -62,12 +61,6 @@ class ToolCallExecutor:
             logger.error("Tool '%s' not found", event.name)
             return
 
-        logger.info(
-            "Tool call: '%s' [args=%s]",
-            event.name,
-            json.dumps(event.arguments or {}, ensure_ascii=False),
-        )
-
         task = asyncio.create_task(
             self._tools.execute(event.name, event.arguments or {})
         )
@@ -88,11 +81,10 @@ class ToolCallExecutor:
 
         for call, result in zip(batch.calls, results, strict=True):
             if isinstance(result, BaseException):
-                logger.error("Tool '%s' failed: %s", call.tool.name, result)
+                logger.error("Tool '%s' crashed: %s", call.tool.name, result)
                 serialized = f"Tool execution failed: {result}"
             else:
                 serialized = serialize_tool_result(result)
-                logger.info("Tool result: '%s' [result=%s]", call.tool.name, serialized)
 
             await send_function_call_output(self._websocket, call.call_id, serialized)
             if call.tool.result_instruction:

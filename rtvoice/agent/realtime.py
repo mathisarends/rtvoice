@@ -34,8 +34,7 @@ from rtvoice.shared.decorators import timed
 from rtvoice.skills import SkillManager, Skills
 from rtvoice.skills.bash import BashRunner
 from rtvoice.tokens import PricingCatalog, UsageReport
-from rtvoice.tools import Inject, ToolContext, Tools
-from rtvoice.tools.params import SupervisorParams
+from rtvoice.tools import ToolContext, Tools
 
 logger = logging.getLogger(__name__)
 
@@ -127,8 +126,6 @@ class RealtimeAgent[T]:
                 self._supervisor,
             )
         )
-        if self._supervisor:
-            self._register_supervisor(self._supervisor)
 
         audio_session = AudioSession(
             input_device=audio_input or self._create_default_input(),
@@ -191,30 +188,6 @@ class RealtimeAgent[T]:
     ) -> list[OutputModality]:
         modalities = output_modalities or ["audio"]
         return list(dict.fromkeys(modalities))
-
-    def _register_supervisor(self, supervisor: Supervisor) -> None:
-        description = supervisor.description
-        if supervisor.handoff_instructions:
-            description = (
-                f"{supervisor.description}\n\n"
-                f"Handoff instructions: {supervisor.handoff_instructions}"
-            )
-
-        @self._tools.action(
-            description,
-            name=supervisor.name,
-            params=SupervisorParams,
-            result_instruction=supervisor.result_instructions,
-        )
-        async def _run_supervisor(
-            params: SupervisorParams,
-            supervisor: Inject[Supervisor],
-            conversation_history: Inject[ConversationHistory],
-        ) -> str:
-            return await supervisor.start(
-                params.task,
-                context=conversation_history.format(),
-            )
 
     def _setup_shutdown_handlers(self) -> None:
         self._event_bus.on(UserInactivityTimeoutEvent, self._on_inactivity_timeout)

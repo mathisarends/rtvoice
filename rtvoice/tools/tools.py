@@ -6,18 +6,21 @@ from typing import Any, Self
 
 from pydantic import BaseModel
 
+from rtvoice.conversation import ConversationHistory
 from rtvoice.realtime.schemas import FunctionTool
 from rtvoice.skills.bash import BashRunner
 from rtvoice.skills.manager import SkillManager
 from rtvoice.tools.binding import (
     ToolAvailability,
     ToolDescription,
+    described,
     provided,
     requires,
 )
+from rtvoice.tools.dependencies import Supervisor
 from rtvoice.tools.di import Inject, ToolContext
 from rtvoice.tools.executor import ToolExecutor
-from rtvoice.tools.params import BashParams, LoadSkillParams
+from rtvoice.tools.params import BashParams, LoadSkillParams, SupervisorParams
 from rtvoice.tools.results import ActionResult
 from rtvoice.tools.views import ActionKind, Tool
 
@@ -63,6 +66,10 @@ class Tools:
     def set_context(self, context: ToolContext) -> None:
         self._context = context
         self._executor.set_context(context)
+        supervisor = context.resolve(Supervisor)
+        self.tools["supervisor"].result_instruction = (
+            supervisor.result_instructions if supervisor is not None else None
+        )
 
     def inject_tool(self, tool: Tool) -> None:
         self.tools[tool.name] = tool
@@ -117,6 +124,26 @@ class Tools:
 
     def _register_default_tools(self) -> None:
         @self.action(
+            described(
+                Supervisor,
+                render=_describe_supervisor,
+                default="Delegate a task to the supervisor.",
+            ),
+            name="supervisor",
+            params=SupervisorParams,
+            available_when=provided(Supervisor),
+        )
+        async def supervisor(
+            params: SupervisorParams,
+            supervisor: Inject[Supervisor],
+            conversation_history: Inject[ConversationHistory],
+        ) -> str:
+            return await supervisor.start(
+                params.task,
+                context=conversation_history.format(),
+            )
+
+        @self.action(
             "Load a skill's full instructions or one bundled resource. Call this "
             "before using a skill. Pass only a relative resource path.",
             params=LoadSkillParams,
@@ -142,3 +169,12 @@ class Tools:
         ) -> ActionResult:
             output = await bash_runner.execute(params)
             return ActionResult.success(output)
+
+
+def _describe_supervisor(supervisor: Supervisor) -> str:
+    if not supervisor.handoff_instructions:
+        return supervisor.description
+    return (
+        f"{supervisor.description}\n\n"
+        f"Handoff instructions: {supervisor.handoff_instructions}"
+    )

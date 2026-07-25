@@ -364,6 +364,48 @@ class TestInterrupt:
         assert len(received) == 1
 
 
+class TestSendMessage:
+    @pytest.mark.asyncio
+    async def test_send_message_records_user_turn_when_sent(self) -> None:
+        agent = make_agent()
+        agent._realtime_session.send_message = AsyncMock(return_value=True)
+
+        await agent.send_message("Hello")
+
+        assert agent._conversation_history.turns[0].role == "user"
+        assert agent._conversation_history.turns[0].transcript == "Hello"
+
+    @pytest.mark.asyncio
+    async def test_send_message_skips_history_when_not_sent(self) -> None:
+        agent = make_agent()
+        agent._realtime_session.send_message = AsyncMock(return_value=False)
+
+        await agent.send_message("Hello")
+
+        assert agent._conversation_history.turns == []
+
+    @pytest.mark.asyncio
+    async def test_send_assistant_message_records_assistant_turn_when_sent(
+        self,
+    ) -> None:
+        agent = make_agent()
+        agent._realtime_session.send_assistant_message = AsyncMock(return_value=True)
+
+        await agent.send_assistant_message("Hi there")
+
+        assert agent._conversation_history.turns[0].role == "assistant"
+        assert agent._conversation_history.turns[0].transcript == "Hi there"
+
+    @pytest.mark.asyncio
+    async def test_send_assistant_message_skips_history_when_not_sent(self) -> None:
+        agent = make_agent()
+        agent._realtime_session.send_assistant_message = AsyncMock(return_value=False)
+
+        await agent.send_assistant_message("Hi there")
+
+        assert agent._conversation_history.turns == []
+
+
 class TestListenerWiring:
     @pytest.mark.asyncio
     async def test_on_user_transcript_is_called(self) -> None:

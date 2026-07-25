@@ -259,10 +259,20 @@ class RealtimeAgent[T]:
         await self._realtime_session.interrupt()
 
     async def send_message(self, text: str, *, base64_image: str | None = None) -> None:
-        await self._realtime_session.send_message(text, base64_image=base64_image)
+        sent = await self._realtime_session.send_message(
+            text, base64_image=base64_image
+        )
+        if sent:
+            self._conversation_history.add(
+                ConversationTurn(role="user", transcript=text)
+            )
 
     async def send_assistant_message(self, text: str) -> None:
-        await self._realtime_session.send_assistant_message(text)
+        sent = await self._realtime_session.send_assistant_message(text)
+        if sent:
+            self._conversation_history.add(
+                ConversationTurn(role="assistant", transcript=text)
+            )
 
     @timed()
     async def stop(self) -> None:

@@ -24,6 +24,9 @@ class ConversationHistory:
             ConversationTurn(role="assistant", transcript=event.transcript)
         )
 
+    def add(self, turn: ConversationTurn) -> None:
+        self._turns.append(turn)
+
     def seed(self, turns: Iterable[ConversationTurn]) -> None:
         self._turns.extend(turns)
 

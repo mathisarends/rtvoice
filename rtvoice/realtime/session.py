@@ -235,10 +235,10 @@ class RealtimeSession:
     async def interrupt(self) -> None:
         await self._event_bus.dispatch(InterruptAssistantCommand())
 
-    async def send_message(self, text: str, *, base64_image: str | None = None) -> None:
+    async def send_message(self, text: str, *, base64_image: str | None = None) -> bool:
         if not self._websocket.is_connected:
             logger.warning("Cannot send message - WebSocket not connected")
-            return
+            return False
 
         logger.info(
             "Sending user message [text=%r, image=%s]", text, bool(base64_image)
@@ -250,14 +250,16 @@ class RealtimeSession:
         )
         await self._websocket.send(item)
         await self._websocket.send(ConversationResponseCreateEvent())
+        return True
 
-    async def send_assistant_message(self, text: str) -> None:
+    async def send_assistant_message(self, text: str) -> bool:
         if not self._websocket.is_connected:
             logger.warning("Cannot send assistant message - WebSocket not connected")
-            return
+            return False
 
         logger.info("Injecting assistant message [text=%r]", text)
         await self._websocket.send(ConversationItemCreateEvent.assistant_message(text))
+        return True
 
     async def _forward_events(self) -> None:
         async for event in self._websocket.events():

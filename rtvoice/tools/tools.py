@@ -11,7 +11,7 @@ from rtvoice.conversation import ConversationHistory
 from rtvoice.realtime.schemas import FunctionTool
 from rtvoice.skills.bash import BashRunner
 from rtvoice.skills.manager import SkillManager
-from rtvoice.tools.argument_resolver import ArgumentResolver
+from rtvoice.tools.argument_resolver import resolve_arguments
 from rtvoice.tools.binding import (
     ToolAvailability,
     ToolDescription,
@@ -32,7 +32,6 @@ class Tools:
     def __init__(self):
         self._tools: dict[str, Tool] = {}
         self._context: ToolContext | None = None
-        self._arg_resolver = ArgumentResolver()
         self._handler = MiddlewareChain(self._tools).build(self._invoke)
         self._register_default_tools()
         self._default_tool_names = frozenset(self._tools)
@@ -105,7 +104,7 @@ class Tools:
         )
 
     async def _invoke(self, call: ToolCall) -> ActionResult:
-        resolved_args = self._arg_resolver.resolve(
+        resolved_args = resolve_arguments(
             call.tool, call.raw_args, call.params, call.context
         )
         result = await call.tool.execute(resolved_args)

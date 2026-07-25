@@ -8,6 +8,7 @@ import pytest
 from rtvoice import RealtimeAgent, Skills, Supervisor
 from rtvoice.skills import SkillManager
 from rtvoice.skills.bash import BashArgs, BashRunner, validate_command
+from rtvoice.tools import Tools
 
 
 def make_skill(
@@ -49,6 +50,15 @@ class TestSkillManager:
         assert "Research sources" in prompt
         assert "Use the bundled workflow" not in prompt
         assert manager.names() == ["internet-research"]
+
+    def test_appends_discovery_prompt_to_instructions(self, tmp_path: Path) -> None:
+        make_skill(tmp_path)
+        manager = SkillManager(Skills.from_local_dir(tmp_path))
+
+        instructions = manager.append_discovery_prompt("You are helpful.")
+
+        assert instructions.startswith("You are helpful.")
+        assert "<name>internet-research</name>" in instructions
 
     def test_load_skill_returns_instructions_base_dir_and_resources(
         self, tmp_path: Path
@@ -198,6 +208,27 @@ class TestBash:
         )
 
         assert result == "hello"
+
+
+class TestDefaultTools:
+    def test_tools_registers_skill_defaults(self, tmp_path: Path) -> None:
+        make_skill(tmp_path)
+        manager = SkillManager(Skills.from_local_dir(tmp_path))
+
+        tools = Tools(skill_manager=manager, allowed_commands=["cat"])
+
+        assert tools.get("load_skill") is not None
+        assert tools.get("bash") is not None
+
+    @pytest.mark.asyncio
+    async def test_load_skill_uses_manager(self, tmp_path: Path) -> None:
+        make_skill(tmp_path)
+        manager = SkillManager(Skills.from_local_dir(tmp_path))
+        tools = Tools(skill_manager=manager)
+
+        loaded = await tools.execute("load_skill", {"name": "internet-research"})
+
+        assert "Use the bundled workflow" in loaded
 
 
 class TestAgentIntegration:

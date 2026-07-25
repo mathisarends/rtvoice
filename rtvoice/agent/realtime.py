@@ -35,8 +35,7 @@ from rtvoice.events.views import (
 )
 from rtvoice.realtime import OpenAIProvider, RealtimeProvider, RealtimeSession
 from rtvoice.shared.decorators import timed
-from rtvoice.skills import SkillRuntime, Skills
-from rtvoice.skills.runtime import append_skill_prompt
+from rtvoice.skills import SkillManager, Skills
 from rtvoice.tools import Inject, ToolContext, Tools
 
 logger = logging.getLogger(__name__)
@@ -111,18 +110,19 @@ class RealtimeAgent[T]:
         self._event_bus = EventBus()
         self._conversation_history = ConversationHistory(self._event_bus)
 
-        self._tools = Tools()
+        self._skill_manager = SkillManager(skills) if skills is not None else None
+        self._tools = Tools(
+            skill_manager=self._skill_manager,
+            allowed_commands=allowed_commands or (),
+        )
         if tools:
             self._tools.merge(tools)
 
-        self._skill_runtime = (
-            SkillRuntime(skills, allowed_commands=allowed_commands or ())
-            if skills is not None
-            else None
+        instructions = (
+            self._skill_manager.append_discovery_prompt(instructions)
+            if self._skill_manager is not None
+            else instructions
         )
-        if self._skill_runtime is not None:
-            self._skill_runtime.register_tools(self._tools)
-        instructions = append_skill_prompt(instructions, self._skill_runtime)
 
         self._tools.set_context(
             ToolContext(

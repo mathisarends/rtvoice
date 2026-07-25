@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import (
     Annotated,
     Any,
@@ -15,6 +15,8 @@ from typing import (
 from pydantic import BaseModel
 
 from rtvoice.realtime.schemas import FunctionTool
+from rtvoice.skills.bash import BashArgs, BashRunner
+from rtvoice.skills.manager import SkillManager
 from rtvoice.tools.di import ToolContext, _Inject
 from rtvoice.tools.views import Tool
 
@@ -22,9 +24,15 @@ logger = logging.getLogger(__name__)
 
 
 class Tools:
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        skill_manager: SkillManager | None = None,
+        allowed_commands: Iterable[str] = (),
+    ):
         self.tools: dict[str, Tool] = {}
         self._context: ToolContext | None = None
+        self._register_default_tools(skill_manager, allowed_commands)
 
     def action(
         self,
@@ -93,7 +101,8 @@ class Tools:
         return new
 
     def merge(self, other: Tools) -> None:
-        self.tools.update(other.tools)
+        for tool in other.tools.values():
+            self._register_tool(tool)
 
     def is_registered(self, tool: Tool) -> bool:
         return tool in self.tools.values()
@@ -102,6 +111,36 @@ class Tools:
         if tool.name in self.tools:
             raise ValueError(f"Tool '{tool.name}' already registered")
         self.tools[tool.name] = tool
+
+    def _register_default_tools(
+        self,
+        skill_manager: SkillManager | None,
+        allowed_commands: Iterable[str],
+    ) -> None:
+        if skill_manager is None or skill_manager.size == 0:
+            return
+
+        bash_runner = BashRunner(
+            allowed_commands=tuple(dict.fromkeys(allowed_commands)),
+            allowed_script_dirs=skill_manager.directories,
+        )
+
+        @self.action(
+            "Load a skill's full instructions or one bundled resource. Call this "
+            "before using a skill. Pass only a relative resource path.",
+            name="load_skill",
+        )
+        def load_skill(name: str, path: str | None = "SKILL.md") -> str:
+            return skill_manager.load(name, path)
+
+        @self.action(
+            "Execute a Bash command. Only explicitly allowed commands or "
+            "scripts inside an available skill directory may run.",
+            name="bash",
+            param_model=BashArgs,
+        )
+        async def bash(args: BashArgs) -> str:
+            return await bash_runner.execute(args)
 
     def _prepare_arguments(
         self,

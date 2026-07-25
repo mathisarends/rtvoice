@@ -76,6 +76,14 @@ class SkillManager:
             "</available_skills>"
         )
 
+    def append_discovery_prompt(self, instructions: str) -> str:
+        prompt = self.discovery_prompt()
+        if not prompt:
+            return instructions
+        if not instructions:
+            return prompt
+        return f"{instructions.rstrip()}\n\n{prompt}"
+
     def load(self, name: str, path: str | None = "SKILL.md") -> str:
         discovered = self.get(name)
         current = parse_skill(discovered.location)

@@ -329,6 +329,15 @@ class InputImageConversationContent(BaseModel):
     image_url: str
     detail: Literal["auto", "low", "high"] | None = None
 
+    @field_validator("image_url")
+    @classmethod
+    def _require_base64_data_url(cls, value: str) -> str:
+        if not value.startswith("data:image/") or ";base64," not in value:
+            raise ValueError(
+                "image_url must be a base64 data URL (data:image/<type>;base64,<data>)"
+            )
+        return value
+
 
 ConversationContentItem = Annotated[
     ConversationContent

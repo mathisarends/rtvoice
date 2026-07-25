@@ -248,8 +248,11 @@ class RealtimeAgent[T]:
     async def interrupt(self) -> None:
         await self._realtime_session.interrupt()
 
-    async def send_image(self, image_data_url: str, text: str = "") -> None:
-        await self._realtime_session.send_image(image_data_url, text)
+    async def send_message(self, text: str, *, base64_image: str | None = None) -> None:
+        await self._realtime_session.send_message(text, base64_image=base64_image)
+
+    async def send_assistant_message(self, text: str) -> None:
+        await self._realtime_session.send_assistant_message(text)
 
     @timed()
     async def stop(self) -> None:

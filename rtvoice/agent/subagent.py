@@ -32,7 +32,7 @@ class Subagent[T]:
         max_iterations: int = 10,
         handoff_instructions: str | None = None,
         result_instructions: str | None = None,
-        context: T | None = None,
+        tool_injection_context: T | None = None,
     ) -> None:
         from rtvoice.tools import ToolContext, Tools
 
@@ -54,7 +54,9 @@ class Subagent[T]:
         self.handoff_instructions = handoff_instructions
         self.result_instructions = result_instructions
 
-        self._tools.set_context(ToolContext(context, self._skill_manager))
+        self._tools.set_context(
+            ToolContext(tool_injection_context, self._skill_manager)
+        )
 
     async def start(
         self,

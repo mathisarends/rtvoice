@@ -184,7 +184,7 @@ Any tool parameter typed as `Inject[T]` is filled automatically by the framework
 | ----------------------------- | ----------------------------- |
 | `Inject[EventBus]`            | Transit Bus event bus         |
 | `Inject[ConversationHistory]` | Full conversation so far      |
-| `Inject[YourContextType]`     | Your custom `context=` object |
+| `Inject[YourContextType]`     | Your custom `tool_injection_context=` object |
 
 ```python
 from rtvoice import Tools, Inject
@@ -203,7 +203,7 @@ async def summarise(
 
 ### Custom application context
 
-Pass any object as `context=` on `RealtimeAgent`. It is then injectable in every tool via `Inject[YourType]`.
+Pass any object as `tool_injection_context=` on `RealtimeAgent`. It is then injectable in every tool via `Inject[YourType]`.
 
 ```python
 from dataclasses import dataclass
@@ -224,7 +224,7 @@ async def greet(state: Inject[AppState]) -> str:
 agent = RealtimeAgent(
     instructions="Greet the user when asked.",
     tools=tools,
-    context=AppState(user_name="Alice", premium=True),
+    tool_injection_context=AppState(user_name="Alice", premium=True),
 )
 ```
 
@@ -347,7 +347,7 @@ completion as the tool result.
 | `result_instructions`  | Tells the realtime model how to present the result        |
 | `handoff_instructions` | Extra guidance appended to the tool description           |
 | `max_iterations`       | Loop iteration cap (default: 10)                          |
-| `context`              | Arbitrary object injectable inside subagent tools         |
+| `tool_injection_context` | Arbitrary object injectable inside subagent tools        |
 
 ---
 

@@ -55,7 +55,7 @@ class RealtimeAgent[T]:
         noise_reduction: NoiseReduction = NoiseReduction.FAR_FIELD,
         turn_detection: TurnDetection | None = None,
         tools: Tools | None = None,
-        context: T | None = None,
+        tool_injection_context: T | None = None,
         skills: Skills | None = None,
         subagent: Subagent | None = None,
         audio_input: AudioInputDevice | None = None,
@@ -83,7 +83,6 @@ class RealtimeAgent[T]:
         effective_turn_detection: TurnDetection = turn_detection or SemanticVAD()
 
         self._listener = listener
-        self._context = context
         recording_path_obj = Path(recording_path) if recording_path else None
 
         self._stopped = asyncio.Event()
@@ -107,7 +106,7 @@ class RealtimeAgent[T]:
         tool_context = ToolContext(
             self._event_bus,
             self._conversation_history,
-            context,
+            tool_injection_context,
             self._skill_manager,
             self._subagent,
         )

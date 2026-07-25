@@ -48,7 +48,7 @@ Run it, speak into your microphone, and the agent responds through your speakers
   - [Context injection](#context-injection)
   - [Custom application context](#custom-application-context)
 - [Agent Skills](#agent-skills)
-- [Supervisor](#supervisor)
+- [Subagent](#subagent)
 - [Conversation seeds](#conversation-seeds)
 - [Lifecycle listener](#lifecycle-listener)
 - [Custom audio devices](#custom-audio-devices)
@@ -261,14 +261,14 @@ description: Research current sources. Use when up-to-date facts are required.
 Follow the workflow in `references/workflow.md`.
 ```
 
-Pass a `Skills` source to either `RealtimeAgent` or `Supervisor`:
+Pass a `Skills` source to either `RealtimeAgent` or `Subagent`:
 
 ```python
-from rtvoice import RealtimeAgent, Skills, Supervisor
+from rtvoice import RealtimeAgent, Skills, Subagent
 
 skills = Skills.from_local_dir("./skills")
 
-supervisor = Supervisor(
+subagent = Subagent(
     description="Handles research tasks.",
     instructions="Use the relevant skill before researching.",
     skills=skills,
@@ -279,7 +279,7 @@ agent = RealtimeAgent(
     instructions="Help the user and load relevant skills before using them.",
     skills=skills,
     allowed_commands=["cat"],
-    supervisor=supervisor,
+    subagent=subagent,
 )
 ```
 
@@ -297,12 +297,13 @@ and command substitution and shell control-flow constructs are rejected.
 
 ---
 
-## Supervisor
+## Subagent
 
-Delegate complex, multi-step tasks to one LLM-driven supervisor. The voice agent hands off, speaks a holding phrase, and presents the result when done.
+Delegate complex, multi-step tasks to an LLM-driven subagent. The voice agent
+hands off the task and presents the result when done.
 
 ```python
-from rtvoice import RealtimeAgent, Supervisor, Tools
+from rtvoice import RealtimeAgent, Subagent, Tools
 from rtvoice.llm import ChatOpenAI
 
 tools = Tools()
@@ -316,7 +317,7 @@ async def book_table(
 ) -> str:
     return f"Booked for {party_size} at {restaurant} on {date} at {time}."
 
-supervisor = Supervisor(
+subagent = Subagent(
     description="Books restaurant tables on behalf of the user.",
     instructions="Use book_table to complete booking requests.",
     tools=tools,
@@ -324,30 +325,30 @@ supervisor = Supervisor(
 )
 
 agent = RealtimeAgent(
-    instructions="Delegate restaurant bookings to the supervisor.",
-    supervisor=supervisor,
+    instructions="Delegate restaurant bookings to the subagent.",
+    subagent=subagent,
 )
 ```
 
-**How it works:** the realtime agent provides the `Supervisor` through tool
-dependency injection and registers it as a regular `supervisor` tool. When
-invoked, the supervisor runs its own tool-calling loop and returns the final LLM
+**How it works:** the realtime agent provides the `Subagent` through tool
+dependency injection and registers it as a regular `subagent` tool. When
+invoked, the subagent runs its own tool-calling loop and returns the final LLM
 completion as the tool result.
 
-**`Supervisor` parameters:**
+**`Subagent` parameters:**
 
 | Parameter              | Description                                               |
 | ---------------------- | --------------------------------------------------------- |
 | `description`          | Shown to the realtime model to decide when to delegate    |
-| `instructions`         | System prompt for the supervisor's own LLM loop           |
+| `instructions`         | System prompt for the subagent's own LLM loop             |
 | `llm`                  | `ChatOpenAI(model=...)` or any `ChatModel` implementation |
-| `tools`                | `Tools` instance with the actions the supervisor may call |
+| `tools`                | `Tools` instance with the actions the subagent may call   |
 | `skills`               | Local Agent Skills exposed through progressive disclosure |
 | `allowed_commands`     | Commands the skill `bash` tool may execute                 |
 | `result_instructions`  | Tells the realtime model how to present the result        |
 | `handoff_instructions` | Extra guidance appended to the tool description           |
 | `max_iterations`       | Loop iteration cap (default: 10)                          |
-| `context`              | Arbitrary object injectable inside supervisor tools       |
+| `context`              | Arbitrary object injectable inside subagent tools         |
 
 ---
 

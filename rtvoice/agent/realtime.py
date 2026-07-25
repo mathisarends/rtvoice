@@ -5,7 +5,7 @@ from pathlib import Path
 from transitbus import EventBus
 
 from rtvoice.agent.listener import AgentListener, AgentListenerBridge
-from rtvoice.agent.supervisor import Supervisor
+from rtvoice.agent.subagent import Subagent
 from rtvoice.agent.views import (
     AgentResult,
     AssistantVoice,
@@ -55,7 +55,7 @@ class RealtimeAgent[T]:
         tools: Tools | None = None,
         skills: Skills | None = None,
         allowed_commands: list[str] | None = None,
-        supervisor: Supervisor | None = None,
+        subagent: Subagent | None = None,
         audio_input: AudioInputDevice | None = None,
         audio_output: AudioOutputDevice | None = None,
         context: T | None = None,
@@ -69,7 +69,7 @@ class RealtimeAgent[T]:
         enable_preambles: bool = True,
         pricing_catalog: PricingCatalog | None = None,
     ):
-        self._supervisor = supervisor
+        self._subagent = subagent
 
         if api_key and provider:
             raise ValueError("Pass either `provider` or `api_key`, not both.")
@@ -123,7 +123,7 @@ class RealtimeAgent[T]:
                 context,
                 self._skill_manager,
                 self._bash_runner,
-                self._supervisor,
+                self._subagent,
             )
         )
 

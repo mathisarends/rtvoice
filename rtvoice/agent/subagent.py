@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from rtvoice.llm import (
     AssistantMessage,
@@ -11,13 +14,14 @@ from rtvoice.llm import (
 )
 from rtvoice.skills import SkillManager, Skills
 from rtvoice.skills.bash import BashRunner
-from rtvoice.tools import Tools
-from rtvoice.tools.di import ToolContext
+
+if TYPE_CHECKING:
+    from rtvoice.tools import Tools
 
 logger = logging.getLogger(__name__)
 
 
-class Supervisor[T]:
+class Subagent[T]:
     def __init__(
         self,
         *,
@@ -32,7 +36,9 @@ class Supervisor[T]:
         result_instructions: str | None = None,
         context: T | None = None,
     ) -> None:
-        self.name = "supervisor"
+        from rtvoice.tools import ToolContext, Tools
+
+        self.name = "subagent"
         self.description = description
         self._llm = llm or ChatModel(model="gpt-5.4-mini")
         self._skill_manager = SkillManager(skills) if skills is not None else None

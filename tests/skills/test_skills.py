@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from rtvoice import RealtimeAgent, Skills, Supervisor
+from rtvoice import RealtimeAgent, Skills, Subagent
 from rtvoice.skills import SkillManager
 from rtvoice.skills.bash import BashArgs, BashRunner, validate_command
 from rtvoice.tools import ToolContext, Tools
@@ -274,22 +274,22 @@ class TestAgentIntegration:
         assert agent._tools.get("bash") is not None
 
     @pytest.mark.asyncio
-    async def test_supervisor_loads_skill_progressively(self, tmp_path: Path) -> None:
+    async def test_subagent_loads_skill_progressively(self, tmp_path: Path) -> None:
         make_skill(tmp_path)
-        supervisor = Supervisor(
-            description="Research supervisor",
+        subagent = Subagent(
+            description="Research subagent",
             instructions="Be accurate.",
             llm=MagicMock(),
             skills=Skills.from_local_dir(tmp_path),
             allowed_commands=["cat"],
         )
 
-        assert "<name>internet-research</name>" in supervisor._instructions
-        assert "Use the bundled workflow" not in supervisor._instructions
-        assert supervisor._tools.get("load_skill") is not None
-        assert supervisor._tools.get("bash") is not None
+        assert "<name>internet-research</name>" in subagent._instructions
+        assert "Use the bundled workflow" not in subagent._instructions
+        assert subagent._tools.get("load_skill") is not None
+        assert subagent._tools.get("bash") is not None
 
-        loaded = await supervisor._tools.execute(
+        loaded = await subagent._tools.execute(
             "load_skill", {"name": "internet-research"}
         )
 

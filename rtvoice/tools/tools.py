@@ -6,6 +6,7 @@ from typing import Any, Self
 
 from pydantic import BaseModel
 
+from rtvoice.agent.subagent import Subagent
 from rtvoice.conversation import ConversationHistory
 from rtvoice.realtime.schemas import FunctionTool
 from rtvoice.skills.bash import BashRunner
@@ -17,10 +18,9 @@ from rtvoice.tools.binding import (
     provided,
     requires,
 )
-from rtvoice.tools.dependencies import Supervisor
 from rtvoice.tools.di import Inject, ToolContext
 from rtvoice.tools.executor import ToolExecutor
-from rtvoice.tools.params import BashParams, LoadSkillParams, SupervisorParams
+from rtvoice.tools.params import BashParams, LoadSkillParams, SubagentParams
 from rtvoice.tools.results import ActionResult
 from rtvoice.tools.views import ActionKind, Tool
 
@@ -66,9 +66,9 @@ class Tools:
     def set_context(self, context: ToolContext) -> None:
         self._context = context
         self._executor.set_context(context)
-        supervisor = context.resolve(Supervisor)
-        self.tools["supervisor"].result_instruction = (
-            supervisor.result_instructions if supervisor is not None else None
+        subagent = context.resolve(Subagent)
+        self.tools["subagent"].result_instruction = (
+            subagent.result_instructions if subagent is not None else None
         )
 
     def inject_tool(self, tool: Tool) -> None:
@@ -125,20 +125,20 @@ class Tools:
     def _register_default_tools(self) -> None:
         @self.action(
             described(
-                Supervisor,
-                render=_describe_supervisor,
-                default="Delegate a task to the supervisor.",
+                Subagent,
+                render=_describe_subagent,
+                default="Delegate a task to the subagent.",
             ),
-            name="supervisor",
-            params=SupervisorParams,
-            available_when=provided(Supervisor),
+            name="subagent",
+            params=SubagentParams,
+            available_when=provided(Subagent),
         )
-        async def supervisor(
-            params: SupervisorParams,
-            supervisor: Inject[Supervisor],
+        async def subagent(
+            params: SubagentParams,
+            subagent: Inject[Subagent],
             conversation_history: Inject[ConversationHistory],
         ) -> str:
-            return await supervisor.start(
+            return await subagent.start(
                 params.task,
                 context=conversation_history.format(),
             )
@@ -171,10 +171,10 @@ class Tools:
             return ActionResult.success(output)
 
 
-def _describe_supervisor(supervisor: Supervisor) -> str:
-    if not supervisor.handoff_instructions:
-        return supervisor.description
+def _describe_subagent(subagent: Subagent) -> str:
+    if not subagent.handoff_instructions:
+        return subagent.description
     return (
-        f"{supervisor.description}\n\n"
-        f"Handoff instructions: {supervisor.handoff_instructions}"
+        f"{subagent.description}\n\n"
+        f"Handoff instructions: {subagent.handoff_instructions}"
     )

@@ -8,5 +8,5 @@ possible. When the user corrects a mistake, record it below as a short bullet
 
 - Comments explain the *why*, never the *what/how*. Drop docstrings that just
   restate the signature.
-- Register injectable dependencies such as `Supervisor` in the tool layer.
+- Register injectable dependencies such as `Subagent` in the tool layer.
 - Store constructor dependencies used by handlers, including `event_bus`, on `self`.

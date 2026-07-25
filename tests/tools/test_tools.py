@@ -270,7 +270,7 @@ class TestJsonToolSchema:
         assert tools.get_json_tool_schema() == []
 
 
-class TestSupervisorTools:
+class TestToolStatuses:
     def test_tool_format_status_formats_template(self) -> None:
         agent = Tools()
 

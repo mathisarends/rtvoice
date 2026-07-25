@@ -1,4 +1,4 @@
-from .agent import AgentListener, RealtimeAgent, Supervisor
+from .agent import AgentListener, RealtimeAgent, Subagent
 from .agent.views import (
     AssistantVoice,
     ConversationSeed,
@@ -53,7 +53,7 @@ __all__ = [
     "ServerVAD",
     "Skill",
     "Skills",
-    "Supervisor",
+    "Subagent",
     "TokenTotals",
     "TokenTracker",
     "ToolContext",

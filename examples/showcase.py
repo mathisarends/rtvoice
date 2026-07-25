@@ -1,8 +1,8 @@
 """
-rtvoice Showcase — Supervisor Tool Chaining Demo
+rtvoice Showcase — Subagent Tool Chaining Demo
 =================================================
 
-Demonstrates how the supervisor autonomously combines multiple tools
+Demonstrates how the subagent autonomously combines multiple tools
 to answer a location- and time-aware question.
 
 Try saying
@@ -24,7 +24,7 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 
-from rtvoice import RealtimeAgent, Supervisor, Tools
+from rtvoice import RealtimeAgent, Subagent, Tools
 from rtvoice.llm import ChatOpenAI
 
 load_dotenv(override=True)
@@ -110,12 +110,12 @@ def build_tools() -> Tools:
 
 
 # ---------------------------------------------------------------------------
-# Supervisor
+# Subagent
 # ---------------------------------------------------------------------------
 
 
-def build_supervisor() -> Supervisor:
-    return Supervisor(
+def build_subagent() -> Subagent:
+    return Subagent(
         description=(
             "Answers questions about whether a local store is currently open, "
             "combining the user's location, the current time, and a web search."
@@ -147,9 +147,9 @@ async def main() -> None:
     agent = RealtimeAgent(
         instructions=(
             "You are Jet, a calm and friendly personal voice assistant.\n"
-            "Your only responsible for user facing conversation. If the question is more complex - you delegate to the supervisor agent."
+            "Your only responsible for user facing conversation. If the question is more complex - you delegate to the subagent."
         ),
-        supervisor=build_supervisor(),
+        subagent=build_subagent(),
         inactivity_timeout_seconds=90,
         inactivity_timeout_enabled=True,
     )

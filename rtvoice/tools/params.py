@@ -25,5 +25,5 @@ class BashParams(ToolParams, BashArgs):
     pass
 
 
-class SupervisorParams(ToolParams):
-    task: str = Field(description="The task to hand off to the supervisor.")
+class SubagentParams(ToolParams):
+    task: str = Field(description="The task to hand off to the subagent.")

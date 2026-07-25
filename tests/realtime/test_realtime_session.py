@@ -42,7 +42,6 @@ class FakeWebSocket:
 def make_session(
     *,
     conversation_seed: ConversationSeed | None = None,
-    enable_preambles: bool = True,
 ) -> tuple[RealtimeSession, FakeWebSocket, list[str]]:
     event_bus = EventBus()
     websocket = FakeWebSocket()
@@ -75,7 +74,6 @@ def make_session(
             inactivity_timeout_seconds=None,
             recording_path=None,
             provider=MagicMock(),
-            enable_preambles=enable_preambles,
         )
     session._websocket = websocket
 
@@ -143,27 +141,3 @@ class TestSessionSettings:
         payload = session._build_session_settings().model_dump(exclude_none=True)
 
         assert payload["reasoning"] == {"effort": ReasoningEffort.LOW}
-
-    def test_native_preamble_guidance_is_added_when_tools_exist(self) -> None:
-        session, _, _ = make_session()
-
-        @session._tools.action("Look something up")
-        async def lookup(query: str) -> str:
-            return query
-
-        settings = session._build_session_settings()
-
-        assert settings.instructions is not None
-        assert settings.instructions.startswith("Test assistant")
-        assert "about to call a tool" in settings.instructions
-
-    def test_native_preamble_guidance_can_be_disabled(self) -> None:
-        session, _, _ = make_session(enable_preambles=False)
-
-        @session._tools.action("Look something up")
-        async def lookup(query: str) -> str:
-            return query
-
-        settings = session._build_session_settings()
-
-        assert settings.instructions == "Test assistant"

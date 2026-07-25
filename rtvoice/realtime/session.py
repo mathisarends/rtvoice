@@ -43,9 +43,7 @@ from rtvoice.realtime.schemas import (
     AudioSettings,
     ConversationItemCreateEvent,
     ConversationResponseCreateEvent,
-    InputAudioNoiseReductionSettings,
     InputAudioTranscriptionSettings,
-    NoiseReductionType,
     RealtimeSessionSettings,
     SemanticVADSettings,
     ServerVADSettings,
@@ -65,12 +63,6 @@ if TYPE_CHECKING:
     from rtvoice.tools import Tools
 
 logger = logging.getLogger(__name__)
-
-_PREAMBLE_GUIDANCE = (
-    "When you are about to call a tool that may take a moment, first say a short, "
-    "natural acknowledgment of what you are doing. If the user asks for a result "
-    "that is not ready yet, tell them you are still working on it."
-)
 
 
 class RealtimeSession:
@@ -93,7 +85,6 @@ class RealtimeSession:
         inactivity_timeout_seconds: float | None,
         recording_path: Path | None,
         provider: RealtimeProvider,
-        enable_preambles: bool = True,
         pricing_catalog: PricingCatalog | None = None,
     ):
         model.warn_if_deprecated(stacklevel=3)
@@ -114,7 +105,6 @@ class RealtimeSession:
         self._transcription_enabled = self._transcription_model is not None
         self._inactivity_timeout_seconds = inactivity_timeout_seconds
         self._recording_path = recording_path
-        self._enable_preambles = enable_preambles
 
         self._websocket = RealtimeWebSocket(model=model, provider=provider)
         self._token_tracker = TokenTracker(
@@ -299,12 +289,6 @@ class RealtimeSession:
             else InputAudioTranscriptionSettings(model=self._transcription_model)
         )
 
-        instructions = self._instructions
-        if self._enable_preambles and self._tools.get_tool_schema():
-            instructions = "\n\n".join(
-                part for part in (instructions, _PREAMBLE_GUIDANCE) if part
-            )
-
         return RealtimeSessionSettings(
             model=self._model,
             reasoning=(
@@ -312,16 +296,14 @@ class RealtimeSession:
                 if self._reasoning_effort is None
                 else {"effort": self._reasoning_effort}
             ),
-            instructions=instructions,
+            instructions=self._instructions,
             output_modalities=self._output_modalities,
             tool_choice=ToolChoiceMode.AUTO,
             tools=self._tools.get_tool_schema(),
             audio=AudioSettings(
-                input=AudioInputSettings(
+                input=AudioInputSettings.with_noise_reduction(
                     turn_detection=turn_detection_settings,
-                    noise_reduction=InputAudioNoiseReductionSettings(
-                        type=NoiseReductionType(self._noise_reduction)
-                    ),
+                    noise_reduction=self._noise_reduction,
                     transcription=transcription_settings,
                 ),
                 output=AudioOutputSettings(

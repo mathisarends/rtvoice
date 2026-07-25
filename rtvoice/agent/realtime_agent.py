@@ -65,7 +65,6 @@ class RealtimeAgent[T]:
         recording_path: str | Path | None = None,
         provider: RealtimeProvider | None = None,
         api_key: str | None = None,
-        enable_preambles: bool = True,
         pricing_catalog: PricingCatalog | None = None,
     ):
         self._subagent = subagent
@@ -134,7 +133,6 @@ class RealtimeAgent[T]:
             inactivity_timeout_seconds=inactivity_timeout_seconds,
             recording_path=recording_path_obj,
             provider=provider or OpenAIProvider(api_key=api_key),
-            enable_preambles=enable_preambles,
             pricing_catalog=pricing_catalog,
         )
 

@@ -90,6 +90,11 @@ class NoiseReductionType(StrEnum):
     FAR_FIELD = "far_field"
 
 
+class TurnDetectionType(StrEnum):
+    SERVER_VAD = "server_vad"
+    SEMANTIC_VAD = "semantic_vad"
+
+
 class AudioInputFormat(StrEnum):
     PCM = "audio/pcm"
     ULAW = "audio/pcmu"
@@ -189,6 +194,22 @@ class AudioInputSettings(BaseModel):
             type=NoiseReductionType.FAR_FIELD
         )
     )
+
+    @classmethod
+    def with_noise_reduction(
+        cls,
+        *,
+        turn_detection: TurnDetectionSettings,
+        noise_reduction: str,
+        transcription: InputAudioTranscriptionSettings | None,
+    ) -> Self:
+        return cls(
+            turn_detection=turn_detection,
+            noise_reduction=InputAudioNoiseReductionSettings(
+                type=NoiseReductionType(noise_reduction)
+            ),
+            transcription=transcription,
+        )
 
 
 class AudioSettings(BaseModel):

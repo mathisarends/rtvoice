@@ -125,11 +125,6 @@ Nested Pydantic models, typed lists, enums, literals, defaults, and `Field(descr
 
 ### Long-running tools
 
-Realtime models provide native preambles for long-running tools. By default,
-rtvoice adds guidance that asks the model to briefly acknowledge work before a
-tool call and to say when a result is still pending. Set
-`enable_preambles=False` on `RealtimeAgent` to disable that guidance.
-
 ```python
 @tools.action(
     "Search the web for a query",

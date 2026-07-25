@@ -11,6 +11,7 @@ from rtvoice.conversation import ConversationHistory
 from rtvoice.realtime.schemas import FunctionTool
 from rtvoice.skills.bash import BashRunner
 from rtvoice.skills.manager import SkillManager
+from rtvoice.tools.argument_resolver import ArgumentResolver
 from rtvoice.tools.binding import (
     ToolAvailability,
     ToolDescription,
@@ -19,7 +20,7 @@ from rtvoice.tools.binding import (
     requires,
 )
 from rtvoice.tools.di import Inject, ToolContext
-from rtvoice.tools.executor import ToolExecutor
+from rtvoice.tools.middleware import MiddlewareChain, ToolCall
 from rtvoice.tools.params import BashParams, LoadSkillParams, SubagentParams
 from rtvoice.tools.results import ActionResult
 from rtvoice.tools.views import ActionKind, Tool
@@ -29,11 +30,12 @@ logger = logging.getLogger(__name__)
 
 class Tools:
     def __init__(self):
-        self.tools: dict[str, Tool] = {}
+        self._tools: dict[str, Tool] = {}
         self._context: ToolContext | None = None
-        self._executor = ToolExecutor(self.tools, self._context)
+        self._arg_resolver = ArgumentResolver()
+        self._handler = MiddlewareChain(self._tools).build(self._invoke)
         self._register_default_tools()
-        self._default_tool_names = frozenset(self.tools)
+        self._default_tool_names = frozenset(self._tools)
 
     def action(
         self,
@@ -65,25 +67,24 @@ class Tools:
 
     def set_context(self, context: ToolContext) -> None:
         self._context = context
-        self._executor.set_context(context)
         subagent = context.resolve(Subagent)
-        self.tools["subagent"].result_instruction = (
+        self._tools["subagent"].result_instruction = (
             subagent.result_instructions if subagent is not None else None
         )
 
     def inject_tool(self, tool: Tool) -> None:
-        self.tools[tool.name] = tool
+        self._tools[tool.name] = tool
 
     def eject_tool(self, name: str) -> None:
-        self.tools.pop(name, None)
+        self._tools.pop(name, None)
 
     def get(self, name: str) -> Tool | None:
-        return self.tools.get(name)
+        return self._tools.get(name)
 
     def get_tool_schema(self) -> list[FunctionTool]:
         return [
             tool.to_schema(self._context)
-            for tool in self.tools.values()
+            for tool in self._tools.values()
             if tool.is_available(self._context)
         ]
 
@@ -99,28 +100,39 @@ class Tools:
     async def execute(
         self, name: str, arguments: dict[str, Any] | None = None
     ) -> ActionResult:
-        return await self._executor.execute(name, arguments)
+        return await self._handler(
+            ToolCall(name=name, raw_args=arguments or {}, context=self._context)
+        )
+
+    async def _invoke(self, call: ToolCall) -> ActionResult:
+        resolved_args = self._arg_resolver.resolve(
+            call.tool, call.raw_args, call.params, call.context
+        )
+        result = await call.tool.execute(resolved_args)
+        if isinstance(result, ActionResult):
+            return result
+        return ActionResult.success(result)
 
     def clone(self) -> Self:
         new = type(self)()
-        # mutate in place so the clone's executor keeps referencing this dict
-        new.tools.update(self.tools)
+        # mutate in place so the clone's handler chain keeps referencing this dict
+        new._tools.update(self._tools)
         return new
 
     def merge(self, other: Tools) -> None:
-        for tool in other.tools.values():
+        for tool in other._tools.values():
             # every Tools carries the defaults, so merging must not collide on them
             if tool.name in self._default_tool_names:
                 continue
             self._register_tool(tool)
 
     def is_registered(self, tool: Tool) -> bool:
-        return tool in self.tools.values()
+        return tool in self._tools.values()
 
     def _register_tool(self, tool: Tool) -> None:
-        if tool.name in self.tools:
+        if tool.name in self._tools:
             raise ValueError(f"Tool '{tool.name}' already registered")
-        self.tools[tool.name] = tool
+        self._tools[tool.name] = tool
 
     def _register_default_tools(self) -> None:
         @self.action(

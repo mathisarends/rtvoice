@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import Sequence
 from typing import Annotated, Any, get_args, get_origin, get_type_hints
 
 from pydantic import BaseModel
 
 from rtvoice.tools.di import ToolContext, _InjectMarker
-from rtvoice.tools.middleware import MiddlewareChain, ToolCall, ToolMiddleware
-from rtvoice.tools.results import ActionResult
 from rtvoice.tools.views import Tool
 
 
@@ -18,36 +15,8 @@ def _is_injectable(hint: Any) -> bool:
     return any(isinstance(metadata, _InjectMarker) for metadata in get_args(hint))
 
 
-class ToolExecutor:
-    def __init__(
-        self,
-        tools: dict[str, Tool],
-        context: ToolContext | None,
-        middlewares: Sequence[ToolMiddleware] | None = None,
-    ) -> None:
-        self._context = context
-        self._handler = MiddlewareChain(tools, middlewares).build(self._invoke)
-
-    def set_context(self, context: ToolContext | None) -> None:
-        self._context = context
-
-    async def execute(
-        self, name: str, args: dict[str, Any] | None = None
-    ) -> ActionResult:
-        return await self._handler(
-            ToolCall(name=name, raw_args=args or {}, context=self._context)
-        )
-
-    async def _invoke(self, call: ToolCall) -> ActionResult:
-        resolved_args = self._resolve_args(
-            call.tool, call.raw_args, call.params, call.context
-        )
-        result = await call.tool.execute(resolved_args)
-        if isinstance(result, ActionResult):
-            return result
-        return ActionResult.success(result)
-
-    def _resolve_args(
+class ArgumentResolver:
+    def resolve(
         self,
         tool: Tool,
         args: dict[str, Any],

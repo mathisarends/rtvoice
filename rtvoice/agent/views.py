@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from rtvoice.conversation.views import ConversationTurn
 from rtvoice.llm import Message
+from rtvoice.tokens.models import UsageReport
 
 type OutputModality = Literal["text", "audio"]
 
@@ -81,6 +82,8 @@ class AssistantVoice(StrEnum):
 
 class TranscriptionModel(StrEnum):
     WHISPER_1 = "whisper-1"
+    GPT_4O_TRANSCRIBE = "gpt-4o-transcribe"
+    GPT_4O_MINI_TRANSCRIBE = "gpt-4o-mini-transcribe"
 
 
 class NoiseReduction(StrEnum):
@@ -157,6 +160,7 @@ class AgentError:
 class AgentResult(BaseModel):
     turns: list[ConversationTurn]
     recording_path: Path | None = None
+    usage: UsageReport
 
 
 @dataclass

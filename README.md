@@ -586,6 +586,35 @@ The returned `AgentResult` also contains `result.turns` — a list of `Conversat
 
 ---
 
+## Token usage and cost estimate
+
+Every `response.done` and input-transcription completion event is tracked for
+the lifetime of an agent. The final result contains modality-level token totals,
+cached input tokens, and an estimated USD cost:
+
+```python
+result = await agent.start()
+
+print(result.usage.tokens.realtime.input_audio_tokens)
+print(result.usage.tokens.realtime.output_audio_tokens)
+print(result.usage.tokens.realtime.cached_input_tokens)
+print(result.usage.cost.total, result.usage.cost.currency)
+```
+
+The built-in price catalog is a dated USD snapshot. `agent.usage_report()`
+returns the current report while a session is running. Currency conversion is
+deliberately left to the caller because exchange rates fluctuate.
+
+Pass a custom `PricingCatalog` to `RealtimeAgent` when using provider-specific
+or negotiated rates.
+
+`estimate.cost.is_complete` is false when an event lacks the modality details
+needed for exact pricing. Whisper is billed per minute; if the event only
+contains audio tokens, its duration is estimated at 100 ms per audio token and
+recorded in `estimate.cost.notes`.
+
+---
+
 ## Inactivity timeout
 
 Automatically stop the agent after a period of user silence:

@@ -32,7 +32,8 @@
       "Bash(rm \"C:/code/rtvoice/Agents.md\")",
       "Bash(ln -s \"Claude.md\" \"C:/code/rtvoice/Agents.md\")",
       "Bash(git *)",
-      "PowerShell(uv run *)"
+      "PowerShell(uv run *)",
+      "PowerShell(git add *)"
     ]
   }
 }

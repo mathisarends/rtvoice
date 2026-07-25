@@ -37,6 +37,7 @@ from rtvoice.realtime import OpenAIProvider, RealtimeProvider, RealtimeSession
 from rtvoice.shared.decorators import timed
 from rtvoice.skills import SkillManager, Skills
 from rtvoice.skills.bash import BashRunner
+from rtvoice.tokens import PricingCatalog, UsageReport
 from rtvoice.tools import Inject, ToolContext, Tools
 from rtvoice.tools.params import HandoffParams
 from rtvoice.tools.results import ActionResult
@@ -72,6 +73,7 @@ class RealtimeAgent[T]:
         provider: RealtimeProvider | None = None,
         api_key: str | None = None,
         enable_preambles: bool = True,
+        pricing_catalog: PricingCatalog | None = None,
     ):
         self._supervisor = supervisor
 
@@ -165,6 +167,7 @@ class RealtimeAgent[T]:
             recording_path=recording_path_obj,
             provider=provider or OpenAIProvider(api_key=api_key),
             enable_preambles=enable_preambles,
+            pricing_catalog=pricing_catalog,
         )
 
         self._setup_shutdown_handlers()
@@ -300,6 +303,7 @@ class RealtimeAgent[T]:
         return AgentResult(
             turns=self._conversation_history.turns,
             recording_path=self._realtime_session.recording_path,
+            usage=self._realtime_session.usage_report,
         )
 
     async def set_speech_speed(
@@ -311,6 +315,9 @@ class RealtimeAgent[T]:
 
     async def send_image(self, image_data_url: str, text: str = "") -> None:
         await self._realtime_session.send_image(image_data_url, text)
+
+    def usage_report(self) -> UsageReport:
+        return self._realtime_session.token_tracker.report()
 
     @timed()
     async def stop(self) -> None:

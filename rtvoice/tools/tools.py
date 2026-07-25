@@ -119,7 +119,6 @@ class Tools:
         @self.action(
             "Load a skill's full instructions or one bundled resource. Call this "
             "before using a skill. Pass only a relative resource path.",
-            name="load_skill",
             params=LoadSkillParams,
             available_when=requires(
                 SkillManager, predicate=lambda manager: manager.size > 0
@@ -128,12 +127,12 @@ class Tools:
         def load_skill(
             params: LoadSkillParams, skill_manager: Inject[SkillManager]
         ) -> ActionResult:
-            return ActionResult.success(skill_manager.load(params.name, params.path))
+            content = skill_manager.load(params.name, params.path)
+            return ActionResult.success(content)
 
         @self.action(
             "Execute a Bash command. Only explicitly allowed commands or "
             "scripts inside an available skill directory may run.",
-            name="bash",
             params=BashParams,
             kind=ActionKind.DESTRUCTIVE,
             available_when=provided(BashRunner),
@@ -141,4 +140,5 @@ class Tools:
         async def bash(
             params: BashParams, bash_runner: Inject[BashRunner]
         ) -> ActionResult:
-            return ActionResult.success(await bash_runner.execute(params))
+            output = await bash_runner.execute(params)
+            return ActionResult.success(output)

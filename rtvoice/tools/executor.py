@@ -38,11 +38,14 @@ class ToolExecutor:
             ToolCall(name=name, raw_args=args or {}, context=self._context)
         )
 
-    async def _invoke(self, call: ToolCall):
+    async def _invoke(self, call: ToolCall) -> ActionResult:
         resolved_args = self._resolve_args(
             call.tool, call.raw_args, call.params, call.context
         )
-        return await call.tool.execute(resolved_args)
+        result = await call.tool.execute(resolved_args)
+        if isinstance(result, ActionResult):
+            return result
+        return ActionResult.success(result)
 
     def _resolve_args(
         self,

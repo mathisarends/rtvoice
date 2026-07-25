@@ -67,13 +67,11 @@ def register_tool(
     tools: Tools,
     name: str = "supervisor",
     result_instruction: str | None = None,
-    holding_instruction: str | None = None,
 ) -> Tool:
     @tools.action(
         "Test tool",
         name=name,
         result_instruction=result_instruction,
-        holding_instruction=holding_instruction,
     )
     async def _tool(query: str | None = None) -> str:
         return "tool_result"
@@ -87,7 +85,6 @@ def register_tool_with_calls(
     tools: Tools,
     name: str = "supervisor",
     result_instruction: str | None = None,
-    holding_instruction: str | None = None,
 ) -> tuple[Tool, list[dict]]:
     calls: list[dict] = []
 
@@ -95,7 +92,6 @@ def register_tool_with_calls(
         "Test tool",
         name=name,
         result_instruction=result_instruction,
-        holding_instruction=holding_instruction,
     )
     async def _tool(
         query: str | None = None, clarification_answer: str | None = None
@@ -172,29 +168,6 @@ class TestToolCallHandling:
         assert tool is None
 
     @pytest.mark.asyncio
-    async def test_holding_instruction_is_a_no_op(
-        self,
-        event_bus: EventBus,
-        coordinator: SupervisorCallCoordinator,
-        websocket: AsyncMock,
-        tools: Tools,
-    ) -> None:
-        tool = register_tool(tools, holding_instruction="Please wait briefly.")
-        release = asyncio.Event()
-
-        async def blocking_tool(query: str | None = None) -> str:
-            await release.wait()
-            return "tool_result"
-
-        tool.function = blocking_tool
-
-        await event_bus.dispatch(make_function_call_item())
-
-        websocket.send.assert_not_called()
-        release.set()
-        await asyncio.sleep(0.05)
-
-    @pytest.mark.asyncio
     async def test_does_not_send_holding_response_without_instruction(
         self,
         event_bus: EventBus,
@@ -269,7 +242,7 @@ class TestToolCallHandling:
 
         tool = tools.get("supervisor")
         assert tool is not None
-        tool.function = blocking_execute
+        tool.fn = blocking_execute
 
         await event_bus.dispatch(make_function_call_item(call_id="call_1"))
         await event_bus.dispatch(make_function_call_item(call_id="call_2"))
@@ -303,7 +276,7 @@ class TestResultDelivery:
         async def done_tool(query: str | None = None) -> str:
             return "job_done"
 
-        tool.function = done_tool
+        tool.fn = done_tool
 
         await event_bus.dispatch(make_function_call_item(call_id="call_lr"))
         await asyncio.sleep(0.05)
@@ -326,7 +299,7 @@ class TestResultDelivery:
         async def done_tool(query: str | None = None) -> str:
             return "job_done"
 
-        tool.function = done_tool
+        tool.fn = done_tool
 
         await event_bus.dispatch(make_function_call_item(call_id="call_lr"))
         await asyncio.sleep(0.05)
@@ -349,7 +322,7 @@ class TestResultDelivery:
         async def silent_done_tool(query: str | None = None) -> SupervisorDone:
             return SupervisorDone(message="job_done")
 
-        tool.function = silent_done_tool
+        tool.fn = silent_done_tool
 
         await event_bus.dispatch(make_function_call_item(call_id="call_silent"))
         await asyncio.sleep(0.05)
@@ -383,7 +356,7 @@ class TestResultDelivery:
         async def done_tool(query: str | None = None) -> str:
             return "done"
 
-        tool.function = done_tool
+        tool.fn = done_tool
 
         await event_bus.dispatch(make_function_call_item())
         await asyncio.sleep(0.05)
@@ -404,7 +377,7 @@ class TestResultDelivery:
         async def done_tool(query: str | None = None) -> str:
             return "done"
 
-        tool.function = done_tool
+        tool.fn = done_tool
         received: list[SupervisorFinishedEvent] = []
 
         async def capture(e: SupervisorFinishedEvent) -> None:
@@ -435,7 +408,7 @@ class TestResultDelivery:
 
         tool = tools.get("supervisor")
         assert tool is not None
-        tool.function = blocking_execute
+        tool.fn = blocking_execute
 
         await event_bus.dispatch(make_function_call_item())
         await asyncio.sleep(0.05)
@@ -471,7 +444,7 @@ class TestCancelSupervisor:
 
         tool = tools.get("supervisor")
         assert tool is not None
-        tool.function = blocking_execute
+        tool.fn = blocking_execute
 
         await event_bus.dispatch(make_function_call_item())
         await event_bus.dispatch(CancelSupervisorCommand())
@@ -494,7 +467,7 @@ class TestCancelSupervisor:
 
         tool = tools.get("supervisor")
         assert tool is not None
-        tool.function = blocking_execute
+        tool.fn = blocking_execute
 
         received: list[SupervisorFinishedEvent] = []
 
@@ -536,7 +509,7 @@ class TestCancelSupervisor:
 
         tool = tools.get("supervisor")
         assert tool is not None
-        tool.function = blocking_execute
+        tool.fn = blocking_execute
 
         await event_bus.dispatch(make_function_call_item())
         result_task = coordinator._active.execution_task
@@ -566,7 +539,7 @@ class TestCancelTool:
         async def done_tool(query: str | None = None) -> str:
             return "done"
 
-        tool.function = done_tool
+        tool.fn = done_tool
 
         received: list[UpdateSessionToolsCommand] = []
 
@@ -606,7 +579,7 @@ class TestUpdateSupervisor:
 
         tool = tools.get("supervisor")
         assert tool is not None
-        tool.function = blocking_execute
+        tool.fn = blocking_execute
 
         await event_bus.dispatch(make_function_call_item())
         await event_bus.dispatch(
@@ -639,7 +612,7 @@ class TestUpdateSupervisor:
     ) -> None:
         supervisor = coordinator._supervisor
         supervisor.update = AsyncMock()
-        tools.set_context(ToolContext(event_bus=event_bus))
+        tools.set_context(ToolContext(event_bus))
         register_tool(tools)
         block = asyncio.Event()
 
@@ -649,14 +622,14 @@ class TestUpdateSupervisor:
 
         tool = tools.get("supervisor")
         assert tool is not None
-        tool.function = blocking_execute
+        tool.fn = blocking_execute
 
         await event_bus.dispatch(make_function_call_item())
         result = await tools.execute(
             "update_supervisor", {"message": "Prioritize Europe"}
         )
 
-        assert result == "The supervisor has received the update."
+        assert result.value == "The supervisor has received the update."
         supervisor.update.assert_awaited_once_with("Prioritize Europe")
         block.set()
         await asyncio.sleep(0.05)
@@ -688,7 +661,7 @@ class TestClarificationFlow:
                 clarify_call_id="clarify_1",
             )
 
-        tool.function = clarify_tool
+        tool.fn = clarify_tool
 
         await event_bus.dispatch(make_function_call_item(call_id="call_clarify"))
         await asyncio.sleep(0.05)

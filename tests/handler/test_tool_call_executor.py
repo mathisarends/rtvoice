@@ -211,7 +211,9 @@ class TestToolBatching:
             temperature: int
 
         tools.get.return_value = make_tool()
-        tools.execute.return_value = WeatherPayload(city="Berlin", temperature=18)
+        tools.execute.return_value = ActionResult.success(
+            WeatherPayload(city="Berlin", temperature=18)
+        )
 
         await event_bus.dispatch(make_function_call_item())
         await event_bus.dispatch(make_response_done())

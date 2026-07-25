@@ -1,8 +1,8 @@
 from collections.abc import Mapping, Sequence
 
 from rtvoice.tools.middleware.base import ToolHandler, ToolMiddleware, compose
-from rtvoice.tools.middleware.defaults import default_tool_middlewares
 from rtvoice.tools.middleware.errors import ErrorBoundaryMiddleware
+from rtvoice.tools.middleware.logging import CallLoggingMiddleware
 from rtvoice.tools.middleware.resolution import ToolResolutionMiddleware
 from rtvoice.tools.middleware.validation import ParamValidationMiddleware
 from rtvoice.tools.views import Tool
@@ -25,8 +25,8 @@ class MiddlewareChain:
         inner: Sequence[ToolMiddleware] | None = None,
     ) -> None:
         self._tools = tools
-        self._inner: tuple[ToolMiddleware, ...] = tuple(
-            default_tool_middlewares() if inner is None else inner
+        self._inner: tuple[ToolMiddleware, ...] = (
+            (CallLoggingMiddleware(),) if inner is None else tuple(inner)
         )
 
     def build(self, handler: ToolHandler) -> ToolHandler:

@@ -228,7 +228,7 @@ class TestDefaultTools:
 
         loaded = await tools.execute("load_skill", {"name": "internet-research"})
 
-        assert "Use the bundled workflow" in loaded
+        assert "Use the bundled workflow" in loaded.value
 
 
 class TestAgentIntegration:
@@ -275,4 +275,4 @@ class TestAgentIntegration:
             "load_skill", {"name": "internet-research"}
         )
 
-        assert "Use the bundled workflow" in loaded
+        assert "Use the bundled workflow" in loaded.value

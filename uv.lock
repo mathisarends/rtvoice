@@ -667,6 +667,24 @@ wheels = [
 ]
 
 [[package]]
+name = "py-llmify"
+version = "0.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f6/97/8c499a63e18d96455d48a4c30c07c75034737f9979009b629a24dee69848/py_llmify-0.7.0.tar.gz", hash = "sha256:c653552914332bfe3981e15c3e1b9b3d60273939e9dff9dd88c225bca8020f37", size = 26402, upload-time = "2026-07-23T16:25:36.752Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2b/f7/9fc14c9f5d278d1817d8a85dc16b503faae12f193fa11cc295ce54de35fe/py_llmify-0.7.0-py3-none-any.whl", hash = "sha256:c948692f55273a78152f76cd9d11c6733f29ae717d96f602ea20fc25a9d35387", size = 30749, upload-time = "2026-07-23T16:25:35.823Z" },
+]
+
+[package.optional-dependencies]
+openai = [
+    { name = "openai" },
+]
+
+[[package]]
 name = "pycparser"
 version = "3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -886,6 +904,7 @@ version = "0.7.0"
 source = { editable = "." }
 dependencies = [
     { name = "openai" },
+    { name = "py-llmify", extra = ["openai"] },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
@@ -916,6 +935,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "openai", specifier = ">=2.14.0" },
+    { name = "py-llmify", extras = ["openai"], specifier = ">=0.7.0" },
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "pyyaml", specifier = ">=6.0.3" },

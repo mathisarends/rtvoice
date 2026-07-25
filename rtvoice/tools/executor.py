@@ -4,7 +4,7 @@ import inspect
 from collections.abc import Sequence
 from typing import Annotated, Any, get_args, get_origin, get_type_hints
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from rtvoice.tools.di import ToolContext, _InjectMarker
 from rtvoice.tools.middleware import MiddlewareChain, ToolCall, ToolMiddleware
@@ -25,9 +25,8 @@ class ToolExecutor:
         context: ToolContext | None,
         middlewares: Sequence[ToolMiddleware] | None = None,
     ) -> None:
-        self._tools = tools
         self._context = context
-        self._handler = MiddlewareChain(middlewares).build(self._invoke)
+        self._handler = MiddlewareChain(tools, middlewares).build(self._invoke)
 
     def set_context(self, context: ToolContext | None) -> None:
         self._context = context
@@ -35,27 +34,8 @@ class ToolExecutor:
     async def execute(
         self, name: str, args: dict[str, Any] | None = None
     ) -> ActionResult:
-        tool = self._tools.get(name)
-        if tool is None or not tool.is_available(self._context):
-            available = [
-                tool_name
-                for tool_name, candidate in self._tools.items()
-                if candidate.is_available(self._context)
-            ]
-            return ActionResult.fail(f"Unknown tool '{name}'. Available: {available}")
-
-        raw_args = args or {}
-        try:
-            params = (
-                tool.param_model.model_validate(raw_args)
-                if tool.param_model is not None
-                else None
-            )
-        except ValidationError as error:
-            return ActionResult.fail(error)
-
         return await self._handler(
-            ToolCall(tool=tool, params=params, raw_args=raw_args, context=self._context)
+            ToolCall(name=name, raw_args=args or {}, context=self._context)
         )
 
     async def _invoke(self, call: ToolCall):

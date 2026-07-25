@@ -2,7 +2,7 @@ import pytest
 from pydantic import BaseModel
 from transitbus import EventBus
 
-from rtvoice.tools import Tools
+from rtvoice.tools import ActionResult, Tools
 from rtvoice.tools.di import Inject, ToolContext
 
 
@@ -67,54 +67,55 @@ class TestExecute:
     @pytest.mark.asyncio
     async def test_executes_tool_with_arguments(self, tools: Tools) -> None:
         @tools.action(description="Add numbers")
-        async def add(a: int, b: int) -> int:
-            return a + b
+        async def add(a: int, b: int) -> ActionResult:
+            return ActionResult.success(a + b)
 
         result = await tools.execute("add", {"a": 1, "b": 2})
 
-        assert result == 3
+        assert result.value == 3
 
     @pytest.mark.asyncio
-    async def test_raises_key_error_for_unknown_tool(self, tools: Tools) -> None:
-        with pytest.raises(KeyError, match="nonexistent"):
-            await tools.execute("nonexistent", {})
+    async def test_unknown_tool_returns_failure(self, tools: Tools) -> None:
+        result = await tools.execute("nonexistent", {})
+
+        assert not result.ok
+        assert "nonexistent" in result.error
 
     @pytest.mark.asyncio
-    async def test_raises_value_error_for_missing_required_param(
-        self, tools: Tools
-    ) -> None:
+    async def test_missing_required_param_returns_failure(self, tools: Tools) -> None:
         @tools.action(description="Needs param")
-        async def greet(name: str) -> str:
-            return f"Hello {name}"
+        async def greet(name: str) -> ActionResult:
+            return ActionResult.success(f"Hello {name}")
 
-        with pytest.raises(ValueError, match="name"):
-            await tools.execute("greet", {})
+        result = await tools.execute("greet", {})
+
+        assert not result.ok
 
     @pytest.mark.asyncio
     async def test_optional_param_uses_default_when_not_provided(
         self, tools: Tools
     ) -> None:
         @tools.action(description="Greet")
-        async def greet(name: str = "World") -> str:
-            return f"Hello {name}"
+        async def greet(name: str = "World") -> ActionResult:
+            return ActionResult.success(f"Hello {name}")
 
         result = await tools.execute("greet", {})
 
-        assert result == "Hello World"
+        assert result.value == "Hello World"
 
 
 class TestPrepareArguments:
     @pytest.mark.asyncio
     async def test_injects_via_inject_marker(self, tools: Tools) -> None:
         injected_bus = EventBus()
-        context = ToolContext(event_bus=injected_bus)
-        tools.set_context(context)
+        tools.set_context(ToolContext().provide(injected_bus))
 
         received = {}
 
         @tools.action(description="Uses event bus via Inject")
-        async def handler(bus: Inject[EventBus]) -> None:
+        async def handler(bus: Inject[EventBus]) -> ActionResult:
             received["bus"] = bus
+            return ActionResult.success()
 
         await tools.execute("handler", {})
 
@@ -125,14 +126,15 @@ class TestPrepareArguments:
         self, tools: Tools
     ) -> None:
         injected_bus = EventBus()
-        context = ToolContext(event_bus=injected_bus)
-        tools.set_context(context)
+        tools.set_context(ToolContext().provide(injected_bus))
 
         @tools.action(description="Uses event bus by name only")
-        async def handler(event_bus: EventBus) -> None: ...
+        async def handler(event_bus: EventBus) -> ActionResult:
+            return ActionResult.success()
 
-        with pytest.raises(ValueError, match="event_bus"):
-            await tools.execute("handler", {})
+        result = await tools.execute("handler", {})
+
+        assert not result.ok
 
     @pytest.mark.asyncio
     async def test_llm_arguments_take_precedence_over_injected(
@@ -141,8 +143,9 @@ class TestPrepareArguments:
         received = {}
 
         @tools.action(description="Takes name")
-        async def handler(name: str) -> None:
+        async def handler(name: str) -> ActionResult:
             received["name"] = name
+            return ActionResult.success()
 
         await tools.execute("handler", {"name": "explicit"})
 
@@ -153,23 +156,24 @@ class TestPrepareArguments:
         self, tools: Tools
     ) -> None:
         @tools.action(description="Uppercase text")
-        async def uppercase(text: str) -> str:
-            return text.upper()
+        async def uppercase(text: str) -> ActionResult:
+            return ActionResult.success(text.upper())
 
         result = await tools.execute("uppercase", {"text": "hello"})
 
-        assert result == "HELLO"
+        assert result.value == "HELLO"
 
     @pytest.mark.asyncio
-    async def test_missing_context_with_injected_param_raises_value_error(
+    async def test_missing_context_with_injected_param_returns_failure(
         self, tools: Tools
     ) -> None:
         @tools.action(description="Needs injected event bus")
-        async def handler(bus: Inject[EventBus]) -> None:
-            _ = bus
+        async def handler(bus: Inject[EventBus]) -> ActionResult:
+            return ActionResult.success(bus)
 
-        with pytest.raises(ValueError, match="bus"):
-            await tools.execute("handler", {})
+        result = await tools.execute("handler", {})
+
+        assert not result.ok
 
 
 class TestSetContext:
@@ -272,7 +276,7 @@ class TestSupervisorTools:
 
         @agent.action(
             description="Search events",
-            param_model=EventSearchParams,
+            params=EventSearchParams,
             status="Suche nach '{query}' im Kalender...",
         )
         def search_events(params: EventSearchParams) -> list:
@@ -302,7 +306,7 @@ class TestSupervisorTools:
 
         @agent.action(
             description="Create event",
-            param_model=EventCreateParams,
+            params=EventCreateParams,
             status="Erstelle Termin am {date} mit {attendees}...",
         )
         def create_event(params: EventCreateParams) -> str:

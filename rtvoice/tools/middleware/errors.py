@@ -17,5 +17,5 @@ class ErrorBoundaryMiddleware(ToolMiddleware):
         except ToolFeedbackError as error:
             return ActionResult.fail(error)
         except Exception:
-            logger.exception("Tool '%s' failed", call.tool.name)
+            logger.exception("Tool '%s' failed", call.name)
             return ActionResult.fail("Internal tool error.")

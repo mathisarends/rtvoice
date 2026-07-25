@@ -9,12 +9,15 @@ from rtvoice.tools.results import ActionResult
 from rtvoice.tools.views import Tool
 
 
-@dataclass
+@dataclass(frozen=True)
 class ToolCall:
-    tool: Tool
-    params: Any | None
+    name: str
     raw_args: dict[str, Any]
-    context: ToolContext | None
+    context: ToolContext | None = None
+    # filled in by the resolution and validation middlewares; everything inner
+    # to them — including the tool itself — can rely on both being set
+    tool: Tool | None = None
+    params: Any | None = None
 
 
 type ToolHandler = Callable[[ToolCall], Awaitable[ActionResult]]

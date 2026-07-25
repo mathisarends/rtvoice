@@ -28,7 +28,11 @@
       "Bash(ffmpeg -i static/banner.png -vf \"alphaextract,signalstats,metadata=print\" -f null -)",
       "Bash(ffmpeg -i static/banner.png -vf scale=1600:-1 -compression_level 9 -pred mixed -y /tmp/banner_1600.png)",
       "Bash(ffmpeg -i static/banner.png -vf scale=1600:-1 -q:v 4 -y /tmp/banner_1600.jpg)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(rm \"C:/code/rtvoice/Agents.md\")",
+      "Bash(ln -s \"Claude.md\" \"C:/code/rtvoice/Agents.md\")",
+      "Bash(git *)",
+      "PowerShell(uv run *)"
     ]
   }
 }

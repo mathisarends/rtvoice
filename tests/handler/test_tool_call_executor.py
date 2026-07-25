@@ -14,6 +14,7 @@ from rtvoice.realtime.schemas import (
     RealtimeServerEvent,
     ResponseDoneEvent,
 )
+from rtvoice.tools import ActionResult
 from rtvoice.tools.views import Tool
 
 
@@ -33,7 +34,7 @@ def websocket() -> AsyncMock:
 def tools() -> MagicMock:
     registry = MagicMock()
     registry.get = MagicMock(return_value=None)
-    registry.execute = AsyncMock(return_value="tool_result")
+    registry.execute = AsyncMock(return_value=ActionResult.success("tool_result"))
     return registry
 
 
@@ -75,7 +76,6 @@ def make_tool(
     tool = MagicMock(spec=Tool)
     tool.name = name
     tool.result_instruction = result_instruction
-    tool.holding_instruction = None
     return tool
 
 
@@ -109,7 +109,10 @@ class TestToolBatching:
         tools: MagicMock,
     ) -> None:
         tools.get.side_effect = make_tool
-        tools.execute.side_effect = ["sunny", "free"]
+        tools.execute.side_effect = [
+            ActionResult.success("sunny"),
+            ActionResult.success("free"),
+        ]
 
         await event_bus.dispatch(make_function_call_item("get_weather", "call_weather"))
         await event_bus.dispatch(
@@ -136,10 +139,10 @@ class TestToolBatching:
         started = [asyncio.Event(), asyncio.Event()]
         release = asyncio.Event()
 
-        async def execute(name: str, arguments: dict) -> str:
+        async def execute(name: str, arguments: dict) -> ActionResult:
             started[0 if name == "first" else 1].set()
             await release.wait()
-            return name
+            return ActionResult.success(name)
 
         tools.get.side_effect = make_tool
         tools.execute.side_effect = execute
@@ -158,7 +161,10 @@ class TestToolBatching:
         tools: MagicMock,
     ) -> None:
         tools.get.side_effect = make_tool
-        tools.execute.side_effect = [RuntimeError("boom"), "ok"]
+        tools.execute.side_effect = [
+            ActionResult.fail("boom"),
+            ActionResult.success("ok"),
+        ]
 
         await event_bus.dispatch(make_function_call_item("broken", "call_1"))
         await event_bus.dispatch(make_function_call_item("working", "call_2"))
@@ -166,7 +172,7 @@ class TestToolBatching:
 
         events = [call.args[0] for call in websocket.send.call_args_list]
         assert len(events) == 3
-        assert events[0].item.output == "Tool execution failed: boom"
+        assert events[0].item.output == "boom"
         assert events[1].item.output == "ok"
         assert isinstance(events[2], ConversationResponseCreateEvent)
 

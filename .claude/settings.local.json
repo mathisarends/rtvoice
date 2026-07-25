@@ -33,7 +33,16 @@
       "Bash(ln -s \"Claude.md\" \"C:/code/rtvoice/Agents.md\")",
       "Bash(git *)",
       "PowerShell(uv run *)",
-      "PowerShell(git add *)"
+      "PowerShell(git add *)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/tools -q)",
+      "Bash(.venv/Scripts/python.exe -m pytest -q)",
+      "Read(//c/code/rtvoice/rtvoice/agent/**)",
+      "Read(//c/code/rtvoice/examples/**)",
+      "Read(//c/code/rtvoice/**)",
+      "Read(//c/code/rtvoice/tests/tools/**)",
+      "Read(//c/code/rtvoice/tests/subagent/**)",
+      "Read(//c/code/rtvoice/.venv/Lib/site-packages/llmify/providers/**)",
+      "Read(//c/code/rtvoice/rtvoice/llm/providers/**)"
     ]
   }
 }

@@ -42,13 +42,13 @@ class ToolCallExecutor:
         tools: Tools,
         websocket: RealtimeWebSocket,
     ) -> None:
-        self._event_bus = event_bus
+        self.event_bus = event_bus
         self._tools = tools
         self._websocket = websocket
         self._batches: dict[str, _ResponseBatch] = {}
 
-        self._event_bus.on(FunctionCallItem, self._on_function_call)
-        self._event_bus.on(ResponseDoneEvent, self._on_response_done)
+        self.event_bus.on(FunctionCallItem, self._on_function_call)
+        self.event_bus.on(ResponseDoneEvent, self._on_response_done)
         logger.debug("ToolCallExecutor initialized")
 
     async def _on_function_call(self, event: FunctionCallItem) -> None:

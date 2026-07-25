@@ -77,13 +77,13 @@ class SkillManager:
             "</available_skills>"
         )
 
-    def append_discovery_prompt(self, instructions: str) -> str:
+    def append_discovery_prompt(self, system_prompt: str) -> str:
         prompt = self.discovery_prompt()
         if not prompt:
-            return instructions
-        if not instructions:
+            return system_prompt
+        if not system_prompt:
             return prompt
-        return f"{instructions.rstrip()}\n\n{prompt}"
+        return f"{system_prompt.rstrip()}\n\n{prompt}"
 
     def load(self, name: str) -> str:
         skill = self._current(name)

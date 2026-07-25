@@ -140,6 +140,13 @@ class TestInjectedConversation:
 
 
 class TestSessionSettings:
+    def test_maps_system_prompt_to_wire_instructions(self) -> None:
+        session, _, _ = make_session()
+
+        payload = session._build_session_settings().model_dump(exclude_none=True)
+
+        assert payload["instructions"] == "Test assistant"
+
     def test_build_session_settings_includes_reasoning_effort(self) -> None:
         session, _, _ = make_session()
 

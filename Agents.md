@@ -12,3 +12,5 @@ possible. When the user corrects a mistake, record it below as a short bullet
 - Store constructor dependencies used by handlers, including `event_bus`, on `self`.
 - Use semantic aliases for primitive mapping keys/values; prefer module helpers
   over static key-building methods.
+- Keep public extension APIs minimal and generic; use `system_prompt: str`
+  instead of an opinionated prompt/memory model or ambiguous `instructions`.

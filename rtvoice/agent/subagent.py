@@ -25,7 +25,7 @@ class Subagent[T]:
         self,
         *,
         description: str,
-        instructions: str,
+        system_prompt: str,
         llm: ChatModel | None = None,
         tools: Tools | None = None,
         skills: Skills | None = None,
@@ -44,10 +44,10 @@ class Subagent[T]:
         if tools:
             self._tools.merge(tools)
 
-        self._instructions = (
-            self._skill_manager.append_discovery_prompt(instructions)
+        self._system_prompt = (
+            self._skill_manager.append_discovery_prompt(system_prompt)
             if self._skill_manager is not None
-            else instructions
+            else system_prompt
         )
 
         self._max_iterations = max_iterations
@@ -67,7 +67,7 @@ class Subagent[T]:
         return await self._loop(messages)
 
     def _build_messages(self, task: str, context: str | None) -> list[Message]:
-        messages = [SystemMessage(content=self._instructions)]
+        messages = [SystemMessage(content=self._system_prompt)]
         if context:
             messages.append(
                 UserMessage(

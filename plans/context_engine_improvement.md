@@ -1,316 +1,214 @@
 # Context Engine Improvements
 
-## Zielbild
+## Ziel
 
-`rtvoice` soll lange Realtime-Konversationen kontrolliert verdichten und
-optionales Langzeitgedächtnis anbieten, ohne Anwendungen auf einen Store, ein
-LLM oder einen Provider festzulegen.
+`rtvoice` soll lange Realtime-Konversationen automatisch kompakt halten, ohne
+Anwendungen ein bestimmtes Memory-, Prompt- oder Persistenzmodell vorzugeben.
 
-Empfehlung: drei Konzepte bewusst trennen:
+Die Bibliothek liefert:
 
-| Konzept | Aufgabe | Lebensdauer |
-| --- | --- | --- |
-| `SystemPrompt` | Identität, Regeln und explizit editierbare Prompt-Sektionen | Agent |
-| `ContextEngine` | Arbeitskontext beobachten, verdichten und synchronisieren | Realtime-Session |
-| `AgentMemory` | Semantische Fakten und episodische Erfahrungen speichern/finden | optional über Sessions hinweg |
+- `system_prompt: str` als klare öffentliche Bezeichnung,
+- minimale Context-Engine-Schnittstellen,
+- eine optionale automatische Compaction,
+- die Realtime-Infrastruktur zum sicheren Einfügen und Löschen von Context-Items.
 
-Der effektive Modellkontext besteht dann aus dem gerenderten System-Prompt,
-einer kompakten Gesprächszusammenfassung, den letzten ungekürzten Turns und
-bei Bedarf abgerufenem Langzeitgedächtnis.
+Nicht Teil des Cores sind strukturierte System-Prompts, Prompt-Selbstmodifikation,
+semantisches/episodisches Gedächtnis, Vector Stores oder konkrete
+Memory-Richtlinien. Anwendungen können diese über Tools, Tool Injection oder
+eigene `ContextEngine`-Implementierungen ergänzen.
 
-## Ist-Zustand im Repo
-
-- `RealtimeAgent.instructions` wird einmalig mit dem Skill-Discovery-Prompt
-  verkettet und als `str` an `RealtimeSession` übergeben.
-- `RealtimeSession` kann zur Laufzeit nur Speech Speed ändern, obwohl
-  `session.update` auch neue Instructions akzeptiert.
-- `ConversationHistory` ist eine Transcript-Sicht. Für eine vollständige
-  Serverspiegelung fehlen dort Item-IDs, Tool Calls/-Ergebnisse und synthetische
-  Items.
-- Die Schemas kennen `conversation.item.delete` als Enum-Wert, aber noch keine
-  Client-/Server-Modelle für Create/Retrieve/Delete-Lifecycle-Events.
-- `response.done` liefert bereits Token Usage und eignet sich als präziser
-  Trigger nach einem abgeschlossenen Turn.
-
-`ConversationHistory` sollte seine einfache öffentliche Transcript-Sicht
-behalten. Eine neue interne `ConversationLedger` sollte die vollständige,
-servergespiegelte Item-Historie führen.
-
-## Vorgeschlagene öffentliche API
+## Öffentliche Agent-API
 
 ```python
-from rtvoice import (
-    AgentMemory,
-    ContextEngine,
-    InMemoryEpisodicMemory,
-    InMemorySemanticMemory,
-    LLMContextCompactor,
-    PromptSection,
-    RealtimeAgent,
-    SystemPrompt,
-    TokenBudgetPolicy,
-)
-from rtvoice.llm import ChatModel
-
-prompt = SystemPrompt(
-    base="Du bist ein präziser Sprachassistent.",
-    sections=[
-        PromptSection(
-            name="agent_notes",
-            content="",
-            agent_writable=True,
-            max_chars=4_000,
-        ),
-    ],
-)
-
-memory = AgentMemory(
-    semantic=InMemorySemanticMemory(),
-    episodic=InMemoryEpisodicMemory(),
-)
-
-engine = ContextEngine(
-    compactor=LLMContextCompactor(
-        llm=ChatModel(model="gpt-5.4-mini"),
-    ),
-    policy=TokenBudgetPolicy(
-        trigger_tokens=24_000,
-        target_tokens=12_000,
-        keep_last_user_turns=4,
-    ),
-    memory=memory,
-)
-
 agent = RealtimeAgent(
-    system_prompt=prompt,
-    context_engine=engine,
+    system_prompt="Du bist ein hilfreicher Sprachassistent.",
+    context_engine=AutomaticCompaction(
+        compactor=LLMCompactor(llm=ChatModel(model="...")),
+        policy=TokenBudgetPolicy(
+            trigger_tokens=24_000,
+            target_tokens=12_000,
+            keep_last_user_turns=4,
+        ),
+    ),
 )
 ```
 
-Konstruktorregeln:
-
-- `context_engine=None` deaktiviert die clientseitige Engine, analog zu
-  `echo_cancellation=None`.
-- `instructions` bleibt zunächst rückwärtskompatibel.
-- `instructions` und `system_prompt` gleichzeitig sind ein Fehler, damit es
-  keine unklare Priorität gibt.
-- Ein `str` als `system_prompt` darf als Komfortform in
-  `SystemPrompt(base=...)` normalisiert werden.
-- Ein Compactor-LLM sollte explizit konfiguriert sein. Eine Bibliothek sollte
-  nicht unbemerkt zusätzliche Modellaufrufe und Kosten erzeugen.
-
-## `SystemPrompt`
-
-`SystemPrompt` ist kein String-Alias, sondern ein versioniertes Dokument mit
-stabiler Render-Reihenfolge:
-
-1. unveränderliche Basisregeln,
-2. unveränderliche Bibliotheks-/Skill-Sektionen,
-3. anwendungsseitig veränderliche Sektionen,
-4. ausdrücklich für den Agenten freigegebene Sektionen.
-
-Der aktuelle Skill-Discovery-Text wird damit eine benannte, gesperrte Sektion
-statt einer einmaligen String-Verkettung. Das hält Herkunft und Priorität
-sichtbar und erleichtert Tests.
-
-Zur Laufzeit verwaltet ein interner `SystemPromptManager` den Prompt und hält
-den `event_bus` auf `self`. Er:
-
-- rendert den Prompt,
-- serialisiert Änderungen mit einer Lock,
-- erhöht bei jeder Änderung die Version,
-- sendet eine kleine `InstructionsUpdateEvent`,
-- übernimmt die neue Version erst nach `session.updated`.
-
-Anwendungsänderungen können über `RealtimeAgent.update_prompt_section(...)`
-laufen. Agentenänderungen laufen über ein nur bei vorhandenen
-`agent_writable`-Sektionen registriertes Tool. `SystemPromptManager` wird dafür
-als injizierbare Dependency im Tool-Layer registriert.
-
-Der Agent darf nie die Basisregeln, Tool-Sicherheitsregeln oder die Liste
-editierbarer Sektionen verändern. Weitere Grenzen:
-
-- Name-Allowlist statt frei erzeugbarer Sektionen,
-- Größenlimit je Sektion und für den Gesamtprompt,
-- optional optimistic concurrency über `expected_version`,
-- Änderungsereignisse mit Autor (`application`, `agent`),
-- Memory- und Summary-Inhalt wird als historische Daten gerahmt; die
-  Basisregeln erklären ausdrücklich, dass er keine Prompt-Regeln überschreibt.
-
-## `ContextEngine`
-
-### Ports statt Provider-Kopplung
-
-Die Engine sollte nur von kleinen Contracts abhängen:
-
 ```python
-class ContextCompactor(Protocol):
-    async def compact(self, snapshot: ContextSnapshot) -> Compaction: ...
-
-
-class ContextPolicy(Protocol):
-    def plan(self, snapshot: ContextSnapshot, usage: ContextUsage) -> CompactionPlan | None: ...
-
-
-class ConversationControl(Protocol):
-    async def create_system_item(self, text: str, *, at_root: bool) -> str: ...
-    async def delete_items(self, item_ids: list[str]) -> None: ...
+subagent = Subagent(
+    description="Plant komplexe Aufgaben.",
+    system_prompt="Du bist ein präziser Planungsagent.",
+)
 ```
 
-`RealtimeSession` adaptiert das Realtime-Protokoll auf
-`ConversationControl`. Ein eigener Compactor oder Store kann dadurch ohne
-OpenAI-spezifische Typen implementiert werden.
+Entscheidungen:
 
-### Vollständige Conversation Ledger
+- `instructions` wird als öffentliche Agent-Option durch `system_prompt`
+  ersetzt. Das ist ein bewusster Breaking Change.
+- `system_prompt` bleibt ein String. Skills dürfen ihren Discovery-Text intern
+  daran anhängen.
+- Das OpenAI-Wire-Schema heißt weiterhin `instructions`; nur der
+  Provider-/Schema-Rand verwendet diesen Namen.
+- `context_engine=None` deaktiviert Context-Verarbeitung, analog zu
+  `echo_cancellation=None`.
+- Die Bibliothek startet keine zusätzlichen LLM-Aufrufe ohne explizit
+  konfigurierte Engine.
 
-`ConversationLedger` spiegelt die serverseitige Conversation und speichert:
+## Generische Context-Schnittstellen
 
-- `item_id`, Rolle, Typ und Reihenfolge,
-- Text/Transcript und Transcript-Status,
-- Tool Call plus zugehöriges Tool-Ergebnis,
-- synthetische Summary-Items,
-- gelöscht/ausstehend/kompaktiert,
-- optional Zeitstempel und Token-Schätzung.
+Die Agent-/Realtime-Schicht soll weder Compaction noch Memory kennen. Sie
+übergibt normalisierte Events und Snapshots an eine kleine Schnittstelle:
 
-Dafür sind mindestens Schemas und Adapter für
-`conversation.item.created`, `conversation.item.retrieved`,
-`conversation.item.deleted` sowie `conversation.item.delete` nötig.
-`ConversationItemCreateEvent` braucht außerdem `previous_item_id`, damit eine
-Summary an der Root-Position eingefügt werden kann.
+```python
+class ContextEngine(Protocol):
+    async def process(
+        self,
+        event: ContextEvent,
+        snapshot: ConversationSnapshot,
+    ) -> ContextUpdate | None: ...
+```
 
-`ConversationHistory` wird aus `ConversationLedger` als Transcript-View
-abgeleitet. So
-bleiben `AgentResult.turns` und die bestehende Tool Injection kompatibel,
-während die Engine keine unvollständige Parallelhistorie pflegt.
+`ContextEvent` enthält nur stabile Bibliotheksereignisse, zum Beispiel:
 
-### Trigger und Auswahl
+- eine Response wurde abgeschlossen,
+- ein Conversation Item wurde erstellt, aktualisiert oder gelöscht,
+- die Session wird beendet.
 
-Die Standard-Policy sollte nach `response.done` prüfen:
+`ConversationSnapshot` ist eine unveränderliche Sicht auf den aktuellen
+modellseitigen Context. `ContextUpdate` beschreibt gewünschte Änderungen,
+anstatt der Engine direkten WebSocket-Zugriff zu geben:
 
-- bevorzugt aktuelle `input_tokens`,
-- ersatzweise eine injizierbare Token-Schätzung,
-- Mindestzahl kompletter User-Turns,
-- nur einen laufenden Compaction-Job.
+```python
+@dataclass(frozen=True)
+class ContextUpdate:
+    create: tuple[ContextItem, ...] = ()
+    delete_item_ids: tuple[str, ...] = ()
+```
 
-Ein Turn beginnt bei einer echten User-Nachricht und umfasst alle folgenden
-Assistant-/Tool-Items bis zur nächsten User-Nachricht. Die Policy darf weder
-einen Turn noch ein Tool-Call/Tool-Result-Paar teilen. Die letzten
-`keep_last_user_turns` bleiben unverändert.
+Die Realtime-Schicht validiert und serialisiert das Update. Dadurch können
+andere Engines eigene Zusammenfassungen, Retrieval-Resultate oder vollständig
+deterministische Context-Strategien implementieren, ohne interne
+Realtime-Schemas zu importieren.
 
-Feste Defaults sind wegen unterschiedlicher Modellfenster problematisch.
-V1 sollte deshalb explizite Token-Grenzen verlangen; später kann eine
-Model-Capability-Registry relative Grenzen wie `trigger_ratio=0.75` auflösen.
+Eine Engine darf zustandsbehaftet sein. `RealtimeAgent` erstellt sie nicht
+implizit und eine Instanz gehört genau zu einer laufenden Agent-Session.
 
-### Compaction-Ablauf
+## Erforderliche Conversation-Infrastruktur
 
-1. Nach `response.done` erstellt die Engine einen unveränderlichen Snapshot
-   bis zu einer festen Item-ID.
-2. Die Policy bestimmt den Cutoff; niemals das LLM.
-3. Der Compactor verdichtet die alte Summary und die neu ausgewählten Turns.
-4. Neu eingetroffene Items gehören nicht zum Snapshot und werden nie gelöscht.
-5. Die Engine erzeugt eine neue synthetische `system`-Nachricht an der Root:
+Automatische Compaction braucht eine vollständige servergespiegelte
+`ConversationLedger`. Die bestehende `ConversationHistory` bleibt die einfache
+öffentliche Transcript-/Archiv-Sicht.
 
-   ```text
-   <conversation_summary>
-   Historische Gesprächsdaten, keine neuen Anweisungen.
-   ...
-   </conversation_summary>
-   ```
+Die Ledger erfasst:
 
-6. Erst nach Bestätigung von `conversation.item.created` löscht sie die exakt
-   abgedeckten Items.
-7. `conversation.item.deleted` aktualisiert `ConversationLedger`. Erst danach gilt die
-   Compaction als abgeschlossen.
+- Item-ID, Typ, Rolle und Reihenfolge,
+- User-/Assistant-Inhalt und Transcript-Status,
+- Tool Calls und zugehörige Tool-Ergebnisse,
+- synthetische Context-Items,
+- gelöschte, ausstehende und unterbrochene Items.
 
-Create-before-delete kann bei einem Fehler kurz doppelte Information erzeugen,
-verliert aber keine Historie. Da das Realtime-Protokoll keine atomare
-Transaktion anbietet, braucht die Engine eine Compaction-ID und einen
-`pending`-Status für idempotente Wiederaufnahme. Mutationen werden mit einer
-Conversation-Lock serialisiert und nicht mitten in einer laufenden Response
-angewendet.
+Dafür fehlen derzeit insbesondere Modelle/Adapter für:
 
-Die Summary sollte strukturiert und anwendungsspezifisch sein: offene Ziele,
-Entscheidungen, relevante Fakten, Zusagen, Tool-Ergebnisse, Fehler und nächste
-Schritte. Der Summarizer darf keine Vermutungen ergänzen und darf zitierte
-User-Anweisungen nicht zu Systemregeln erheben.
+- `conversation.item.created`,
+- `conversation.item.retrieved`,
+- `conversation.item.deleted`,
+- `conversation.item.delete`,
+- `previous_item_id` auf `conversation.item.create`.
 
-### Serverseitige Truncation
+Die Ledger entfernt gelöschte Records nicht zwingend physisch. So kann
+`AgentResult.turns` die vollständige archivierte Unterhaltung behalten,
+während `ConversationSnapshot` nur den aktiven Modellkontext enthält.
 
-OpenAI kann alte Items mit `session.truncation` automatisch aus dem
-Response-Kontext entfernen. Das ist Fallback-Truncation, keine semantische
-Compaction.
+## Mitgelieferte automatische Compaction
 
-Wenn `ContextEngine` aktiv ist, muss das Verhalten explizit sein:
+`AutomaticCompaction` implementiert `ContextEngine` und setzt sich nur aus
+austauschbaren Teilen zusammen:
 
-- `truncation="disabled"` für strikt von der Engine verwalteten Kontext und
-  sichtbare Fehler, oder
-- ein oberhalb des Engine-Triggers liegendes `token_limits.post_instructions`
-  mit `retention_ratio` als Notfall-Fallback.
+```python
+class Compactor(Protocol):
+    async def compact(self, input: CompactionInput) -> str: ...
 
-Die OpenAI-Standardeinstellung sollte nicht unbemerkt parallel zur Engine
-arbeiten. Ohne Engine kann der bisherige Server-Default bestehen bleiben.
 
-## `AgentMemory`
+class CompactionPolicy(Protocol):
+    def plan(
+        self,
+        snapshot: ConversationSnapshot,
+        usage: ContextUsage | None,
+    ) -> CompactionPlan | None: ...
+```
 
-Compaction und Langzeitgedächtnis sind verschiedene Vorgänge. Die Summary hält
-den aktuellen Arbeitszustand; Langzeitgedächtnis speichert selektive Inhalte,
-die später wieder relevant werden können.
+Der Core kann anbieten:
 
-### Semantisches Gedächtnis
+- `LLMCompactor` auf Basis des vorhandenen `ChatModel`,
+- `TokenBudgetPolicy`,
+- optional eine einfache turn-basierte Policy für Tests und Provider ohne Usage.
 
-Stabile, konsolidierte Aussagen wie Nutzerpräferenzen, bekannte Entitäten oder
-Domänenfakten. Records brauchen mindestens:
+Anwendungen können beide Ports ersetzen. Der Compactor liefert nur Summary-Text;
+Cutoff und zu löschende Item-IDs bestimmt ausschließlich die Policy bzw. Engine,
+nicht das LLM.
 
-- ID/Key und Inhalt,
-- Herkunft bzw. Quell-Item-IDs,
-- Erstell-/Änderungszeit und Version,
-- optional Confidence, Tags und Ablaufzeit,
-- Konflikt-/Tombstone-Unterstützung.
+### Ablauf
 
-Schreiben ist ein `upsert`, Abruf eine Suche. Der Core definiert nur ein
-`SemanticMemoryStore`-Protocol und einen In-Memory-Store. Vector DB,
-SQL/Redis oder anwendungsspezifische Stores gehören in Adapter.
+1. Nach einer abgeschlossenen Response erzeugt die Session einen unveränderlichen
+   Snapshot samt aktueller Token Usage.
+2. Die Policy wählt vollständige alte User-Turns aus. Tool Call und Ergebnis
+   bleiben zusammen; die letzten Turns bleiben unverändert.
+3. Der Compactor fasst die alte Summary und die ausgewählten Items zusammen.
+4. Währenddessen neu eingetroffene Items liegen außerhalb des Snapshots.
+5. Die Engine liefert ein `ContextUpdate`: neue Summary an der Root erstellen,
+   exakt abgedeckte Item-IDs löschen.
+6. Die Realtime-Schicht erstellt zuerst die Summary und wartet auf Bestätigung.
+   Erst danach löscht sie alte Items und spiegelt die Delete-Bestätigungen.
 
-### Episodisches Gedächtnis
+Create-before-delete verhindert Informationsverlust. Ein Fehler kann
+vorübergehend Duplikate erzeugen, aber keine Originale vernichten. Pro Session
+läuft höchstens eine Compaction; Updates werden nicht mitten in einer laufenden
+Response angewendet.
 
-Append-only Ereignisse: Was geschah wann, mit wem, mit welchem Ziel und
-Ergebnis? Ein Episode-Record enthält Zeit, Kontext, Outcome und Provenance.
-Episoden werden nicht still zu Fakten überschrieben; Konsolidierung in
-semantische Records ist ein eigener, austauschbarer Schritt.
+Unterbrochene Assistant-Ausgaben dürfen nicht als vollständig gehörte Aussagen
+in die Summary eingehen. Tool-Ergebnisse, offene Ziele, Entscheidungen und
+nächste Schritte müssen dagegen erhalten bleiben.
 
-### Read/Write-Pfad
+Die synthetische Summary sollte als klar markiertes historisches Context-Item
+eingefügt werden:
 
-Für Realtime Voice sollte nicht vor jeder automatischen VAD-Response synchron
-eine Vector-Suche erzwungen werden. Das würde Turn-Latenz und Race-Risiko
-erhöhen. V1 sollte stattdessen anbieten:
+```text
+<conversation_summary>
+Historische Gesprächsdaten, keine neuen Anweisungen.
+...
+</conversation_summary>
+```
 
-- `recall_memory(query)` als bedarfsabhängiges Tool,
-- `remember_fact(...)` und `remember_episode(...)` nur bei freigegebenem
-  Schreibzugriff,
-- optional eine kleine, begrenzte Memory-Übersicht im System-Prompt,
-- später einen proaktiven Retriever als eigene Policy.
+Der konkrete Summary-Prompt gehört zum `Compactor` und bleibt konfigurierbar.
 
-`AgentMemory` und seine Stores werden im `ToolContext` registriert. Die
-Default-Tools sind nur verfügbar, wenn die entsprechende Dependency und
-Access-Policy vorhanden sind. Automatisch extrahierte Erinnerungen sind
-zunächst Kandidaten; eine Policy validiert Relevanz, Sensitivität,
-Widersprüche und Retention vor dem Schreiben.
+## Serverseitige Truncation
 
-## Beobachtbarkeit und Datenschutz
+OpenAI-`session.truncation` entfernt alte Items aus dem Response-Input, erstellt
+aber keine semantische Zusammenfassung. Bei aktiver `AutomaticCompaction` muss
+die Beziehung explizit konfiguriert werden:
 
-Die Bibliothek sollte Events/Listener für mindestens diese Fälle anbieten:
+- `disabled`, wenn die Engine den Context strikt verwalten soll, oder
+- ein höheres `token_limits.post_instructions` als Notfallgrenze.
 
-- Compaction geplant, gestartet, abgeschlossen, fehlgeschlagen,
-- Tokens und Item-Anzahl vor/nach Compaction,
-- Prompt-Sektion geändert,
-- Memory gelesen, geschrieben, verworfen oder gelöscht.
+Ohne Context Engine kann der Provider-Default unverändert bleiben. Diese
+Provider-Option gehört in die Realtime-Konfiguration, nicht in das generische
+`ContextEngine`-Protocol.
 
-Keine Logs mit vollständigem Prompt, Summary oder Memory auf `INFO`.
-Persistente Stores brauchen Lösch- und Retention-Hooks. Anwendungen müssen
-Memory pro Benutzer/Tenant isolieren können; globale Singletons sind kein
-sicherer Default.
+## Erweiterungen außerhalb des Cores
 
-## Vorgeschlagene Repo-Struktur
+Semantisches oder episodisches Memory lässt sich auf mehreren Wegen ergänzen:
+
+- normale Tools wie `remember(...)` und `recall(...)`,
+- injizierte anwendungseigene Stores,
+- eine eigene `ContextEngine`, die Retrieval-Ergebnisse als `ContextUpdate`
+  einfügt,
+- ein eigener `Compactor`, der zusätzlich externe Daten persistiert.
+
+Die Bibliothek definiert dafür bewusst keine Records, Zugriffspolicies,
+Tenant-Isolation oder Store-Adapter. Sobald sich wiederkehrende
+Implementierungsmuster zeigen, können kleine optionale Ports später ergänzt
+werden.
+
+## Repo-Struktur
 
 ```text
 rtvoice/
@@ -318,98 +216,60 @@ rtvoice/
     engine.py
     compaction.py
     ledger.py
-    policies.py
     views.py
-  memory/
-    ports.py
-    stores.py
-    views.py
-  prompt/
-    manager.py
-    system_prompt.py
 ```
 
-`RealtimeAgent` konstruiert bzw. verbindet diese Bausteine. Die eigentliche
-Realtime-Protokollübersetzung bleibt in `rtvoice/realtime`; Event-Handler
-speichern ihre verwendeten Konstruktor-Dependencies einschließlich
-`event_bus` auf `self`.
+Provider-spezifische Create-/Delete-Events bleiben unter `rtvoice/realtime`.
+`RealtimeAgent` verbindet Engine, Ledger und Session. Handler speichern ihre
+verwendeten Konstruktor-Dependencies einschließlich `event_bus` auf `self`.
 
-## Umsetzung in Etappen
+## Umsetzung
 
-### 1. Strukturierter System-Prompt
+### 1. API-Bezeichnung (umgesetzt)
 
-- `SystemPrompt`, `PromptSection`, Rendering und Exports hinzufügen.
-- `instructions` kompatibel normalisieren.
-- partielles Instructions-Update plus `session.updated`-Bestätigung ergänzen.
-- Skill-Discovery als gesperrte Sektion modellieren.
-- Noch keine Agent-Selbständerung.
+- `RealtimeAgent.instructions` zu `system_prompt` umbenennen.
+- `Subagent.instructions` zu `system_prompt` umbenennen.
+- interne Variablen entsprechend benennen.
+- erst beim Erstellen von `RealtimeSessionSettings` auf das Wire-Feld
+  `instructions` abbilden.
+- README, Examples und Tests vollständig aktualisieren.
 
-### 2. Kanonische Conversation Ledger
+### 2. Conversation Ledger
 
-- fehlende Realtime Item-Events/-Commands modellieren.
-- alle User-, Assistant-, Tool- und synthetischen Items spiegeln.
-- bestehende `ConversationHistory` daraus ableiten.
-- Injected Conversation mit echten/zugeordneten Item-IDs synchronisieren.
+- fehlende Realtime Item-Events und Commands modellieren.
+- alle Message-/Tool-/Summary-Items mit IDs spiegeln.
+- aktive Context-Sicht und vollständige Transcript-Sicht trennen.
+- Injected Conversation und programmatisch gesendete Nachrichten abdecken.
 
-### 3. Automatische Compaction
+### 3. Extension API
 
-- `ContextEngine`, Policy- und Compactor-Protocols einführen.
-- `LLMContextCompactor` auf dem vorhandenen `ChatModel`-Abstraktionslayer
+- `ContextEngine`, `ContextEvent`, `ConversationSnapshot` und `ContextUpdate`
+  einführen.
+- Engine in `RealtimeAgent` optional injizieren.
+- Updates ausschließlich über eine kontrollierte Realtime-Adapter-Schicht
+  anwenden.
+
+### 4. Automatic Compaction
+
+- `Compactor`, `CompactionPolicy`, `LLMCompactor` und `TokenBudgetPolicy`
   implementieren.
-- Snapshot, Root-Summary, bestätigtes Löschen und Fehlerzustände umsetzen.
-- `context_engine=None` und Server-Truncation explizit testen.
-
-### 4. Memory und kontrollierte Agent-Updates
-
-- Store-Protocols und In-Memory-Implementierungen ergänzen.
-- Memory-/Prompt-Dependencies im Tool-Layer registrieren.
-- Tools abhängig von Access-Policy verfügbar machen.
-- Provenance, Limits, Versionierung und Konflikte testen.
-
-### 5. Persistenz und Evals
-
-- Adapter-Beispiele für SQLite/Redis/Vector Store, aber keine harte
-  Core-Abhängigkeit.
-- Neustart während partieller Compaction testen.
-- Evals für Recall, Widersprüche, Summary-Drift, Prompt Injection, Latenz und
-  Kosten auf repräsentativen langen Voice-Sessions.
+- Snapshot-, Turn- und Race-Regeln umsetzen.
+- Create-/Delete-Bestätigungen und wiederholbare Fehlerzustände behandeln.
+- Token- und Compaction-Metriken über Events sichtbar machen.
 
 ## Wichtige Tests
 
-- Engine aus: keine zusätzlichen Tools, Events oder Modellaufrufe.
-- Snapshot-Race: während Summarization eintreffende Turns bleiben erhalten.
-- Tool Call und Ergebnis werden gemeinsam behalten oder verdichtet.
-- Unterbrochene, nicht vollständig abgespielte Antworten werden als solche
-  markiert und nicht wie gehörte Aussagen zusammengefasst.
-- Create-Fehler löscht keine Originale; Delete-Fehler ist wiederholbar.
-- Wiederholte Compactions ersetzen die alte Summary ohne Informationsduplikat.
-- Agent kann nur freigegebene Prompt-Sektionen verändern.
-- Memory eines Tenants ist für andere Tenants nicht abrufbar.
-- Summary enthält keine erfundenen Fakten und hebt User-Text nicht zur Regel.
-- `AgentResult.turns` bleibt trotz serverseitig gelöschter Items vollständig
-  oder dokumentiert bewusst eine separate Archiv-Historie.
+- `context_engine=None` erzeugt keine zusätzlichen Aufrufe oder Tools.
+- Eine eigene minimale `ContextEngine` funktioniert ohne OpenAI-Typen.
+- Während Compaction eintreffende Items werden nie gelöscht.
+- Tool Call und Ergebnis werden gemeinsam behalten oder kompakt gemacht.
+- Unterbrochene Antworten werden korrekt markiert.
+- Create-Fehler löscht keine Originale; partielle Delete-Fehler sind wiederholbar.
+- Wiederholte Compactions ersetzen die alte Summary ohne Duplikate.
+- `AgentResult.turns` behält die archivierte Unterhaltung.
+- OpenAI erhält weiterhin `instructions=<system_prompt>` im Wire-Payload.
 
-Der letzte Punkt braucht eine klare Entscheidung: Für Nutzer ist meist sinnvoll,
-die vollständige lokale/archivierte Transcript-Historie im Ergebnis zu behalten,
-auch wenn die modellseitige Working Conversation verdichtet wurde. Ledger und
-Model Context dürfen daher unterschiedliche Views derselben Session sein.
+## Quellen
 
-## Quellen und Designbezug
-
-- OpenAI zeigt für Realtime-Konversationen denselben Grundablauf:
-  Item-IDs spiegeln, nach `response.done` über Usage triggern, eine
-  System-Summary an der Root einfügen und erst dann alte Items löschen:
-  [Context Summarization with Realtime API](https://developers.openai.com/cookbook/examples/context_summarization_with_realtime_api).
-- Serverseitige Truncation entfernt alte Items aus dem Modellinput und kann
-  über `retention_ratio`, Token-Limits oder `disabled` konfiguriert werden:
-  [Realtime API – Managing costs](https://developers.openai.com/api/docs/guides/realtime-costs#truncation).
-- Die OpenAI Agents SDK trennt Conversation Sessions und automatische
-  Compaction ebenfalls über austauschbare Session-Abstraktionen:
-  [Agents SDK Sessions](https://openai.github.io/openai-agents-python/sessions/).
-- Aktuelle Memory-Literatur beschreibt Agent Memory als
-  Write–Manage–Read-Zyklus und hebt Provenance, Widersprüche, Vergessen,
-  Latenz und Privacy als eigene Engineering-Probleme hervor:
-  [Memory for Autonomous LLM Agents](https://arxiv.org/abs/2603.07670).
-- Episodisches Gedächtnis ist sinnvoll als kontextgebundene,
-  instanzspezifische Langzeiterinnerung getrennt von semantischen Fakten:
-  [Episodic Memory is the Missing Piece for Long-Term LLM Agents](https://arxiv.org/abs/2502.06975).
+- [OpenAI: Context Summarization with Realtime API](https://developers.openai.com/cookbook/examples/context_summarization_with_realtime_api)
+- [OpenAI: Realtime API – Truncation](https://developers.openai.com/api/docs/guides/realtime-costs#truncation)

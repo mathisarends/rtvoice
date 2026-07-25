@@ -96,6 +96,10 @@ class TestInitDefaults:
             agent._realtime_session._transcription_model == TranscriptionModel.WHISPER_1
         )
 
+    def test_system_prompt_is_passed_to_realtime_session(self) -> None:
+        agent = make_agent(system_prompt="Be concise.")
+        assert agent._realtime_session._instructions == "Be concise."
+
     def test_default_inactivity_timeout_disabled(self) -> None:
         agent = make_agent()
         assert agent._realtime_session._inactivity_timeout_seconds is None
@@ -104,7 +108,7 @@ class TestInitDefaults:
     async def test_subagent_is_executed_as_injected_regular_tool(self) -> None:
         subagent = Subagent(
             description="A subagent",
-            instructions="Do the task.",
+            system_prompt="Do the task.",
             llm=MagicMock(),
         )
         subagent.start = AsyncMock(return_value="final result")

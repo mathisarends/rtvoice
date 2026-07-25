@@ -120,7 +120,7 @@ def build_subagent() -> Subagent:
             "Answers questions about whether a local store is currently open, "
             "combining the user's location, the current time, and a web search."
         ),
-        instructions=(
+        system_prompt=(
             "You are a helpful local-search assistant.\n\n"
             "When asked whether a store is open right now, follow these steps:\n\n"
             "1. Call get_current_datetime() to find out today's weekday and current time.\n"
@@ -145,7 +145,7 @@ def build_subagent() -> Subagent:
 
 async def main() -> None:
     agent = RealtimeAgent(
-        instructions=(
+        system_prompt=(
             "You are Jet, a calm and friendly personal voice assistant.\n"
             "Your only responsible for user facing conversation. If the question is more complex - you delegate to the subagent."
         ),

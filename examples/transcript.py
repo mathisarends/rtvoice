@@ -15,10 +15,10 @@ class ConsolePrinter(AgentListener):
 
 
 async def main():
-    instructions = """Du bist Jarvis. Antworte kurz und bündig."""
+    system_prompt = """Du bist Jarvis. Antworte kurz und bündig."""
 
     agent = RealtimeAgent(
-        instructions=instructions,
+        system_prompt=system_prompt,
         transcription_model=TranscriptionModel.WHISPER_1,
         listener=ConsolePrinter(),
     )

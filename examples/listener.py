@@ -77,7 +77,7 @@ You're not a tool. You're the dev he can think out loud with at 2am when the GKE
 """
 
     agent = RealtimeAgent(
-        instructions=prompt,
+        system_prompt=prompt,
         listener=LifecycleLogger(),
     )
     await agent.start()

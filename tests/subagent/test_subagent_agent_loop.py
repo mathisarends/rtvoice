@@ -20,7 +20,7 @@ async def test_returns_completion_when_no_tool_calls() -> None:
     )
     subagent = Subagent(
         description="Planning helper",
-        instructions="You are a planner.",
+        system_prompt="You are a planner.",
         llm=llm,
     )
 
@@ -33,7 +33,7 @@ async def test_includes_context_in_messages() -> None:
     llm.invoke = AsyncMock(return_value=ChatInvokeCompletion(completion="Done"))
     subagent = Subagent(
         description="Planning helper",
-        instructions="You are a planner.",
+        system_prompt="You are a planner.",
         llm=llm,
     )
 
@@ -68,7 +68,7 @@ async def test_runs_tools_until_final_completion() -> None:
 
     subagent = Subagent(
         description="Planning helper",
-        instructions="You are a planner.",
+        system_prompt="You are a planner.",
         llm=llm,
         tools=tools,
     )
@@ -97,7 +97,7 @@ async def test_returns_max_iterations_message() -> None:
 
     subagent = Subagent(
         description="Planning helper",
-        instructions="You are a planner.",
+        system_prompt="You are a planner.",
         llm=llm,
         tools=tools,
         max_iterations=2,

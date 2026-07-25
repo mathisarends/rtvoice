@@ -27,7 +27,7 @@ from rtvoice import RealtimeAgent
 
 async def main():
     agent = RealtimeAgent(
-        instructions="You are Jarvis, a concise and helpful voice assistant.",
+        system_prompt="You are Jarvis, a concise and helpful voice assistant.",
     )
     await agent.run()
 
@@ -35,6 +35,8 @@ asyncio.run(main())
 ```
 
 Run it, speak into your microphone, and the agent responds through your speakers. Press `Ctrl+C` to end the session.
+
+`system_prompt` is a plain string that defines the agent's behavior.
 
 ---
 
@@ -81,7 +83,7 @@ async def get_weather(city: str) -> str:
 
 async def main():
     agent = RealtimeAgent(
-        instructions="Answer weather questions using get_weather.",
+        system_prompt="Answer weather questions using get_weather.",
         tools=tools,
     )
     await agent.run()
@@ -222,7 +224,7 @@ async def greet(state: Inject[AppState]) -> str:
     return f"Hello {state.user_name}, you are on the {tier} plan."
 
 agent = RealtimeAgent(
-    instructions="Greet the user when asked.",
+    system_prompt="Greet the user when asked.",
     tools=tools,
     tool_injection_context=AppState(user_name="Alice", premium=True),
 )
@@ -267,12 +269,12 @@ skills = Skills.from_local_dir("./skills")
 
 subagent = Subagent(
     description="Handles research tasks.",
-    instructions="Use the relevant skill before researching.",
+    system_prompt="Use the relevant skill before researching.",
     skills=skills,
 )
 
 agent = RealtimeAgent(
-    instructions="Help the user and load relevant skills before using them.",
+    system_prompt="Help the user and load relevant skills before using them.",
     skills=skills,
     subagent=subagent,
 )
@@ -319,13 +321,13 @@ async def book_table(
 
 subagent = Subagent(
     description="Books restaurant tables on behalf of the user.",
-    instructions="Use book_table to complete booking requests.",
+    system_prompt="Use book_table to complete booking requests.",
     tools=tools,
     llm=ChatOpenAI(model="gpt-4o-mini"),
 )
 
 agent = RealtimeAgent(
-    instructions="Delegate restaurant bookings to the subagent.",
+    system_prompt="Delegate restaurant bookings to the subagent.",
     subagent=subagent,
 )
 ```
@@ -340,7 +342,7 @@ completion as the tool result.
 | Parameter              | Description                                               |
 | ---------------------- | --------------------------------------------------------- |
 | `description`          | Shown to the realtime model to decide when to delegate    |
-| `instructions`         | System prompt for the subagent's own LLM loop             |
+| `system_prompt`        | System prompt for the subagent's own LLM loop             |
 | `llm`                  | `ChatOpenAI(model=...)` or any `ChatModel` implementation |
 | `tools`                | `Tools` instance with the actions the subagent may call   |
 | `skills`               | Local Agent Skills exposed through progressive disclosure |
@@ -364,7 +366,7 @@ from rtvoice import (
 )
 
 agent = RealtimeAgent(
-    instructions="You are a helpful assistant.",
+    system_prompt="You are a helpful assistant.",
     injected_conversation=InjectedConversation(
         messages=[
             InjectedUserMessage("My name is Alice and I prefer short answers."),
@@ -409,7 +411,7 @@ class MyListener(AgentListener):
         print("Session ended.")
 
 agent = RealtimeAgent(
-    instructions="You are a helpful assistant.",
+    system_prompt="You are a helpful assistant.",
     listener=MyListener(),
 )
 ```
@@ -466,7 +468,7 @@ class CustomMicrophone(AudioInputDevice):
         return self._active
 
 agent = RealtimeAgent(
-    instructions="...",
+    system_prompt="...",
     audio_input=CustomMicrophone(),
 )
 ```
@@ -499,7 +501,7 @@ class CustomSpeaker(AudioOutputDevice):
         return self._playing
 
 agent = RealtimeAgent(
-    instructions="...",
+    system_prompt="...",
     audio_output=CustomSpeaker(),
 )
 ```
@@ -520,7 +522,7 @@ turn detection:
 from rtvoice import EchoCancellation, RealtimeAgent
 
 agent = RealtimeAgent(
-    instructions="...",
+    system_prompt="...",
     echo_cancellation=EchoCancellation(),
 )
 ```
@@ -545,7 +547,7 @@ Waits for a semantically complete thought. Less likely to cut off mid-sentence.
 from rtvoice import RealtimeAgent, SemanticVAD, SemanticEagerness
 
 agent = RealtimeAgent(
-    instructions="...",
+    system_prompt="...",
     turn_detection=SemanticVAD(eagerness=SemanticEagerness.LOW),
 )
 ```
@@ -560,7 +562,7 @@ Energy-based: triggers on silence duration. More predictable latency.
 from rtvoice import RealtimeAgent, ServerVAD
 
 agent = RealtimeAgent(
-    instructions="...",
+    system_prompt="...",
     turn_detection=ServerVAD(
         threshold=0.5,           # energy threshold 0–1
         prefix_padding_ms=300,   # audio kept before speech onset
@@ -581,7 +583,7 @@ agent = RealtimeAgent(
     reasoning_effort=ReasoningEffort.LOW,        # default for gpt-realtime-2.1-mini
     voice=AssistantVoice.CORAL,
     speech_speed=1.2,                            # 0.25–1.5, default 1.0
-    instructions="...",
+    system_prompt="...",
 )
 ```
 
@@ -601,7 +603,7 @@ Save the raw session audio to a file:
 
 ```python
 agent = RealtimeAgent(
-    instructions="...",
+    system_prompt="...",
     recording_path="session.pcm",
 )
 
@@ -649,7 +651,7 @@ Automatically stop the agent after a period of user silence:
 
 ```python
 agent = RealtimeAgent(
-    instructions="...",
+    system_prompt="...",
     inactivity_timeout_seconds=30.0,
     listener=MyListener(),   # on_user_inactivity_countdown fires each second 5→1
 )
@@ -688,7 +690,7 @@ from rtvoice import RealtimeAgent
 from rtvoice import AzureOpenAIProvider
 
 agent = RealtimeAgent(
-    instructions="...",
+    system_prompt="...",
     provider=AzureOpenAIProvider(
         azure_endpoint="https://your-resource.openai.azure.com",
         azure_deployment="gpt-4o-realtime-preview",

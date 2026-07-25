@@ -1,13 +1,17 @@
+import logging
+
 from dotenv import load_dotenv
 
 from rtvoice import EchoCancellation, RealtimeAgent
 
 load_dotenv(override=True)
 
+logging.basicConfig(level=logging.INFO)
+
 
 async def main():
     agent = RealtimeAgent(
-        instructions="Du bist Jarvis. Antworte kurz und bündig.",
+        system_prompt="Du bist Jarvis. Antworte kurz und bündig.",
         inactivity_timeout_seconds=7,
         echo_cancellation=EchoCancellation(),
     )

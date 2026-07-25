@@ -46,7 +46,7 @@ class RealtimeAgent[T]:
     def __init__(
         self,
         *,
-        instructions: str = "",
+        system_prompt: str = "",
         model: RealtimeModel = RealtimeModel.GPT_REALTIME_2_1_MINI,
         reasoning_effort: ReasoningEffort | None = ReasoningEffort.LOW,
         voice: AssistantVoice = AssistantVoice.MARIN,
@@ -108,10 +108,10 @@ class RealtimeAgent[T]:
         if tools:
             self._tools.merge(tools)
 
-        instructions = (
-            self._skill_manager.append_discovery_prompt(instructions)
+        system_prompt = (
+            self._skill_manager.append_discovery_prompt(system_prompt)
             if self._skill_manager is not None
-            else instructions
+            else system_prompt
         )
 
         tool_context = ToolContext(
@@ -140,7 +140,8 @@ class RealtimeAgent[T]:
             event_bus=self._event_bus,
             model=model,
             reasoning_effort=reasoning_effort,
-            instructions=instructions,
+            # Agent-level "system prompt" becomes Session-level "instructions" (the model's own param name).
+            instructions=system_prompt,
             voice=voice,
             speech_speed=clipped_speech_speed,
             transcription_model=transcription_model,

@@ -164,16 +164,12 @@ class RealtimeSession:
             )
 
     @property
-    def recording_path(self) -> Path | None:
+    def recorpding_path(self) -> Path | None:
         return self._recording_path
 
     @property
     def usage_report(self) -> UsageReport:
         return self._token_tracker.report()
-
-    @property
-    def token_tracker(self) -> TokenTracker:
-        return self._token_tracker
 
     @timed()
     async def start(self) -> None:

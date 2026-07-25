@@ -50,14 +50,14 @@ class TestSkillManager:
         assert "Use the bundled workflow" not in prompt
         assert manager.names() == ["internet-research"]
 
-    def test_appends_discovery_prompt_to_instructions(self, tmp_path: Path) -> None:
+    def test_appends_discovery_prompt_to_system_prompt(self, tmp_path: Path) -> None:
         make_skill(tmp_path)
         manager = SkillManager(Skills.from_local_dir(tmp_path))
 
-        instructions = manager.append_discovery_prompt("You are helpful.")
+        system_prompt = manager.append_discovery_prompt("You are helpful.")
 
-        assert instructions.startswith("You are helpful.")
-        assert "<name>internet-research</name>" in instructions
+        assert system_prompt.startswith("You are helpful.")
+        assert "<name>internet-research</name>" in system_prompt
 
     def test_load_skill_lists_relative_resources_without_reading_them(
         self, tmp_path: Path
@@ -265,16 +265,16 @@ class TestAgentIntegration:
 
         with patch("rtvoice.agent.realtime_agent.OpenAIProvider"):
             agent = RealtimeAgent(
-                instructions="You are helpful.",
+                system_prompt="You are helpful.",
                 skills=Skills.from_local_dir(tmp_path),
                 audio_input=audio_input,
                 audio_output=audio_output,
             )
 
-        instructions = agent._realtime_session._instructions
-        assert instructions.startswith("You are helpful.")
-        assert "<name>internet-research</name>" in instructions
-        assert "Use the bundled workflow" not in instructions
+        system_prompt = agent._realtime_session._instructions
+        assert system_prompt.startswith("You are helpful.")
+        assert "<name>internet-research</name>" in system_prompt
+        assert "Use the bundled workflow" not in system_prompt
         assert {tool.name for tool in agent._tools.get_schema()} >= _SKILL_TOOLS
 
     @pytest.mark.asyncio
@@ -282,13 +282,13 @@ class TestAgentIntegration:
         make_skill(tmp_path)
         subagent = Subagent(
             description="Research subagent",
-            instructions="Be accurate.",
+            system_prompt="Be accurate.",
             llm=MagicMock(),
             skills=Skills.from_local_dir(tmp_path),
         )
 
-        assert "<name>internet-research</name>" in subagent._instructions
-        assert "Use the bundled workflow" not in subagent._instructions
+        assert "<name>internet-research</name>" in subagent._system_prompt
+        assert "Use the bundled workflow" not in subagent._system_prompt
         assert {tool.name for tool in subagent._tools.get_schema()} >= _SKILL_TOOLS
 
         loaded = await subagent._tools.execute(

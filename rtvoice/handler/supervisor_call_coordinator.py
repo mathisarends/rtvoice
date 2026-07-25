@@ -6,8 +6,9 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from transitbus import EventBus
+
 from rtvoice.agent.views import SupervisorClarificationNeeded
-from rtvoice.events import EventBus
 from rtvoice.events.views import (
     CancelSupervisorCommand,
     SupervisorFinishedEvent,
@@ -38,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class PendingSupervisorCall:
+class SupervisorCallState:
     call_id: str
     handoff_tool: Tool
     arguments: dict
@@ -47,7 +48,7 @@ class PendingSupervisorCall:
     runner_task: asyncio.Task | None = None
 
 
-class SupervisorCoordinator:
+class SupervisorCallCoordinator:
     def __init__(
         self,
         event_bus: EventBus,
@@ -63,16 +64,12 @@ class SupervisorCoordinator:
         self._update_tool = self._register_update_tool()
         self._tools.eject_tool(self._cancel_tool.name)
         self._tools.eject_tool(self._update_tool.name)
-        self._active: PendingSupervisorCall | None = None
+        self._active: SupervisorCallState | None = None
         self._awaiting_clarification = False
 
-        self._event_bus.subscribe(FunctionCallItem, self._handle_tool_call)
-        self._event_bus.subscribe(
-            CancelSupervisorCommand, self._cancel_active_supervisor
-        )
-        self._event_bus.subscribe(
-            UpdateSupervisorCommand, self._update_active_supervisor
-        )
+        self._event_bus.on(FunctionCallItem, self._handle_tool_call)
+        self._event_bus.on(CancelSupervisorCommand, self._cancel_active_supervisor)
+        self._event_bus.on(UpdateSupervisorCommand, self._update_active_supervisor)
 
     def _register_cancel_tool(self) -> Tool:
         @self._tools.action(
@@ -142,7 +139,7 @@ class SupervisorCoordinator:
 
         await self._inject_supervisor_control_tools()
 
-        active = PendingSupervisorCall(
+        active = SupervisorCallState(
             call_id=event.call_id,
             handoff_tool=tool,
             arguments=event.arguments or {},
@@ -185,7 +182,7 @@ class SupervisorCoordinator:
         logger.info("Updating active supervisor task: %s", event.message)
         await self._supervisor.update(event.message)
 
-    async def _run_supervisor_call(self, active: PendingSupervisorCall) -> None:
+    async def _run_supervisor_call(self, active: SupervisorCallState) -> None:
         failure_message: str | None = None
 
         try:
@@ -217,7 +214,7 @@ class SupervisorCoordinator:
         await self._deliver_supervisor_result(active, result)
 
     async def _deliver_supervisor_result(
-        self, active: PendingSupervisorCall, result: object
+        self, active: SupervisorCallState, result: object
     ) -> None:
         try:
             if isinstance(result, SupervisorClarificationNeeded):
@@ -235,7 +232,7 @@ class SupervisorCoordinator:
             logger.exception("Failed to deliver supervisor result")
 
     async def _handle_supervisor_failure(
-        self, active: PendingSupervisorCall, message: str
+        self, active: SupervisorCallState, message: str
     ) -> None:
         await send_function_call_output(
             self._websocket,
@@ -246,7 +243,7 @@ class SupervisorCoordinator:
         await self._eject_supervisor_control_tools()
 
     async def _ask_user_for_clarification(
-        self, active: PendingSupervisorCall, result: SupervisorClarificationNeeded
+        self, active: SupervisorCallState, result: SupervisorClarificationNeeded
     ) -> None:
         logger.info("Supervisor needs clarification: %s", result.question)
 
@@ -269,7 +266,7 @@ class SupervisorCoordinator:
         await self._notify_supervisor_finished()
         await self._eject_supervisor_control_tools()
 
-    def _abort_pending_call(self, active: PendingSupervisorCall) -> None:
+    def _abort_pending_call(self, active: SupervisorCallState) -> None:
         if active.execution_task is not None:
             active.execution_task.cancel()
             return

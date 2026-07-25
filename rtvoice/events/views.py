@@ -1,139 +1,120 @@
-from __future__ import annotations
+from typing import TYPE_CHECKING, Any
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from transitbus import Event
 
 if TYPE_CHECKING:
-    from rtvoice.agent.views import (
-        AgentError,
-    )
+    from rtvoice.agent.views import AgentError
     from rtvoice.realtime.schemas import FunctionTool, ToolChoiceMode
 
+    type AgentErrorValue = AgentError
+    type FunctionToolValue = FunctionTool
+    type ToolChoiceValue = ToolChoiceMode
+else:
+    type AgentErrorValue = Any
+    type FunctionToolValue = Any
+    type ToolChoiceValue = Any
 
-@dataclass
-class UpdateSpeechSpeedCommand:
+
+class UpdateSpeechSpeedCommand(Event):
     speed: float
 
 
-@dataclass
-class UpdateToolChoiceCommand:
-    tool_choice: ToolChoiceMode
+class UpdateToolChoiceCommand(Event):
+    tool_choice: ToolChoiceValue
 
 
-@dataclass
-class CancelSupervisorCommand:
+class CancelSupervisorCommand(Event):
     pass
 
 
-@dataclass
-class UpdateSupervisorCommand:
+class UpdateSupervisorCommand(Event):
     message: str
 
 
-@dataclass
-class UpdateSessionToolsCommand:
-    tools: list[FunctionTool]
+class UpdateSessionToolsCommand(Event):
+    tools: list[FunctionToolValue]
 
 
-@dataclass
-class AgentSessionConnectedEvent:
+class AgentSessionConnectedEvent(Event):
     pass
 
 
-@dataclass
-class AgentStartingEvent:
+class AgentStartingEvent(Event):
     pass
 
 
-@dataclass
-class AgentStoppedEvent:
+class AgentStoppedEvent(Event):
     pass
 
 
-@dataclass
-class UserTranscriptChunkReceivedEvent:
+class UserTranscriptChunkReceivedEvent(Event):
     chunk: str
 
 
-@dataclass
-class UserTranscriptCompletedEvent:
+class UserTranscriptCompletedEvent(Event):
     transcript: str
     item_id: str
 
 
-@dataclass
-class AssistantTranscriptChunkReceivedEvent:
+class AssistantTranscriptChunkReceivedEvent(Event):
     chunk: str
 
 
-@dataclass
-class AssistantTranscriptDeltaEvent:
+class AssistantTranscriptDeltaEvent(Event):
     delta: str
     item_id: str
     output_index: int
     content_index: int
 
 
-@dataclass
-class AssistantTranscriptCompletedEvent:
+class AssistantTranscriptCompletedEvent(Event):
     transcript: str
     item_id: str
     output_index: int
     content_index: int
 
 
-@dataclass
-class UserInactivityCountdownEvent:
+class UserInactivityCountdownEvent(Event):
     remaining_seconds: int
 
 
-@dataclass
-class UserInactivityTimeoutEvent:
+class UserInactivityTimeoutEvent(Event):
     timeout_seconds: float
 
 
-@dataclass
-class SupervisorStartedEvent:
+class SupervisorStartedEvent(Event):
     pass
 
 
-@dataclass
-class SupervisorFinishedEvent:
+class SupervisorFinishedEvent(Event):
     pass
 
 
-@dataclass
-class AssistantInterruptedEvent:
+class AssistantInterruptedEvent(Event):
     item_id: str | None = None
     played_ms: int | None = None
 
 
-@dataclass
-class AudioPlaybackCompletedEvent:
+class AudioPlaybackCompletedEvent(Event):
     pass
 
 
-@dataclass
-class AgentErrorEvent:
-    error: AgentError
+class AgentErrorEvent(Event):
+    error: AgentErrorValue
     event_id: str | None = None
 
 
-@dataclass
-class UserStartedSpeakingEvent:
+class UserStartedSpeakingEvent(Event):
     pass
 
 
-@dataclass
-class UserStoppedSpeakingEvent:
+class UserStoppedSpeakingEvent(Event):
     pass
 
 
-@dataclass
-class AssistantStartedRespondingEvent:
+class AssistantStartedRespondingEvent(Event):
     pass
 
 
-@dataclass
-class AssistantStoppedRespondingEvent:
+class AssistantStoppedRespondingEvent(Event):
     pass

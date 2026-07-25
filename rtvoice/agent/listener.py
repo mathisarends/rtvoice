@@ -1,7 +1,8 @@
 import logging
 
+from transitbus import EventBus
+
 from rtvoice.agent.views import AgentError
-from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentErrorEvent,
     AgentSessionConnectedEvent,
@@ -98,49 +99,49 @@ class AgentListenerBridge:
         self._warn_supervisor_mismatch_if_necessary()
         self._warn_text_modality_mismatch_if_necessary()
 
-        self._event_bus.subscribe(
+        self._event_bus.on(
             UserTranscriptCompletedEvent, self._on_user_transcript_completed
         )
-        self._event_bus.subscribe(
+        self._event_bus.on(
             AssistantTranscriptCompletedEvent,
             self._on_assistant_transcript_completed,
         )
-        self._event_bus.subscribe(
+        self._event_bus.on(
             AssistantTranscriptDeltaEvent,
             self._on_assistant_transcript_delta,
         )
-        self._event_bus.subscribe(AgentStartingEvent, self._on_agent_starting)
-        self._event_bus.subscribe(
+        self._event_bus.on(AgentStartingEvent, self._on_agent_starting)
+        self._event_bus.on(
             AgentSessionConnectedEvent,
             self._on_agent_session_connected,
         )
-        self._event_bus.subscribe(
+        self._event_bus.on(
             AssistantInterruptedEvent,
             self._on_assistant_interrupted,
         )
-        self._event_bus.subscribe(AgentErrorEvent, self._on_agent_error)
-        self._event_bus.subscribe(
+        self._event_bus.on(AgentErrorEvent, self._on_agent_error)
+        self._event_bus.on(
             UserStartedSpeakingEvent,
             self._on_user_started_speaking,
         )
-        self._event_bus.subscribe(
+        self._event_bus.on(
             UserStoppedSpeakingEvent,
             self._on_user_stopped_speaking,
         )
-        self._event_bus.subscribe(
+        self._event_bus.on(
             AssistantStartedRespondingEvent,
             self._on_assistant_started_responding,
         )
-        self._event_bus.subscribe(
+        self._event_bus.on(
             AssistantStoppedRespondingEvent,
             self._on_assistant_stopped_responding,
         )
-        self._event_bus.subscribe(
+        self._event_bus.on(
             UserInactivityCountdownEvent,
             self._on_user_inactivity_countdown,
         )
-        self._event_bus.subscribe(SupervisorStartedEvent, self._on_supervisor_started)
-        self._event_bus.subscribe(SupervisorFinishedEvent, self._on_supervisor_finished)
+        self._event_bus.on(SupervisorStartedEvent, self._on_supervisor_started)
+        self._event_bus.on(SupervisorFinishedEvent, self._on_supervisor_finished)
 
     async def _on_user_transcript_completed(
         self, event: UserTranscriptCompletedEvent

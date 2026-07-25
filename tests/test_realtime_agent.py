@@ -222,7 +222,7 @@ class TestStop:
         async def capture(e: AgentStoppedEvent) -> None:
             received.append(e)
 
-        agent._event_bus.subscribe(AgentStoppedEvent, capture)
+        agent._event_bus.on(AgentStoppedEvent, capture)
 
         await agent.stop()
 
@@ -248,7 +248,7 @@ class TestStop:
         async def capture(e: AgentStoppedEvent) -> None:
             dispatched.append(e)
 
-        agent._event_bus.subscribe(AgentStoppedEvent, capture)
+        agent._event_bus.on(AgentStoppedEvent, capture)
 
         await agent.stop()
         await agent.stop()

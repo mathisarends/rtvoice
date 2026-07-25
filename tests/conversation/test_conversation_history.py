@@ -1,7 +1,7 @@
 import pytest
+from transitbus import EventBus
 
 from rtvoice.conversation import ConversationHistory
-from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AssistantTranscriptCompletedEvent,
     UserTranscriptCompletedEvent,

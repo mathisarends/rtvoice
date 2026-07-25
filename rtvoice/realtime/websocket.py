@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator
 from contextlib import suppress
 
 from pydantic import BaseModel, ValidationError
+from transitbus import Event
 from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import ConnectionClosed
 
@@ -58,7 +59,12 @@ class RealtimeWebSocket:
         if not self.is_connected:
             raise RuntimeError("Not connected. Call connect() first.")
 
-        payload = message.model_dump(exclude_none=True)
+        exclude = (
+            {"id", "parent_id", "created_at", "path"}
+            if isinstance(message, Event)
+            else None
+        )
+        payload = message.model_dump(exclude=exclude, exclude_none=True)
         await self._ws.send(json.dumps(payload))
 
     async def close(self) -> None:

@@ -1,9 +1,9 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from transitbus import EventBus
 
-from rtvoice.events.bus import EventBus
-from rtvoice.handler import AudioHandler
+from rtvoice.handler import AudioBridge
 from rtvoice.realtime.schemas import InputAudioBufferAppendEvent
 
 
@@ -26,10 +26,10 @@ def audio_session() -> MagicMock:
 
 
 @pytest.fixture
-def audio_handler(
+def audio_bridge(
     event_bus: EventBus, audio_session: MagicMock, websocket: MagicMock
-) -> AudioHandler:
-    return AudioHandler(event_bus, audio_session, websocket)
+) -> AudioBridge:
+    return AudioBridge(event_bus, audio_session, websocket)
 
 
 class TestAudioForwarding:
@@ -37,7 +37,7 @@ class TestAudioForwarding:
     async def test_forwards_audio_event_when_connected(
         self,
         event_bus: EventBus,
-        audio_handler: AudioHandler,
+        audio_bridge: AudioBridge,
         websocket: MagicMock,
     ) -> None:
         websocket.is_connected = True
@@ -51,7 +51,7 @@ class TestAudioForwarding:
     async def test_does_not_forward_when_disconnected(
         self,
         event_bus: EventBus,
-        audio_handler: AudioHandler,
+        audio_bridge: AudioBridge,
         websocket: MagicMock,
     ) -> None:
         websocket.is_connected = False

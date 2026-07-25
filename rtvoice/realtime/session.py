@@ -6,6 +6,8 @@ from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from transitbus import EventBus
+
 from rtvoice.agent.views import (
     AssistantVoice,
     ConversationSeed,
@@ -20,21 +22,20 @@ from rtvoice.agent.views import (
     TurnDetection,
 )
 from rtvoice.audio import AudioSession
-from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentSessionConnectedEvent,
     AgentStoppedEvent,
     UpdateSessionToolsCommand,
 )
 from rtvoice.handler import (
-    AudioHandler,
-    AudioRecorder,
-    InterruptionHandler,
-    SpeechStateTracker,
-    SupervisorCoordinator,
-    ToolCallHandler,
-    TranscriptionAccumulator,
-    UserInactivityTimeoutHandler,
+    AudioBridge,
+    BargeInCoordinator,
+    ConversationAudioRecorder,
+    ConversationInactivityMonitor,
+    SpeechActivityEventAdapter,
+    SupervisorCallCoordinator,
+    ToolCallExecutor,
+    TranscriptEventAdapter,
 )
 from rtvoice.realtime.port import RealtimeProvider
 from rtvoice.realtime.schemas import (
@@ -116,34 +117,31 @@ class RealtimeSession:
         self._stopped = False
         self._setup_handlers()
 
-        self._event_bus.subscribe(
-            UpdateSessionToolsCommand, self._on_update_session_tools
-        )
-        self._event_bus.subscribe(AgentStoppedEvent, self._on_agent_stopped)
-        self._event_bus.subscribe(ResponseDoneEvent, self._on_response_done)
-        self._event_bus.subscribe(
+        self._event_bus.on(UpdateSessionToolsCommand, self._on_update_session_tools)
+        self._event_bus.on(AgentStoppedEvent, self._on_agent_stopped)
+        self._event_bus.on(ResponseDoneEvent, self._on_response_done)
+        self._event_bus.on(
             InputAudioTranscriptionCompleted, self._on_transcription_completed
         )
 
     def _setup_handlers(self) -> None:
-        self._audio_handler = AudioHandler(
+        self._audio_bridge = AudioBridge(
             event_bus=self._event_bus,
             audio_session=self._audio_session,
             websocket=self._websocket,
         )
-        self._interruption_handler = InterruptionHandler(
+        self._barge_in_coordinator = BargeInCoordinator(
             event_bus=self._event_bus,
             websocket=self._websocket,
             audio_session=self._audio_session,
         )
 
         if self._transcription_enabled or self._assistant_text_enabled:
-            self._transcription_accumulator = TranscriptionAccumulator(
+            self._transcript_event_adapter = TranscriptEventAdapter(
                 event_bus=self._event_bus
             )
-            self._transcription_watchdog = self._transcription_accumulator
 
-        self._tool_call_handler = ToolCallHandler(
+        self._tool_call_executor = ToolCallExecutor(
             event_bus=self._event_bus,
             tools=self._tools,
             websocket=self._websocket,
@@ -151,7 +149,7 @@ class RealtimeSession:
         )
 
         if self._supervisor:
-            self._supervisor_coordinator = SupervisorCoordinator(
+            self._supervisor_call_coordinator = SupervisorCallCoordinator(
                 event_bus=self._event_bus,
                 tools=self._tools,
                 websocket=self._websocket,
@@ -159,19 +157,21 @@ class RealtimeSession:
             )
 
         self._error_watchdog = ErrorWatchdog(event_bus=self._event_bus)
-        self._speech_state_tracker = SpeechStateTracker(event_bus=self._event_bus)
+        self._speech_activity_event_adapter = SpeechActivityEventAdapter(
+            event_bus=self._event_bus
+        )
 
         if (
             self._inactivity_timeout_enabled
             and self._inactivity_timeout_seconds is not None
         ):
-            self._user_inactivity_timeout_handler = UserInactivityTimeoutHandler(
+            self._conversation_inactivity_monitor = ConversationInactivityMonitor(
                 event_bus=self._event_bus,
                 timeout_seconds=self._inactivity_timeout_seconds,
             )
 
         if self._recording_path:
-            self._audio_recorder = AudioRecorder(
+            self._conversation_audio_recorder = ConversationAudioRecorder(
                 event_bus=self._event_bus,
                 output_path=self._recording_path,
             )

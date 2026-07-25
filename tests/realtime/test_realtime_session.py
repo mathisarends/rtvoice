@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from transitbus import EventBus
 
 from rtvoice.agent.views import (
     AssistantVoice,
@@ -14,7 +15,6 @@ from rtvoice.agent.views import (
     TranscriptionModel,
 )
 from rtvoice.audio import AudioSession
-from rtvoice.events import EventBus
 from rtvoice.events.views import AgentSessionConnectedEvent
 from rtvoice.realtime.schemas import ConversationItemCreateEvent, SessionUpdateEvent
 from rtvoice.realtime.session import RealtimeSession
@@ -53,7 +53,7 @@ def make_session(
         call_order.append(type(event).__name__)
 
     websocket.send.side_effect = record_send
-    event_bus.subscribe(AgentSessionConnectedEvent, record_connected)
+    event_bus.on(AgentSessionConnectedEvent, record_connected)
 
     with patch.object(RealtimeSession, "_setup_handlers"):
         session = RealtimeSession(

@@ -1,9 +1,9 @@
 from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import BaseModel, ConfigDict
+from transitbus import EventBus
 
 from rtvoice.conversation import ConversationHistory
-from rtvoice.events.bus import EventBus
 
 
 class _Inject:

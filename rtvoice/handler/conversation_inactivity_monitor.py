@@ -1,8 +1,9 @@
 import asyncio
 import logging
 
+from transitbus import EventBus
+
 from rtvoice.conversation.inactivity_timer import ConversationInactivityTimer
-from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentSessionConnectedEvent,
     AudioPlaybackCompletedEvent,
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 _COUNTDOWN_SECONDS = frozenset({5, 4, 3, 2, 1})
 
 
-class UserInactivityTimeoutHandler:
+class ConversationInactivityMonitor:
     def __init__(self, event_bus: EventBus, timeout_seconds: float = 10.0):
         self.event_bus = event_bus
         self._timer = ConversationInactivityTimer(timeout_seconds)
@@ -32,25 +33,17 @@ class UserInactivityTimeoutHandler:
         self._user_has_stopped_speaking = False
         self._agent_is_busy = False
 
-        self.event_bus.subscribe(
-            SupervisorStartedEvent, self._handle_supervisor_started
-        )
-        self.event_bus.subscribe(
-            SupervisorFinishedEvent, self._handle_supervisor_finished
-        )
-        self.event_bus.subscribe(
-            AgentSessionConnectedEvent, self._handle_session_connected
-        )
-        self.event_bus.subscribe(
+        self.event_bus.on(SupervisorStartedEvent, self._handle_supervisor_started)
+        self.event_bus.on(SupervisorFinishedEvent, self._handle_supervisor_finished)
+        self.event_bus.on(AgentSessionConnectedEvent, self._handle_session_connected)
+        self.event_bus.on(
             InputAudioBufferSpeechStoppedEvent, self._handle_user_speech_ended
         )
-        self.event_bus.subscribe(
+        self.event_bus.on(
             InputAudioBufferSpeechStartedEvent, self._handle_user_started_speaking
         )
-        self.event_bus.subscribe(ResponseCreatedEvent, self._handle_assistant_started)
-        self.event_bus.subscribe(
-            AudioPlaybackCompletedEvent, self._handle_assistant_done
-        )
+        self.event_bus.on(ResponseCreatedEvent, self._handle_assistant_started)
+        self.event_bus.on(AudioPlaybackCompletedEvent, self._handle_assistant_done)
 
     async def _handle_supervisor_started(self, _: SupervisorStartedEvent) -> None:
         self._agent_is_busy = True

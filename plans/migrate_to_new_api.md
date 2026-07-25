@@ -13,13 +13,13 @@
 
 1. **Modell-Enum aktualisieren**: Default auf `gpt-realtime-2.1`, Mini-Variante ergänzen,
    deprecatete Modelle markieren.
-2. **Parallel Tool Calls unterstützen**: `ToolCallHandler` von „ein `response.create`
+2. **Parallel Tool Calls unterstützen**: `RealtimeToolCallExecutor` von „ein `response.create`
    pro Tool" auf „ein `response.create` pro Response-Batch" umbauen. Das ist der
    größte und wichtigste Umbau.
 3. **Preambles nativ nutzen statt selbst zu emulieren**: Das Konstrukt
    `holding_instruction` / `_send_holding_message` wird durch das native
    Preamble-Verhalten des Modells ersetzt (via Instructions gesteuert).
-4. **Async Function Calling nativ nutzen**: Die `SupervisorCoordinator`-Maschinerie,
+4. **Async Function Calling nativ nutzen**: Die `SupervisorCallCoordinator`-Maschinerie,
    die die Konversation während langer Tool-Calls „am Leben hält", wird verschlankt.
    Das Modell hält die Konversation jetzt selbst flüssig und sagt bei Nachfragen
    „ich arbeite noch daran".
@@ -129,9 +129,9 @@ Ergebnis dann in den laufenden Dialog ein.
 |---|---|---|
 | `rtvoice/agent/views.py` | `RealtimeModel`, `ReasoningEffort`, `TranscriptionModel` Enums | **Ja** — Modell-Enum |
 | `rtvoice/realtime/schemas.py` | Alle Pydantic-Events + Session-Settings | **Ja** — Legacy-Cleanup, Response-Parsing |
-| `rtvoice/handler/tool_call_handler.py` | Reguläre Tool-Ausführung | **Ja** — Parallel-Batching |
+| `rtvoice/handler/realtime_tool_call_executor.py` | Reguläre Tool-Ausführung | **Ja** — Parallel-Batching |
 | `rtvoice/handler/tool_call_helpers.py` | `send_function_call_output`, `send_response_event` | **Ja** — Batch-fähige Helfer |
-| `rtvoice/handler/supervisor_coordinator.py` | Langläufer-Tool „Supervisor" | **Ja** — Holding-Message entfernen, verschlanken |
+| `rtvoice/handler/supervisor_call_coordinator.py` | Langläufer-Tool „Supervisor" | **Ja** — Holding-Message entfernen, verschlanken |
 | `rtvoice/tools/views.py` | `Tool` (mit `holding_instruction`, `result_instruction`, `status`) | **Ja** — `holding_instruction` deprecaten |
 | `rtvoice/tools/tools.py` | `Tools`-Registry / `action`-Decorator | **Ja** — `holding_instruction`-Param |
 | `rtvoice/realtime/session.py` | Verdrahtung aller Handler + Session-Update | **Ja** — Default-Instructions für Preambles |
@@ -152,7 +152,7 @@ sie als Task starten.
 
 ### Entscheidung 1 — Ein `response.create` pro Response, nicht pro Tool
 
-Der aktuelle Ablauf in `ToolCallHandler._handle_tool_call`:
+Der aktuelle Ablauf in `RealtimeToolCallExecutor._handle_tool_call`:
 
 ```
 FunctionCallItem → execute → send function_call_output → send response.create
@@ -183,7 +183,7 @@ API-Kompatibilität, Nutzung wird entfernt), das Preamble-Verhalten wird stattde
 ### Entscheidung 3 — Supervisor verschlanken, aber nicht abschaffen
 
 Async Function Calling macht die „Konversation-am-Leben-halten"-Mechanik nativ.
-Der `SupervisorCoordinator` behält aber echten Mehrwert:
+Der `SupervisorCallCoordinator` behält aber echten Mehrwert:
 `cancel_supervisor`, `update_supervisor` und den Clarification-Flow. Diese bleiben.
 Entfernt/vereinfacht wird nur:
 - `_send_holding_message` (Preamble ist nativ),
@@ -261,7 +261,7 @@ class RealtimeResponseObject(BaseModel):
 > Reserve** (z. B. um zu prüfen, ob wirklich alle erwarteten Outputs vorliegen).
 > Wenn man es minimal halten will, kann dieser Schritt entfallen.
 
-### 4.3 `rtvoice/handler/tool_call_handler.py` — Parallel-Batching (Kernstück)
+### 4.3 `rtvoice/handler/realtime_tool_call_executor.py` — Parallel-Batching (Kernstück)
 
 Neues Verhalten:
 
@@ -274,7 +274,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from rtvoice.events import EventBus
+from transitbus import EventBus
 from rtvoice.handler.tool_call_helpers import (
     send_batched_response,          # NEU (siehe 4.4)
     send_function_call_output,
@@ -303,7 +303,7 @@ class _ResponseBatch:
     calls: list[_PendingCall] = field(default_factory=list)
 
 
-class ToolCallHandler:
+class RealtimeToolCallExecutor:
     def __init__(
         self,
         event_bus: EventBus,
@@ -316,11 +316,11 @@ class ToolCallHandler:
         self._supervisor_tool_name = supervisor_tool_name
         self._batches: dict[str, _ResponseBatch] = {}
 
-        event_bus.subscribe(FunctionCallItem, self._on_function_call)
-        event_bus.subscribe(ResponseDoneEvent, self._on_response_done)
+        event_bus.on(FunctionCallItem, self._on_function_call)
+        event_bus.on(ResponseDoneEvent, self._on_response_done)
 
     async def _on_function_call(self, event: FunctionCallItem) -> None:
-        # Supervisor-Tool wird vom SupervisorCoordinator behandelt.
+        # Supervisor-Tool wird vom SupervisorCallCoordinator behandelt.
         if event.name == self._supervisor_tool_name:
             return
 
@@ -382,7 +382,7 @@ Wichtige Punkte:
 - Der **einzelne** `response.create` wird über `send_batched_response` erzeugt
   (Instruction-Merging, siehe §4.4).
 - Der `supervisor_tool_name`-Filter bleibt; der Supervisor läuft weiter über den
-  `SupervisorCoordinator`.
+  `SupervisorCallCoordinator`.
 
 ### 4.4 `rtvoice/handler/tool_call_helpers.py` — Batch-fähiger Response-Helfer
 
@@ -435,18 +435,18 @@ Holding-Responses zu senden.
 > `RealtimeSession` bzw. des öffentlichen Agent-Builders durchreichen, Default `True`
 > für die neuen Modelle. So bleibt das Verhalten testbar und abschaltbar.
 
-### 4.6 `rtvoice/handler/supervisor_coordinator.py` — Holding-Message entfernen
+### 4.6 `rtvoice/handler/supervisor_call_coordinator.py` — Holding-Message entfernen
 
 - `_send_holding_message` und der Aufruf in `_handle_tool_call` **entfernen**.
   Begründung: Native Preambles übernehmen die Überbrückung; die explizite
   `response.create` mit `tool_choice=NONE` kollidiert damit.
-- `PendingSupervisorCall` / Cancel / Update / Clarification **unverändert lassen**.
+- `SupervisorCallState` / Cancel / Update / Clarification **unverändert lassen**.
 - Der Ergebnis-Pfad (`_deliver_supervisor_result` → `send_function_call_output`
   + `send_response_event`) bleibt; er passt bereits zum Async-Modell (Output wird
   nachgeliefert, dann eine `response.create`).
 - **Parallel-Edge-Case dokumentieren**: Falls das Modell den Supervisor-Handoff
   zusammen mit einem regulären Tool in **derselben** Response aufruft, erzeugt der
-  `ToolCallHandler`-Batch **ein** `response.create` (nach den regulären Outputs),
+  `RealtimeToolCallExecutor`-Batch **ein** `response.create` (nach den regulären Outputs),
   und der Supervisor liefert später **ein weiteres** `response.create` nach.
   Mit Async Function Calling ist das unkritisch (die zweite Response integriert das
   Supervisor-Ergebnis). In der Praxis parallelisiert das Modell einen Handoff
@@ -458,7 +458,7 @@ Holding-Responses zu senden.
 - `holding_instruction` als Parameter **belassen** (API-Kompatibilität), aber:
   - Docstring/Kommentar ergänzen: „Deprecated — natives Preamble-Verhalten des
     Modells nutzen; wird nicht mehr aktiv gesendet."
-  - Alle internen Verwendungen entfernen (nur noch in `supervisor_coordinator.py`
+  - Alle internen Verwendungen entfernen (nur noch in `supervisor_call_coordinator.py`
     referenziert → dort entfällt sie mit §4.6).
 - `result_instruction` und `status` bleiben unverändert.
 
@@ -474,7 +474,7 @@ Nach Verifikation (grep, Tests) entfernen:
   im `ServerEvent`-Union.
 
 > **Vorsicht**: Erst per `grep -rn "ResponseTextDelta\|ResponseTextDone\|RESPONSE_TEXT_\|TRANSCRIPTION_SESSION" rtvoice tests`
-> prüfen, ob Tests oder Handler darauf hören. `TranscriptionAccumulator` nutzt
+> prüfen, ob Tests oder Handler darauf hören. `TranscriptEventAdapter` nutzt
 > vermutlich die `output_audio_transcript.*`- und `input_audio_transcription.*`-
 > Events — das sind die GA-Namen und bleiben. Nur die reinen Beta-Duplikate raus.
 
@@ -487,7 +487,7 @@ Das ist die zentrale konzeptionelle Frage. Zuordnung alt → neu:
 | Bisheriges Konstrukt | Was es emuliert hat | Neue Behandlung |
 |---|---|---|
 | `holding_instruction` + `_send_holding_message` | **Preamble** („one moment…") | **Entfernen.** Nativ via Instructions (§4.5). |
-| `SupervisorCoordinator` Keep-alive-Maschinerie | **Async Function Calling** (Konversation läuft weiter während langem Tool) | **Verschlanken.** Nativ; Coordinator behält nur Cancel/Update/Clarification. |
+| `SupervisorCallCoordinator` Keep-alive-Maschinerie | **Async Function Calling** (Konversation läuft weiter während langem Tool) | **Verschlanken.** Nativ; Coordinator behält nur Cancel/Update/Clarification. |
 | `result_instruction` + pro-Tool `response.create` | Follow-up-Response nach Tool-Output | **Behalten, aber batchen** (§4.3/4.4): ein `response.create` pro Response, Instructions gemergt. |
 | `status` (Callable/Template) | Sichtbarer Status-Text an UI | **Behalten** — reine Client-UX, kein API-Feature; unabhängig von Modell-Änderungen. |
 
@@ -531,7 +531,7 @@ Reihenfolge einspeisen und `asyncio`-Tasks vor der Assertion durchlaufen lassen
 
 1. **§4.1** Modell-Enum + Default (risikoarm, sofort nutzbar).
 2. **§4.8** Legacy-Cleanup (isoliert, per grep abgesichert).
-3. **§4.3 + §4.4** Parallel-Batching im `ToolCallHandler` + Helfer (Kernstück) inkl.
+3. **§4.3 + §4.4** Parallel-Batching im `RealtimeToolCallExecutor` + Helfer (Kernstück) inkl.
    neuer Tests (§6.1–6.5).
 4. **§4.6 + §4.7** Supervisor entschlacken, `holding_instruction` deprecaten.
 5. **§4.5** Preamble-Instructions verdrahten (+ optionales `enable_preambles`-Flag).

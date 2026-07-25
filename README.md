@@ -182,7 +182,7 @@ Any tool parameter typed as `Inject[T]` is filled automatically by the framework
 
 | Type                          | What it provides              |
 | ----------------------------- | ----------------------------- |
-| `Inject[EventBus]`            | Internal event bus            |
+| `Inject[EventBus]`            | Transit Bus event bus         |
 | `Inject[ConversationHistory]` | Full conversation so far      |
 | `Inject[YourContextType]`     | Your custom `context=` object |
 

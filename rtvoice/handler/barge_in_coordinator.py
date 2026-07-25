@@ -1,8 +1,9 @@
 import logging
 import time
 
+from transitbus import EventBus
+
 from rtvoice.audio.session import AudioSession
-from rtvoice.events import EventBus
 from rtvoice.events.views import AssistantInterruptedEvent
 from rtvoice.realtime.schemas import (
     ConversationItemTruncateEvent,
@@ -17,7 +18,7 @@ from rtvoice.realtime.websocket import RealtimeWebSocket
 logger = logging.getLogger(__name__)
 
 
-class InterruptionHandler:
+class BargeInCoordinator:
     """Handles barge-in: cancels the running response, clears the audio buffer,
     and truncates the conversation item to what was actually played."""
 
@@ -36,10 +37,10 @@ class InterruptionHandler:
         self._start_time: float | None = None
         self._assistant_is_speaking = False
 
-        self._event_bus.subscribe(ResponseCreatedEvent, self._on_response_created)
-        self._event_bus.subscribe(ResponseOutputAudioDeltaEvent, self._on_audio_delta)
-        self._event_bus.subscribe(ResponseDoneEvent, self._on_response_done)
-        self._event_bus.subscribe(
+        self._event_bus.on(ResponseCreatedEvent, self._on_response_created)
+        self._event_bus.on(ResponseOutputAudioDeltaEvent, self._on_audio_delta)
+        self._event_bus.on(ResponseDoneEvent, self._on_response_done)
+        self._event_bus.on(
             InputAudioBufferSpeechStartedEvent, self._on_user_started_speaking
         )
 

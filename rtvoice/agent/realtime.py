@@ -2,6 +2,8 @@ import asyncio
 import logging
 from pathlib import Path
 
+from transitbus import EventBus
+
 from rtvoice.agent.listener import AgentListener, AgentListenerBridge
 from rtvoice.agent.supervisor import (
     Supervisor,
@@ -27,7 +29,6 @@ from rtvoice.audio import (
     AudioSession,
 )
 from rtvoice.conversation import ConversationHistory
-from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentStartingEvent,
     AgentStoppedEvent,
@@ -251,9 +252,7 @@ class RealtimeAgent[T]:
             return result
 
     def _setup_shutdown_handlers(self) -> None:
-        self._event_bus.subscribe(
-            UserInactivityTimeoutEvent, self._on_inactivity_timeout
-        )
+        self._event_bus.on(UserInactivityTimeoutEvent, self._on_inactivity_timeout)
 
     def _setup_listener(
         self, *, inactivity_timeout_enabled: bool, assistant_text_enabled: bool

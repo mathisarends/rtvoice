@@ -2,8 +2,9 @@ import base64
 import logging
 from pathlib import Path
 
+from transitbus import EventBus
+
 from rtvoice.audio.audio_mixer import ConversationAudioMixer
-from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentStoppedEvent,
     AssistantStartedRespondingEvent,
@@ -17,16 +18,16 @@ from rtvoice.realtime.schemas import (
 logger = logging.getLogger(__name__)
 
 
-class AudioRecorder:
+class ConversationAudioRecorder:
     def __init__(self, event_bus: EventBus, output_path: Path):
         self._mixer = ConversationAudioMixer(output_path)
         self._assistant_speaking = False
 
-        event_bus.subscribe(AssistantStartedRespondingEvent, self._on_assistant_started)
-        event_bus.subscribe(AudioPlaybackCompletedEvent, self._on_assistant_stopped)
-        event_bus.subscribe(InputAudioBufferAppendEvent, self._on_user_audio)
-        event_bus.subscribe(ResponseOutputAudioDeltaEvent, self._on_assistant_audio)
-        event_bus.subscribe(AgentStoppedEvent, self._on_agent_stopped)
+        event_bus.on(AssistantStartedRespondingEvent, self._on_assistant_started)
+        event_bus.on(AudioPlaybackCompletedEvent, self._on_assistant_stopped)
+        event_bus.on(InputAudioBufferAppendEvent, self._on_user_audio)
+        event_bus.on(ResponseOutputAudioDeltaEvent, self._on_assistant_audio)
+        event_bus.on(AgentStoppedEvent, self._on_agent_stopped)
 
     async def _on_assistant_started(self, _: AssistantStartedRespondingEvent) -> None:
         self._assistant_speaking = True

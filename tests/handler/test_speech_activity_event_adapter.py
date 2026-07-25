@@ -1,6 +1,6 @@
 import pytest
+from transitbus import EventBus
 
-from rtvoice.events.bus import EventBus
 from rtvoice.events.views import (
     AssistantStartedRespondingEvent,
     AssistantStoppedRespondingEvent,
@@ -8,7 +8,7 @@ from rtvoice.events.views import (
     UserStartedSpeakingEvent,
     UserStoppedSpeakingEvent,
 )
-from rtvoice.handler import SpeechStateTracker
+from rtvoice.handler import SpeechActivityEventAdapter
 from rtvoice.realtime.schemas import (
     InputAudioBufferSpeechStartedEvent,
     InputAudioBufferSpeechStoppedEvent,
@@ -24,8 +24,8 @@ def event_bus() -> EventBus:
 
 
 @pytest.fixture
-def watchdog(event_bus: EventBus) -> SpeechStateTracker:
-    return SpeechStateTracker(event_bus)
+def adapter(event_bus: EventBus) -> SpeechActivityEventAdapter:
+    return SpeechActivityEventAdapter(event_bus)
 
 
 def make_speech_started() -> InputAudioBufferSpeechStartedEvent:
@@ -55,28 +55,28 @@ def make_response_created(response_id: str = "resp_001") -> ResponseCreatedEvent
 class TestUserSpeech:
     @pytest.mark.asyncio
     async def test_speech_started_dispatches_user_started_speaking(
-        self, event_bus: EventBus, watchdog: SpeechStateTracker
+        self, event_bus: EventBus, adapter: SpeechActivityEventAdapter
     ) -> None:
         received: list[UserStartedSpeakingEvent] = []
 
         async def capture(e: UserStartedSpeakingEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(UserStartedSpeakingEvent, capture)
+        event_bus.on(UserStartedSpeakingEvent, capture)
         await event_bus.dispatch(make_speech_started())
 
         assert len(received) == 1
 
     @pytest.mark.asyncio
     async def test_speech_stopped_dispatches_user_stopped_speaking(
-        self, event_bus: EventBus, watchdog: SpeechStateTracker
+        self, event_bus: EventBus, adapter: SpeechActivityEventAdapter
     ) -> None:
         received: list[UserStoppedSpeakingEvent] = []
 
         async def capture(e: UserStoppedSpeakingEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(UserStoppedSpeakingEvent, capture)
+        event_bus.on(UserStoppedSpeakingEvent, capture)
         await event_bus.dispatch(make_speech_stopped())
 
         assert len(received) == 1
@@ -85,42 +85,42 @@ class TestUserSpeech:
 class TestAssistantSpeech:
     @pytest.mark.asyncio
     async def test_response_created_dispatches_assistant_started_responding(
-        self, event_bus: EventBus, watchdog: SpeechStateTracker
+        self, event_bus: EventBus, adapter: SpeechActivityEventAdapter
     ) -> None:
         received: list[AssistantStartedRespondingEvent] = []
 
         async def capture(e: AssistantStartedRespondingEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(AssistantStartedRespondingEvent, capture)
+        event_bus.on(AssistantStartedRespondingEvent, capture)
         await event_bus.dispatch(make_response_created())
 
         assert len(received) == 1
 
     @pytest.mark.asyncio
     async def test_playback_completed_dispatches_assistant_stopped_responding(
-        self, event_bus: EventBus, watchdog: SpeechStateTracker
+        self, event_bus: EventBus, adapter: SpeechActivityEventAdapter
     ) -> None:
         received: list[AssistantStoppedRespondingEvent] = []
 
         async def capture(e: AssistantStoppedRespondingEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(AssistantStoppedRespondingEvent, capture)
+        event_bus.on(AssistantStoppedRespondingEvent, capture)
         await event_bus.dispatch(AudioPlaybackCompletedEvent())
 
         assert len(received) == 1
 
     @pytest.mark.asyncio
     async def test_multiple_responses_dispatch_multiple_started_events(
-        self, event_bus: EventBus, watchdog: SpeechStateTracker
+        self, event_bus: EventBus, adapter: SpeechActivityEventAdapter
     ) -> None:
         received: list[AssistantStartedRespondingEvent] = []
 
         async def capture(e: AssistantStartedRespondingEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(AssistantStartedRespondingEvent, capture)
+        event_bus.on(AssistantStartedRespondingEvent, capture)
         await event_bus.dispatch(make_response_created("resp_001"))
         await event_bus.dispatch(make_response_created("resp_002"))
 

@@ -4,11 +4,13 @@ from typing import Annotated, Any, Literal, Self
 
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
     TypeAdapter,
     computed_field,
     field_validator,
 )
+from transitbus import Event
 
 from rtvoice.agent.views import RealtimeModel, ReasoningEffort
 
@@ -356,7 +358,13 @@ class RealtimeSessionSettings(BaseModel):
 # ============================================================================
 
 
-class InputAudioBufferAppendEvent(BaseModel):
+class RealtimeBusEvent(Event):
+    """Transit event that retains the permissive realtime wire-model behavior."""
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class InputAudioBufferAppendEvent(RealtimeBusEvent):
     type: Literal[RealtimeClientEvent.INPUT_AUDIO_BUFFER_APPEND] = Field(
         default=RealtimeClientEvent.INPUT_AUDIO_BUFFER_APPEND
     )
@@ -534,7 +542,7 @@ class OutputAudioBufferClearEvent(BaseModel):
 # ============================================================================
 
 
-class SessionCreatedEvent(BaseModel):
+class SessionCreatedEvent(RealtimeBusEvent):
     type: Literal[RealtimeServerEvent.SESSION_CREATED] = (
         RealtimeServerEvent.SESSION_CREATED
     )
@@ -542,7 +550,7 @@ class SessionCreatedEvent(BaseModel):
     session: RealtimeSessionSettings
 
 
-class SessionUpdatedEvent(BaseModel):
+class SessionUpdatedEvent(RealtimeBusEvent):
     type: Literal[RealtimeServerEvent.SESSION_UPDATED] = (
         RealtimeServerEvent.SESSION_UPDATED
     )
@@ -550,13 +558,13 @@ class SessionUpdatedEvent(BaseModel):
     session: RealtimeSessionSettings
 
 
-class ErrorEvent(BaseModel):
+class ErrorEvent(RealtimeBusEvent):
     type: Literal[RealtimeServerEvent.ERROR]
     event_id: str
     error: ErrorDetails
 
 
-class ResponseOutputAudioDeltaEvent(BaseModel):
+class ResponseOutputAudioDeltaEvent(RealtimeBusEvent):
     type: Literal[RealtimeServerEvent.RESPONSE_OUTPUT_AUDIO_DELTA] = (
         RealtimeServerEvent.RESPONSE_OUTPUT_AUDIO_DELTA
     )
@@ -568,7 +576,7 @@ class ResponseOutputAudioDeltaEvent(BaseModel):
     delta: str
 
 
-class InputAudioTranscriptionDelta(BaseModel):
+class InputAudioTranscriptionDelta(RealtimeBusEvent):
     type: Literal[RealtimeServerEvent.CONVERSATION_ITEM_INPUT_AUDIO_TRANSCRIPTION_DELTA]
     event_id: str
     item_id: str
@@ -577,7 +585,7 @@ class InputAudioTranscriptionDelta(BaseModel):
     logprobs: list[LogProbEntry] | None = None
 
 
-class InputAudioTranscriptionCompleted(BaseModel):
+class InputAudioTranscriptionCompleted(RealtimeBusEvent):
     type: Literal[
         RealtimeServerEvent.CONVERSATION_ITEM_INPUT_AUDIO_TRANSCRIPTION_COMPLETED
     ]
@@ -589,7 +597,7 @@ class InputAudioTranscriptionCompleted(BaseModel):
     usage: Usage | None = None
 
 
-class ResponseOutputAudioTranscriptDelta(BaseModel):
+class ResponseOutputAudioTranscriptDelta(RealtimeBusEvent):
     type: Literal[RealtimeServerEvent.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA]
     event_id: str
     item_id: str
@@ -599,7 +607,7 @@ class ResponseOutputAudioTranscriptDelta(BaseModel):
     delta: str
 
 
-class ResponseOutputAudioTranscriptDone(BaseModel):
+class ResponseOutputAudioTranscriptDone(RealtimeBusEvent):
     type: Literal[RealtimeServerEvent.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE]
     event_id: str
     item_id: str
@@ -609,7 +617,7 @@ class ResponseOutputAudioTranscriptDone(BaseModel):
     transcript: str
 
 
-class ResponseOutputTextDelta(BaseModel):
+class ResponseOutputTextDelta(RealtimeBusEvent):
     type: Literal[RealtimeServerEvent.RESPONSE_OUTPUT_TEXT_DELTA]
     event_id: str
     item_id: str
@@ -619,7 +627,7 @@ class ResponseOutputTextDelta(BaseModel):
     delta: str
 
 
-class ResponseOutputTextDone(BaseModel):
+class ResponseOutputTextDone(RealtimeBusEvent):
     type: Literal[RealtimeServerEvent.RESPONSE_OUTPUT_TEXT_DONE]
     event_id: str
     item_id: str
@@ -629,7 +637,7 @@ class ResponseOutputTextDone(BaseModel):
     text: str
 
 
-class ResponseTextDelta(BaseModel):
+class ResponseTextDelta(RealtimeBusEvent):
     type: Literal[RealtimeServerEvent.RESPONSE_TEXT_DELTA]
     event_id: str
     response_id: str
@@ -639,7 +647,7 @@ class ResponseTextDelta(BaseModel):
     delta: str
 
 
-class ResponseTextDone(BaseModel):
+class ResponseTextDone(RealtimeBusEvent):
     type: Literal[RealtimeServerEvent.RESPONSE_TEXT_DONE]
     event_id: str
     response_id: str
@@ -649,7 +657,7 @@ class ResponseTextDone(BaseModel):
     text: str
 
 
-class ConversationItemTruncatedEvent(BaseModel):
+class ConversationItemTruncatedEvent(RealtimeBusEvent):
     type: Literal[RealtimeServerEvent.CONVERSATION_ITEM_TRUNCATED] = (
         RealtimeServerEvent.CONVERSATION_ITEM_TRUNCATED
     )
@@ -659,7 +667,7 @@ class ConversationItemTruncatedEvent(BaseModel):
     audio_end_ms: int
 
 
-class InputAudioBufferSpeechStartedEvent(BaseModel):
+class InputAudioBufferSpeechStartedEvent(RealtimeBusEvent):
     type: Literal[RealtimeServerEvent.INPUT_AUDIO_BUFFER_SPEECH_STARTED] = (
         RealtimeServerEvent.INPUT_AUDIO_BUFFER_SPEECH_STARTED
     )
@@ -668,7 +676,7 @@ class InputAudioBufferSpeechStartedEvent(BaseModel):
     audio_start_ms: int
 
 
-class InputAudioBufferSpeechStoppedEvent(BaseModel):
+class InputAudioBufferSpeechStoppedEvent(RealtimeBusEvent):
     type: Literal[RealtimeServerEvent.INPUT_AUDIO_BUFFER_SPEECH_STOPPED] = (
         RealtimeServerEvent.INPUT_AUDIO_BUFFER_SPEECH_STOPPED
     )
@@ -683,7 +691,7 @@ class RealtimeResponseObject(BaseModel):
     usage: TokenUsage | None = None
 
 
-class ResponseCreatedEvent(BaseModel):
+class ResponseCreatedEvent(RealtimeBusEvent):
     type: Literal[RealtimeServerEvent.RESPONSE_CREATED]
     event_id: str
     response: RealtimeResponseObject
@@ -693,7 +701,7 @@ class ResponseCreatedEvent(BaseModel):
         return self.response.id
 
 
-class ResponseDoneEvent(BaseModel):
+class ResponseDoneEvent(RealtimeBusEvent):
     type: Literal[RealtimeServerEvent.RESPONSE_DONE]
     event_id: str
     response: RealtimeResponseObject
@@ -703,7 +711,7 @@ class ResponseDoneEvent(BaseModel):
         return self.response.id
 
 
-class FunctionCallItem(BaseModel):
+class FunctionCallItem(RealtimeBusEvent):
     type: Literal[RealtimeServerEvent.RESPONSE_FUNCTION_CALL_ARGUMENTS_DONE] = (
         RealtimeServerEvent.RESPONSE_FUNCTION_CALL_ARGUMENTS_DONE
     )

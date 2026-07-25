@@ -1,19 +1,19 @@
-from .audio_handler import AudioHandler
-from .audio_recorder import AudioRecorder
-from .interruption_handler import InterruptionHandler
-from .speech_state_tracker import SpeechStateTracker
-from .supervisor_coordinator import SupervisorCoordinator
-from .tool_call_handler import ToolCallHandler
-from .transcription_accumulator import TranscriptionAccumulator
-from .user_inactivity_timeout_handler import UserInactivityTimeoutHandler
+from .audio_bridge import AudioBridge
+from .barge_in_coordinator import BargeInCoordinator
+from .conversation_audio_recorder import ConversationAudioRecorder
+from .conversation_inactivity_monitor import ConversationInactivityMonitor
+from .speech_activity_event_adapter import SpeechActivityEventAdapter
+from .supervisor_call_coordinator import SupervisorCallCoordinator
+from .tool_call_executor import ToolCallExecutor
+from .transcript_event_adapter import TranscriptEventAdapter
 
 __all__ = [
-    "AudioHandler",
-    "AudioRecorder",
-    "InterruptionHandler",
-    "SpeechStateTracker",
-    "SupervisorCoordinator",
-    "ToolCallHandler",
-    "TranscriptionAccumulator",
-    "UserInactivityTimeoutHandler",
+    "AudioBridge",
+    "BargeInCoordinator",
+    "ConversationAudioRecorder",
+    "ConversationInactivityMonitor",
+    "SpeechActivityEventAdapter",
+    "SupervisorCallCoordinator",
+    "ToolCallExecutor",
+    "TranscriptEventAdapter",
 ]

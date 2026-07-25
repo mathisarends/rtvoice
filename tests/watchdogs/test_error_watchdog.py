@@ -1,6 +1,6 @@
 import pytest
+from transitbus import EventBus
 
-from rtvoice.events.bus import EventBus
 from rtvoice.events.views import AgentErrorEvent
 from rtvoice.realtime.schemas import ErrorDetails, ErrorEvent, RealtimeServerEvent
 from rtvoice.watchdogs import ErrorWatchdog
@@ -26,7 +26,7 @@ class TestErrorMapping:
         async def capture(e: AgentErrorEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(AgentErrorEvent, capture)
+        event_bus.on(AgentErrorEvent, capture)
         await event_bus.dispatch(
             ErrorEvent(
                 type=RealtimeServerEvent.ERROR,
@@ -53,7 +53,7 @@ class TestErrorMapping:
         async def capture(e: AgentErrorEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(AgentErrorEvent, capture)
+        event_bus.on(AgentErrorEvent, capture)
         await event_bus.dispatch(
             ErrorEvent(
                 type=RealtimeServerEvent.ERROR,
@@ -78,7 +78,7 @@ class TestErrorMapping:
         async def capture(e: AgentErrorEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(AgentErrorEvent, capture)
+        event_bus.on(AgentErrorEvent, capture)
 
         for i in range(3):
             await event_bus.dispatch(

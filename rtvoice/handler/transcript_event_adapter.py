@@ -1,6 +1,7 @@
 import logging
 
-from rtvoice.events import EventBus
+from transitbus import EventBus
+
 from rtvoice.events.views import (
     AssistantTranscriptChunkReceivedEvent,
     AssistantTranscriptCompletedEvent,
@@ -19,31 +20,31 @@ from rtvoice.realtime.schemas import (
 logger = logging.getLogger(__name__)
 
 
-class TranscriptionAccumulator:
+class TranscriptEventAdapter:
     def __init__(self, event_bus: EventBus):
         self._event_bus = event_bus
 
-        self._event_bus.subscribe(
+        self._event_bus.on(
             InputAudioTranscriptionCompleted,
             self._on_user_transcript_completed,
         )
-        self._event_bus.subscribe(
+        self._event_bus.on(
             ResponseOutputAudioTranscriptDone,
             self._on_assistant_transcript_completed,
         )
-        self._event_bus.subscribe(
+        self._event_bus.on(
             ResponseOutputTextDelta,
             self._on_assistant_text_delta,
         )
-        self._event_bus.subscribe(
+        self._event_bus.on(
             ResponseTextDelta,
             self._on_assistant_text_delta,
         )
-        self._event_bus.subscribe(
+        self._event_bus.on(
             ResponseOutputTextDone,
             self._on_assistant_text_done,
         )
-        self._event_bus.subscribe(
+        self._event_bus.on(
             ResponseTextDone,
             self._on_assistant_text_done,
         )

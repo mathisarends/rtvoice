@@ -1,5 +1,6 @@
+from transitbus import EventBus
+
 from rtvoice.conversation.views import ConversationTurn
-from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AssistantTranscriptCompletedEvent,
     UserTranscriptCompletedEvent,
@@ -10,8 +11,8 @@ class ConversationHistory:
     def __init__(self, event_bus: EventBus):
         self._turns: list[ConversationTurn] = []
 
-        event_bus.subscribe(UserTranscriptCompletedEvent, self._on_user)
-        event_bus.subscribe(AssistantTranscriptCompletedEvent, self._on_assistant)
+        event_bus.on(UserTranscriptCompletedEvent, self._on_user)
+        event_bus.on(AssistantTranscriptCompletedEvent, self._on_assistant)
 
     async def _on_user(self, event: UserTranscriptCompletedEvent) -> None:
         self._turns.append(ConversationTurn(role="user", transcript=event.transcript))

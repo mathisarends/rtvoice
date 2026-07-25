@@ -4,7 +4,8 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
-from rtvoice.events import EventBus
+from transitbus import EventBus
+
 from rtvoice.handler.tool_call_helpers import (
     send_function_call_output,
     send_response_event,
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class ToolCallHandler:
+class ToolCallExecutor:
     def __init__(
         self,
         event_bus: EventBus,
@@ -31,8 +32,8 @@ class ToolCallHandler:
         self._websocket = websocket
         self._supervisor_tool_name = supervisor_tool_name
 
-        event_bus.subscribe(FunctionCallItem, self._handle_tool_call)
-        logger.debug("ToolCallHandler initialized")
+        event_bus.on(FunctionCallItem, self._handle_tool_call)
+        logger.debug("ToolCallExecutor initialized")
 
     async def _handle_tool_call(self, event: FunctionCallItem) -> None:
         if self._is_supervisor_tool(event.name):

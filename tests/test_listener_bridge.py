@@ -1,10 +1,10 @@
 import logging
 
 import pytest
+from transitbus import EventBus
 
 from rtvoice.agent.listener import AgentListener, AgentListenerBridge
 from rtvoice.agent.views import AgentError
-from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentErrorEvent,
     AgentSessionConnectedEvent,

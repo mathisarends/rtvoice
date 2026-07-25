@@ -2,9 +2,9 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from transitbus import EventBus
 
 from rtvoice.agent.views import SupervisorClarificationNeeded, SupervisorDone
-from rtvoice.events.bus import EventBus
 from rtvoice.events.views import (
     CancelSupervisorCommand,
     SupervisorFinishedEvent,
@@ -12,7 +12,7 @@ from rtvoice.events.views import (
     UpdateSessionToolsCommand,
     UpdateSupervisorCommand,
 )
-from rtvoice.handler import SupervisorCoordinator
+from rtvoice.handler import SupervisorCallCoordinator
 from rtvoice.realtime.schemas import (
     ConversationItemCreateEvent,
     ConversationResponseCreateEvent,
@@ -41,10 +41,10 @@ def tools() -> Tools:
 
 
 @pytest.fixture
-def watchdog(
+def coordinator(
     event_bus: EventBus, tools: Tools, websocket: AsyncMock
-) -> SupervisorCoordinator:
-    return SupervisorCoordinator(event_bus, tools, websocket, make_supervisor())
+) -> SupervisorCallCoordinator:
+    return SupervisorCallCoordinator(event_bus, tools, websocket, make_supervisor())
 
 
 def make_function_call_item(
@@ -121,7 +121,7 @@ class TestNonSupervisorToolIgnored:
     async def test_unregistered_tool_name_does_not_send(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         websocket: AsyncMock,
         tools: Tools,
     ) -> None:
@@ -134,7 +134,7 @@ class TestNonSupervisorToolIgnored:
     async def test_unregistered_tool_name_does_not_execute(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         tools: Tools,
     ) -> None:
         _, calls = register_tool_with_calls(tools, name="other")
@@ -145,14 +145,14 @@ class TestNonSupervisorToolIgnored:
 
 class TestToolCallHandling:
     @pytest.fixture(autouse=True)
-    def setup_supervisor(self, watchdog: SupervisorCoordinator) -> None:
+    def setup_supervisor(self, coordinator: SupervisorCallCoordinator) -> None:
         pass
 
     @pytest.mark.asyncio
     async def test_tool_not_found_does_not_send(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         websocket: AsyncMock,
         tools: Tools,
     ) -> None:
@@ -164,7 +164,7 @@ class TestToolCallHandling:
     async def test_tool_not_found_does_not_execute(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         tools: Tools,
     ) -> None:
         await event_bus.dispatch(make_function_call_item())
@@ -175,7 +175,7 @@ class TestToolCallHandling:
     async def test_sends_holding_response_immediately_when_configured(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         websocket: AsyncMock,
         tools: Tools,
     ) -> None:
@@ -191,7 +191,7 @@ class TestToolCallHandling:
     async def test_does_not_send_holding_response_without_instruction(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         websocket: AsyncMock,
         tools: Tools,
     ) -> None:
@@ -214,7 +214,7 @@ class TestToolCallHandling:
     async def test_dispatches_started_event(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         tools: Tools,
     ) -> None:
         register_tool(tools)
@@ -223,7 +223,7 @@ class TestToolCallHandling:
         async def capture(e: SupervisorStartedEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(SupervisorStartedEvent, capture)
+        event_bus.on(SupervisorStartedEvent, capture)
 
         await event_bus.dispatch(make_function_call_item())
 
@@ -234,7 +234,7 @@ class TestToolCallHandling:
     async def test_executes_tool_with_arguments(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         tools: Tools,
     ) -> None:
         _, calls = register_tool_with_calls(tools)
@@ -249,7 +249,7 @@ class TestToolCallHandling:
     async def test_duplicate_call_sends_already_in_progress(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         websocket: AsyncMock,
         tools: Tools,
     ) -> None:
@@ -278,14 +278,14 @@ class TestToolCallHandling:
 
 class TestResultDelivery:
     @pytest.fixture(autouse=True)
-    def setup_supervisor(self, watchdog: SupervisorCoordinator) -> None:
+    def setup_supervisor(self, coordinator: SupervisorCallCoordinator) -> None:
         pass
 
     @pytest.mark.asyncio
     async def test_delivers_function_call_output_after_holding(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         websocket: AsyncMock,
         tools: Tools,
     ) -> None:
@@ -308,7 +308,7 @@ class TestResultDelivery:
     async def test_sends_response_create_after_result(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         websocket: AsyncMock,
         tools: Tools,
     ) -> None:
@@ -331,7 +331,7 @@ class TestResultDelivery:
     async def test_sends_response_create_when_supervisor_result_returned(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         websocket: AsyncMock,
         tools: Tools,
     ) -> None:
@@ -366,7 +366,7 @@ class TestResultDelivery:
     async def test_pending_cleared_after_result_delivered(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         tools: Tools,
     ) -> None:
         register_tool(tools)
@@ -381,13 +381,13 @@ class TestResultDelivery:
         await event_bus.dispatch(make_function_call_item())
         await asyncio.sleep(0.05)
 
-        assert watchdog._active is None
+        assert coordinator._active is None
 
     @pytest.mark.asyncio
     async def test_dispatches_finished_event_after_result(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         tools: Tools,
     ) -> None:
         register_tool(tools)
@@ -403,7 +403,7 @@ class TestResultDelivery:
         async def capture(e: SupervisorFinishedEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(SupervisorFinishedEvent, capture)
+        event_bus.on(SupervisorFinishedEvent, capture)
 
         await event_bus.dispatch(make_function_call_item())
         await asyncio.sleep(0.05)
@@ -415,7 +415,7 @@ class TestResultDelivery:
     async def test_result_not_delivered_before_tool_completes(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         websocket: AsyncMock,
         tools: Tools,
     ) -> None:
@@ -445,14 +445,14 @@ class TestResultDelivery:
 
 class TestCancelSupervisor:
     @pytest.fixture(autouse=True)
-    def setup_supervisor(self, watchdog: SupervisorCoordinator) -> None:
+    def setup_supervisor(self, coordinator: SupervisorCallCoordinator) -> None:
         pass
 
     @pytest.mark.asyncio
     async def test_cancel_clears_pending(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         tools: Tools,
     ) -> None:
         register_tool(tools)
@@ -469,13 +469,13 @@ class TestCancelSupervisor:
         await event_bus.dispatch(make_function_call_item())
         await event_bus.dispatch(CancelSupervisorCommand())
 
-        assert watchdog._active is None
+        assert coordinator._active is None
 
     @pytest.mark.asyncio
     async def test_cancel_dispatches_finished_event(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         tools: Tools,
     ) -> None:
         register_tool(tools)
@@ -494,7 +494,7 @@ class TestCancelSupervisor:
         async def capture(e: SupervisorFinishedEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(SupervisorFinishedEvent, capture)
+        event_bus.on(SupervisorFinishedEvent, capture)
 
         await event_bus.dispatch(make_function_call_item())
         await event_bus.dispatch(CancelSupervisorCommand())
@@ -506,7 +506,7 @@ class TestCancelSupervisor:
     async def test_cancel_without_pending_is_safe(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         websocket: AsyncMock,
     ) -> None:
         await event_bus.dispatch(CancelSupervisorCommand())
@@ -517,7 +517,7 @@ class TestCancelSupervisor:
     async def test_cancel_cancels_result_task(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         tools: Tools,
     ) -> None:
         register_tool(tools)
@@ -532,7 +532,7 @@ class TestCancelSupervisor:
         tool.function = blocking_execute
 
         await event_bus.dispatch(make_function_call_item())
-        result_task = watchdog._active.execution_task
+        result_task = coordinator._active.execution_task
 
         await event_bus.dispatch(CancelSupervisorCommand())
         await asyncio.sleep(0.01)
@@ -542,14 +542,14 @@ class TestCancelSupervisor:
 
 class TestCancelTool:
     @pytest.fixture(autouse=True)
-    def setup_supervisor(self, watchdog: SupervisorCoordinator) -> None:
+    def setup_supervisor(self, coordinator: SupervisorCallCoordinator) -> None:
         pass
 
     @pytest.mark.asyncio
     async def test_cancel_tool_ejected_after_result_delivered(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         tools: Tools,
     ) -> None:
         register_tool(tools)
@@ -566,7 +566,7 @@ class TestCancelTool:
         async def capture(e: UpdateSessionToolsCommand) -> None:
             received.append(e)
 
-        event_bus.subscribe(UpdateSessionToolsCommand, capture)
+        event_bus.on(UpdateSessionToolsCommand, capture)
 
         await event_bus.dispatch(make_function_call_item())
         await asyncio.sleep(0.05)
@@ -578,17 +578,17 @@ class TestCancelTool:
 
 class TestUpdateSupervisor:
     @pytest.fixture(autouse=True)
-    def setup_supervisor(self, watchdog: SupervisorCoordinator) -> None:
+    def setup_supervisor(self, coordinator: SupervisorCallCoordinator) -> None:
         pass
 
     @pytest.mark.asyncio
     async def test_update_command_pushes_message_to_active_supervisor(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         tools: Tools,
     ) -> None:
-        supervisor = watchdog._supervisor
+        supervisor = coordinator._supervisor
         supervisor.update = AsyncMock()
         register_tool(tools)
         block = asyncio.Event()
@@ -614,9 +614,9 @@ class TestUpdateSupervisor:
     async def test_update_command_without_active_supervisor_is_ignored(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
     ) -> None:
-        supervisor = watchdog._supervisor
+        supervisor = coordinator._supervisor
         supervisor.update = AsyncMock()
 
         await event_bus.dispatch(UpdateSupervisorCommand(message="Use EU context"))
@@ -627,10 +627,10 @@ class TestUpdateSupervisor:
     async def test_update_tool_dispatches_update_command(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         tools: Tools,
     ) -> None:
-        supervisor = watchdog._supervisor
+        supervisor = coordinator._supervisor
         supervisor.update = AsyncMock()
         tools.set_context(ToolContext(event_bus=event_bus))
         register_tool(tools)
@@ -657,14 +657,14 @@ class TestUpdateSupervisor:
 
 class TestClarificationFlow:
     @pytest.fixture(autouse=True)
-    def setup_supervisor(self, watchdog: SupervisorCoordinator) -> None:
+    def setup_supervisor(self, coordinator: SupervisorCallCoordinator) -> None:
         pass
 
     @pytest.mark.asyncio
     async def test_clarification_result_sets_awaiting_flag_and_sends_prompt(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         websocket: AsyncMock,
         tools: Tools,
     ) -> None:
@@ -686,7 +686,7 @@ class TestClarificationFlow:
         await event_bus.dispatch(make_function_call_item(call_id="call_clarify"))
         await asyncio.sleep(0.05)
 
-        assert watchdog._awaiting_clarification is True
+        assert coordinator._awaiting_clarification is True
 
         sent_payloads = [c.args[0] for c in websocket.send.call_args_list]
         output_events = [
@@ -714,14 +714,14 @@ class TestClarificationFlow:
     async def test_non_supervisor_tool_call_is_ignored_while_waiting_for_clarification(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         websocket: AsyncMock,
         tools: Tools,
     ) -> None:
         register_tool(tools, name="supervisor")
         register_tool(tools, name="other_job")
 
-        watchdog._awaiting_clarification = True
+        coordinator._awaiting_clarification = True
 
         await event_bus.dispatch(
             make_function_call_item(name="other_job", call_id="call_ignored")
@@ -733,11 +733,11 @@ class TestClarificationFlow:
     async def test_supervisor_call_with_clarification_answer_is_allowed(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         tools: Tools,
     ) -> None:
         _, calls = register_tool_with_calls(tools, name="supervisor")
-        watchdog._awaiting_clarification = True
+        coordinator._awaiting_clarification = True
 
         await event_bus.dispatch(
             make_function_call_item(
@@ -748,19 +748,19 @@ class TestClarificationFlow:
         await asyncio.sleep(0.05)
 
         assert calls == [{"query": "resume answer"}]
-        assert watchdog._awaiting_clarification is False
+        assert coordinator._awaiting_clarification is False
 
 
 class TestSessionToolsSyncing:
     @pytest.fixture(autouse=True)
-    def setup_supervisor(self, watchdog: SupervisorCoordinator) -> None:
+    def setup_supervisor(self, coordinator: SupervisorCallCoordinator) -> None:
         pass
 
     @pytest.mark.asyncio
     async def test_successful_supervisor_run_syncs_tools_on_inject_and_eject(
         self,
         event_bus: EventBus,
-        watchdog: SupervisorCoordinator,
+        coordinator: SupervisorCallCoordinator,
         tools: Tools,
     ) -> None:
         register_tool(tools)
@@ -769,7 +769,7 @@ class TestSessionToolsSyncing:
         async def capture(event: UpdateSessionToolsCommand) -> None:
             received.append(event)
 
-        event_bus.subscribe(UpdateSessionToolsCommand, capture)
+        event_bus.on(UpdateSessionToolsCommand, capture)
 
         await event_bus.dispatch(make_function_call_item(call_id="call_sync"))
         await asyncio.sleep(0.05)

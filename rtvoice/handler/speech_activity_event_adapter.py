@@ -1,6 +1,7 @@
 import logging
 
-from rtvoice.events import EventBus
+from transitbus import EventBus
+
 from rtvoice.events.views import (
     AssistantStartedRespondingEvent,
     AssistantStoppedRespondingEvent,
@@ -17,20 +18,14 @@ from rtvoice.realtime.schemas import (
 logger = logging.getLogger(__name__)
 
 
-class SpeechStateTracker:
+class SpeechActivityEventAdapter:
     def __init__(self, event_bus: EventBus):
         self._event_bus = event_bus
 
-        self._event_bus.subscribe(
-            InputAudioBufferSpeechStartedEvent, self._on_speech_started
-        )
-        self._event_bus.subscribe(
-            InputAudioBufferSpeechStoppedEvent, self._on_speech_stopped
-        )
-        self._event_bus.subscribe(ResponseCreatedEvent, self._on_response_created)
-        self._event_bus.subscribe(
-            AudioPlaybackCompletedEvent, self._on_playback_completed
-        )
+        self._event_bus.on(InputAudioBufferSpeechStartedEvent, self._on_speech_started)
+        self._event_bus.on(InputAudioBufferSpeechStoppedEvent, self._on_speech_stopped)
+        self._event_bus.on(ResponseCreatedEvent, self._on_response_created)
+        self._event_bus.on(AudioPlaybackCompletedEvent, self._on_playback_completed)
 
     async def _on_speech_started(self, _: InputAudioBufferSpeechStartedEvent) -> None:
         await self._event_bus.dispatch(UserStartedSpeakingEvent())

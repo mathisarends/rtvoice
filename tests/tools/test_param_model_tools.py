@@ -3,8 +3,8 @@ from typing import Annotated, Literal
 
 import pytest
 from pydantic import BaseModel, Field
+from transitbus import EventBus
 
-from rtvoice.events.bus import EventBus
 from rtvoice.tools import Tools
 from rtvoice.tools.di import Inject, ToolContext
 from rtvoice.tools.views import ToolSchemaBuilder

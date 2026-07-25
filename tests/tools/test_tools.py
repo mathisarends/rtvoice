@@ -1,7 +1,7 @@
 import pytest
 from pydantic import BaseModel
+from transitbus import EventBus
 
-from rtvoice.events.bus import EventBus
 from rtvoice.tools import Tools
 from rtvoice.tools.di import Inject, ToolContext
 

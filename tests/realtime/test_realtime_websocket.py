@@ -9,6 +9,7 @@ from websockets.exceptions import ConnectionClosed
 
 from rtvoice.agent.views import RealtimeModel
 from rtvoice.realtime.providers import OpenAIProvider
+from rtvoice.realtime.schemas import InputAudioBufferAppendEvent
 from rtvoice.realtime.websocket import RealtimeWebSocket
 
 
@@ -164,6 +165,20 @@ class TestSend:
 
         payload = json.loads(ws.send.call_args[0][0])
         assert "value" not in payload
+        socket._receive_task.cancel()
+
+    @pytest.mark.asyncio
+    async def test_excludes_transit_metadata_from_wire_payload(
+        self, socket: RealtimeWebSocket
+    ) -> None:
+        ws = make_ws()
+
+        with patch("rtvoice.realtime.websocket.connect", AsyncMock(return_value=ws)):
+            await socket.connect()
+            await socket.send(InputAudioBufferAppendEvent(audio="AAAA"))
+
+        payload = json.loads(ws.send.call_args[0][0])
+        assert payload == {"type": "input_audio_buffer.append", "audio": "AAAA"}
         socket._receive_task.cancel()
 
     @pytest.mark.asyncio

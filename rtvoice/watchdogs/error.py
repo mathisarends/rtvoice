@@ -1,7 +1,8 @@
 import logging
 
+from transitbus import EventBus
+
 from rtvoice.agent.views import AgentError
-from rtvoice.events import EventBus
 from rtvoice.events.views import AgentErrorEvent
 from rtvoice.realtime.schemas import ErrorEvent
 
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 class ErrorWatchdog:
     def __init__(self, event_bus: EventBus) -> None:
         self._event_bus = event_bus
-        self._event_bus.subscribe(ErrorEvent, self._on_error)
+        self._event_bus.on(ErrorEvent, self._on_error)
 
     async def _on_error(self, event: ErrorEvent) -> None:
         agent_error = AgentError(

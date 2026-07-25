@@ -2,9 +2,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic import BaseModel
+from transitbus import EventBus
 
-from rtvoice.events.bus import EventBus
-from rtvoice.handler import ToolCallHandler
+from rtvoice.handler import ToolCallExecutor
 from rtvoice.realtime.schemas import (
     ConversationItemCreateEvent,
     ConversationResponseCreateEvent,
@@ -34,10 +34,10 @@ def tools() -> MagicMock:
 
 
 @pytest.fixture
-def watchdog(
+def executor(
     event_bus: EventBus, tools: MagicMock, websocket: AsyncMock
-) -> ToolCallHandler:
-    return ToolCallHandler(event_bus, tools, websocket)
+) -> ToolCallExecutor:
+    return ToolCallExecutor(event_bus, tools, websocket)
 
 
 def make_function_call_item(
@@ -69,7 +69,7 @@ class TestImmediateTool:
     async def test_immediate_tool_sends_function_call_output(
         self,
         event_bus: EventBus,
-        watchdog: ToolCallHandler,
+        executor: ToolCallExecutor,
         websocket: AsyncMock,
         tools: MagicMock,
     ) -> None:
@@ -84,7 +84,7 @@ class TestImmediateTool:
     async def test_immediate_tool_sends_response_create_after_result(
         self,
         event_bus: EventBus,
-        watchdog: ToolCallHandler,
+        executor: ToolCallExecutor,
         websocket: AsyncMock,
         tools: MagicMock,
     ) -> None:
@@ -99,7 +99,7 @@ class TestImmediateTool:
     async def test_immediate_tool_executes_with_arguments(
         self,
         event_bus: EventBus,
-        watchdog: ToolCallHandler,
+        executor: ToolCallExecutor,
         tools: MagicMock,
     ) -> None:
         tools.get.return_value = make_immediate_tool()
@@ -113,7 +113,7 @@ class TestImmediateTool:
     async def test_response_create_uses_result_instruction_when_present(
         self,
         event_bus: EventBus,
-        watchdog: ToolCallHandler,
+        executor: ToolCallExecutor,
         websocket: AsyncMock,
         tools: MagicMock,
     ) -> None:
@@ -140,7 +140,7 @@ class TestImmediateTool:
     async def test_non_string_result_is_serialized_to_function_output(
         self,
         event_bus: EventBus,
-        watchdog: ToolCallHandler,
+        executor: ToolCallExecutor,
         websocket: AsyncMock,
         tools: MagicMock,
     ) -> None:
@@ -168,7 +168,7 @@ class TestUnknownTool:
     async def test_unknown_tool_does_not_send_to_websocket(
         self,
         event_bus: EventBus,
-        watchdog: ToolCallHandler,
+        executor: ToolCallExecutor,
         websocket: AsyncMock,
         tools: MagicMock,
     ) -> None:
@@ -182,7 +182,7 @@ class TestUnknownTool:
     async def test_unknown_tool_does_not_execute(
         self,
         event_bus: EventBus,
-        watchdog: ToolCallHandler,
+        executor: ToolCallExecutor,
         tools: MagicMock,
     ) -> None:
         tools.get.return_value = None
@@ -194,10 +194,10 @@ class TestUnknownTool:
 
 class TestSupervisorToolSkipped:
     @pytest.fixture
-    def watchdog_with_supervisor(
+    def executor_with_supervisor(
         self, event_bus: EventBus, tools: MagicMock, websocket: AsyncMock
-    ) -> ToolCallHandler:
-        return ToolCallHandler(
+    ) -> ToolCallExecutor:
+        return ToolCallExecutor(
             event_bus, tools, websocket, supervisor_tool_name="slow_job"
         )
 
@@ -205,7 +205,7 @@ class TestSupervisorToolSkipped:
     async def test_supervisor_tool_is_not_executed(
         self,
         event_bus: EventBus,
-        watchdog_with_supervisor: ToolCallHandler,
+        executor_with_supervisor: ToolCallExecutor,
         tools: MagicMock,
     ) -> None:
         tools.get.return_value = make_immediate_tool(name="slow_job")
@@ -218,7 +218,7 @@ class TestSupervisorToolSkipped:
     async def test_supervisor_tool_does_not_send_to_websocket(
         self,
         event_bus: EventBus,
-        watchdog_with_supervisor: ToolCallHandler,
+        executor_with_supervisor: ToolCallExecutor,
         websocket: AsyncMock,
         tools: MagicMock,
     ) -> None:
@@ -232,7 +232,7 @@ class TestSupervisorToolSkipped:
     async def test_non_supervisor_tool_still_executes(
         self,
         event_bus: EventBus,
-        watchdog_with_supervisor: ToolCallHandler,
+        executor_with_supervisor: ToolCallExecutor,
         tools: MagicMock,
     ) -> None:
         tools.get.return_value = make_immediate_tool(name="get_weather")

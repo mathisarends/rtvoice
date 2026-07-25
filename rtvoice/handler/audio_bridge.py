@@ -3,8 +3,9 @@ import base64
 import logging
 from contextlib import suppress
 
+from transitbus import EventBus
+
 from rtvoice.audio.session import AudioSession
-from rtvoice.events import EventBus
 from rtvoice.events.views import (
     AgentSessionConnectedEvent,
     AgentStoppedEvent,
@@ -21,7 +22,7 @@ from rtvoice.realtime.websocket import RealtimeWebSocket
 logger = logging.getLogger(__name__)
 
 
-class AudioHandler:
+class AudioBridge:
     def __init__(
         self,
         event_bus: EventBus,
@@ -33,16 +34,14 @@ class AudioHandler:
         self._websocket = websocket
         self._streaming_task: asyncio.Task | None = None
 
-        self._event_bus.subscribe(
-            AgentSessionConnectedEvent, self._audio_session_connected
-        )
-        self._event_bus.subscribe(AgentStoppedEvent, self._on_agent_stopped)
-        self._event_bus.subscribe(ResponseOutputAudioDeltaEvent, self._on_audio_delta)
-        self._event_bus.subscribe(
+        self._event_bus.on(AgentSessionConnectedEvent, self._audio_session_connected)
+        self._event_bus.on(AgentStoppedEvent, self._on_agent_stopped)
+        self._event_bus.on(ResponseOutputAudioDeltaEvent, self._on_audio_delta)
+        self._event_bus.on(
             InputAudioBufferSpeechStartedEvent, self._on_user_started_speaking
         )
-        self._event_bus.subscribe(ResponseDoneEvent, self._on_response_done)
-        self._event_bus.subscribe(
+        self._event_bus.on(ResponseDoneEvent, self._on_response_done)
+        self._event_bus.on(
             InputAudioBufferAppendEvent, self._on_input_audio_buffer_append
         )
 

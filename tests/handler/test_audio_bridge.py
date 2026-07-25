@@ -3,14 +3,14 @@ import base64
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from transitbus import EventBus
 
-from rtvoice.events.bus import EventBus
 from rtvoice.events.views import (
     AgentSessionConnectedEvent,
     AgentStoppedEvent,
     AudioPlaybackCompletedEvent,
 )
-from rtvoice.handler import AudioHandler
+from rtvoice.handler import AudioBridge
 from rtvoice.realtime.schemas import (
     InputAudioBufferSpeechStartedEvent,
     RealtimeResponseObject,
@@ -51,10 +51,10 @@ def websocket() -> MagicMock:
 
 
 @pytest.fixture
-def player(
+def audio_bridge(
     event_bus: EventBus, audio_session: MagicMock, websocket: MagicMock
-) -> AudioHandler:
-    return AudioHandler(event_bus, audio_session, websocket)
+) -> AudioBridge:
+    return AudioBridge(event_bus, audio_session, websocket)
 
 
 class TestSessionLifecycle:
@@ -62,7 +62,7 @@ class TestSessionLifecycle:
     async def test_session_connected_starts_audio(
         self,
         event_bus: EventBus,
-        player: AudioHandler,
+        audio_bridge: AudioBridge,
         audio_session: MagicMock,
     ) -> None:
         await event_bus.dispatch(AgentSessionConnectedEvent())
@@ -72,19 +72,19 @@ class TestSessionLifecycle:
 
     @pytest.mark.asyncio
     async def test_session_connected_creates_streaming_task(
-        self, event_bus: EventBus, player: AudioHandler
+        self, event_bus: EventBus, audio_bridge: AudioBridge
     ) -> None:
-        assert player._streaming_task is None
+        assert audio_bridge._streaming_task is None
 
         await event_bus.dispatch(AgentSessionConnectedEvent())
 
-        assert player._streaming_task is not None
+        assert audio_bridge._streaming_task is not None
 
     @pytest.mark.asyncio
     async def test_agent_stopped_stops_audio(
         self,
         event_bus: EventBus,
-        player: AudioHandler,
+        audio_bridge: AudioBridge,
         audio_session: MagicMock,
     ) -> None:
         await event_bus.dispatch(AgentSessionConnectedEvent())
@@ -95,13 +95,13 @@ class TestSessionLifecycle:
 
     @pytest.mark.asyncio
     async def test_agent_stopped_clears_streaming_task(
-        self, event_bus: EventBus, player: AudioHandler
+        self, event_bus: EventBus, audio_bridge: AudioBridge
     ) -> None:
         await event_bus.dispatch(AgentSessionConnectedEvent())
         await asyncio.sleep(0)
         await event_bus.dispatch(AgentStoppedEvent())
 
-        assert player._streaming_task is None
+        assert audio_bridge._streaming_task is None
 
 
 class TestAudioDelta:
@@ -109,7 +109,7 @@ class TestAudioDelta:
     async def test_audio_delta_plays_decoded_chunk(
         self,
         event_bus: EventBus,
-        player: AudioHandler,
+        audio_bridge: AudioBridge,
         audio_session: MagicMock,
     ) -> None:
         audio_bytes = b"\x00\x01\x02\x03"
@@ -134,7 +134,7 @@ class TestBargeIn:
     async def test_user_started_speaking_clears_output_buffer(
         self,
         event_bus: EventBus,
-        player: AudioHandler,
+        audio_bridge: AudioBridge,
         audio_session: MagicMock,
     ) -> None:
         await event_bus.dispatch(
@@ -153,7 +153,7 @@ class TestPlaybackCompletion:
     async def test_response_done_dispatches_playback_completed_when_not_playing(
         self,
         event_bus: EventBus,
-        player: AudioHandler,
+        audio_bridge: AudioBridge,
         audio_session: MagicMock,
     ) -> None:
         received: list[AudioPlaybackCompletedEvent] = []
@@ -161,7 +161,7 @@ class TestPlaybackCompletion:
         async def capture(e: AudioPlaybackCompletedEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(AudioPlaybackCompletedEvent, capture)
+        event_bus.on(AudioPlaybackCompletedEvent, capture)
         audio_session.is_playing = False
 
         await event_bus.dispatch(
@@ -179,7 +179,7 @@ class TestPlaybackCompletion:
     async def test_response_done_waits_while_playing_before_dispatching(
         self,
         event_bus: EventBus,
-        player: AudioHandler,
+        audio_bridge: AudioBridge,
         audio_session: MagicMock,
     ) -> None:
         received: list[AudioPlaybackCompletedEvent] = []
@@ -187,7 +187,7 @@ class TestPlaybackCompletion:
         async def capture(e: AudioPlaybackCompletedEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(AudioPlaybackCompletedEvent, capture)
+        event_bus.on(AudioPlaybackCompletedEvent, capture)
         audio_session.is_playing = True
 
         await event_bus.dispatch(

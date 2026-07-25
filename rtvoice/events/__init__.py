@@ -1,3 +1,3 @@
-from .bus import EventBus
+from transitbus import Event, EventBus
 
-__all__ = ["EventBus"]
+__all__ = ["Event", "EventBus"]

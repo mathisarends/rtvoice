@@ -1,12 +1,12 @@
 import pytest
+from transitbus import EventBus
 
-from rtvoice.events.bus import EventBus
 from rtvoice.events.views import (
     AssistantTranscriptCompletedEvent,
     AssistantTranscriptDeltaEvent,
     UserTranscriptCompletedEvent,
 )
-from rtvoice.handler import TranscriptionAccumulator
+from rtvoice.handler import TranscriptEventAdapter
 from rtvoice.realtime.schemas import (
     InputAudioTranscriptionCompleted,
     RealtimeServerEvent,
@@ -23,21 +23,21 @@ def event_bus() -> EventBus:
 
 
 @pytest.fixture
-def watchdog(event_bus: EventBus) -> TranscriptionAccumulator:
-    return TranscriptionAccumulator(event_bus)
+def adapter(event_bus: EventBus) -> TranscriptEventAdapter:
+    return TranscriptEventAdapter(event_bus)
 
 
 class TestUserTranscription:
     @pytest.mark.asyncio
     async def test_transcription_completed_dispatches_user_transcript_event(
-        self, event_bus: EventBus, watchdog: TranscriptionAccumulator
+        self, event_bus: EventBus, adapter: TranscriptEventAdapter
     ) -> None:
         received: list[UserTranscriptCompletedEvent] = []
 
         async def capture(e: UserTranscriptCompletedEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(UserTranscriptCompletedEvent, capture)
+        event_bus.on(UserTranscriptCompletedEvent, capture)
         await event_bus.dispatch(
             InputAudioTranscriptionCompleted(
                 type=RealtimeServerEvent.CONVERSATION_ITEM_INPUT_AUDIO_TRANSCRIPTION_COMPLETED,
@@ -54,14 +54,14 @@ class TestUserTranscription:
 
     @pytest.mark.asyncio
     async def test_user_transcript_carries_item_id(
-        self, event_bus: EventBus, watchdog: TranscriptionAccumulator
+        self, event_bus: EventBus, adapter: TranscriptEventAdapter
     ) -> None:
         received: list[UserTranscriptCompletedEvent] = []
 
         async def capture(e: UserTranscriptCompletedEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(UserTranscriptCompletedEvent, capture)
+        event_bus.on(UserTranscriptCompletedEvent, capture)
         await event_bus.dispatch(
             InputAudioTranscriptionCompleted(
                 type=RealtimeServerEvent.CONVERSATION_ITEM_INPUT_AUDIO_TRANSCRIPTION_COMPLETED,
@@ -78,14 +78,14 @@ class TestUserTranscription:
 class TestAssistantTranscription:
     @pytest.mark.asyncio
     async def test_transcript_done_dispatches_assistant_transcript_event(
-        self, event_bus: EventBus, watchdog: TranscriptionAccumulator
+        self, event_bus: EventBus, adapter: TranscriptEventAdapter
     ) -> None:
         received: list[AssistantTranscriptCompletedEvent] = []
 
         async def capture(e: AssistantTranscriptCompletedEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(AssistantTranscriptCompletedEvent, capture)
+        event_bus.on(AssistantTranscriptCompletedEvent, capture)
         await event_bus.dispatch(
             ResponseOutputAudioTranscriptDone(
                 type=RealtimeServerEvent.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE,
@@ -106,14 +106,14 @@ class TestAssistantTranscription:
 
     @pytest.mark.asyncio
     async def test_assistant_transcript_carries_output_and_content_index(
-        self, event_bus: EventBus, watchdog: TranscriptionAccumulator
+        self, event_bus: EventBus, adapter: TranscriptEventAdapter
     ) -> None:
         received: list[AssistantTranscriptCompletedEvent] = []
 
         async def capture(e: AssistantTranscriptCompletedEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(AssistantTranscriptCompletedEvent, capture)
+        event_bus.on(AssistantTranscriptCompletedEvent, capture)
         await event_bus.dispatch(
             ResponseOutputAudioTranscriptDone(
                 type=RealtimeServerEvent.RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE,
@@ -131,14 +131,14 @@ class TestAssistantTranscription:
 
     @pytest.mark.asyncio
     async def test_text_delta_dispatches_assistant_delta_event(
-        self, event_bus: EventBus, watchdog: TranscriptionAccumulator
+        self, event_bus: EventBus, adapter: TranscriptEventAdapter
     ) -> None:
         received: list[AssistantTranscriptDeltaEvent] = []
 
         async def capture(e: AssistantTranscriptDeltaEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(AssistantTranscriptDeltaEvent, capture)
+        event_bus.on(AssistantTranscriptDeltaEvent, capture)
         await event_bus.dispatch(
             ResponseOutputTextDelta(
                 type=RealtimeServerEvent.RESPONSE_OUTPUT_TEXT_DELTA,
@@ -157,14 +157,14 @@ class TestAssistantTranscription:
 
     @pytest.mark.asyncio
     async def test_text_done_dispatches_assistant_completed_event(
-        self, event_bus: EventBus, watchdog: TranscriptionAccumulator
+        self, event_bus: EventBus, adapter: TranscriptEventAdapter
     ) -> None:
         received: list[AssistantTranscriptCompletedEvent] = []
 
         async def capture(e: AssistantTranscriptCompletedEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(AssistantTranscriptCompletedEvent, capture)
+        event_bus.on(AssistantTranscriptCompletedEvent, capture)
         await event_bus.dispatch(
             ResponseOutputTextDone(
                 type=RealtimeServerEvent.RESPONSE_OUTPUT_TEXT_DONE,
@@ -182,14 +182,14 @@ class TestAssistantTranscription:
 
     @pytest.mark.asyncio
     async def test_response_text_delta_dispatches_assistant_delta_event(
-        self, event_bus: EventBus, watchdog: TranscriptionAccumulator
+        self, event_bus: EventBus, adapter: TranscriptEventAdapter
     ) -> None:
         received: list[AssistantTranscriptDeltaEvent] = []
 
         async def capture(e: AssistantTranscriptDeltaEvent) -> None:
             received.append(e)
 
-        event_bus.subscribe(AssistantTranscriptDeltaEvent, capture)
+        event_bus.on(AssistantTranscriptDeltaEvent, capture)
         await event_bus.dispatch(
             ResponseTextDelta(
                 type=RealtimeServerEvent.RESPONSE_TEXT_DELTA,

@@ -6,18 +6,11 @@ from rtvoice.audio.echo.ports import EchoCanceller
 
 _INT16_PEAK = 32768.0
 _EPS = 1e-12
-_FAR_END_FLOOR = 1e-3  # ~-60 dBFS: below this there is no echo to learn from
+_FAR_END_FLOOR = 1e-3  # Below -60 dBFS there is no useful echo to learn.
 
 
 class NlmsEchoCanceller(EchoCanceller):
-    """Partitioned frequency-domain NLMS filter (needs numpy).
-
-    Learns the actual path from loudspeaker to microphone and subtracts it, so unlike
-    a gate it leaves the user's voice intact and barge-in keeps working while the
-    assistant speaks. A Wiener-style post-filter removes what the linear filter cannot
-    - non-linear speaker distortion above all - which is what keeps the residual below
-    the VAD's threshold.
-    """
+    """NLMS filter with residual suppression for nonlinear speaker echo."""
 
     def __init__(
         self,
@@ -74,7 +67,6 @@ class NlmsEchoCanceller(EchoCanceller):
         return pending[: self._block], pending[self._block :]
 
     def _process_block(self, near: np.ndarray, far: np.ndarray) -> np.ndarray:
-        # overlap-save: each transform covers the previous and the current block
         spectrum = np.fft.rfft(np.concatenate([self._far_tail, far]))
         self._far_tail = far
         self._far_spectra[self._cursor] = spectrum
@@ -103,8 +95,7 @@ class NlmsEchoCanceller(EchoCanceller):
         near: np.ndarray,
         residual: np.ndarray,
     ) -> None:
-        # a filter that adds energy rather than removing it is diverging; pull it back
-        # before it turns the loop into feedback
+        # Pull back a diverging filter before it amplifies the feedback loop.
         if residual @ residual > 4 * (near @ near):
             self._weights *= 0.5
             return
@@ -114,8 +105,7 @@ class NlmsEchoCanceller(EchoCanceller):
         self._weights += self._constrain(np.conj(history) * (step * residual_spectrum))
 
     def _constrain(self, gradient: np.ndarray) -> np.ndarray:
-        # the tail of the circular correlation is wrap-around, not a real tap - zeroing
-        # it is what keeps the filter causal
+        # Circular wrap-around is not a real tap and would make the filter noncausal.
         taps = np.fft.irfft(gradient, n=self._fft, axis=-1)
         taps[:, self._block :] = 0.0
         return np.fft.rfft(taps, axis=-1)
@@ -134,7 +124,7 @@ class NlmsEchoCanceller(EchoCanceller):
         target = residual_power / (
             residual_power + self._residual_leakage * echo_power + _EPS
         )
-        # smoothing trades reaction speed for the musical noise a jumpy gain produces
+        # Smoothing avoids musical noise from abrupt gain changes.
         self._gain = 0.5 * self._gain + 0.5 * target
         return np.fft.irfft(residual_spectrum * self._gain, n=self._fft)[self._block :]
 

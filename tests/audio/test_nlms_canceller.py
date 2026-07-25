@@ -5,7 +5,7 @@ np = pytest.importorskip("numpy")
 from rtvoice.audio.echo import NlmsEchoCanceller
 
 SAMPLE_RATE = 16000
-ECHO_DELAY = 120  # samples between speaker and microphone
+ECHO_DELAY_SAMPLES = 120
 
 
 def far_end_signal(samples: int, seed: int = 0) -> np.ndarray:
@@ -14,10 +14,9 @@ def far_end_signal(samples: int, seed: int = 0) -> np.ndarray:
 
 
 def echo_of(far: np.ndarray) -> np.ndarray:
-    """A delayed, two-tap version of the far end - a stand-in for the room."""
-    path = np.zeros(ECHO_DELAY + 40)
-    path[ECHO_DELAY] = 0.5
-    path[ECHO_DELAY + 30] = -0.2
+    path = np.zeros(ECHO_DELAY_SAMPLES + 40)
+    path[ECHO_DELAY_SAMPLES] = 0.5
+    path[ECHO_DELAY_SAMPLES + 30] = -0.2
     return np.convolve(far, path)[: len(far)]
 
 

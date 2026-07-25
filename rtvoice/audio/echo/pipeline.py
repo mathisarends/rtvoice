@@ -8,11 +8,6 @@ from rtvoice.audio.ports import AudioInputDevice, AudioOutputDevice
 
 
 class EchoCancellation:
-    """Wraps an input/output pair so captured audio no longer carries the assistant's
-    own playback, stopping the assistant from interrupting itself on shared speaker/
-    mic setups. Works through ports only, so it's transport-agnostic.
-    """
-
     def __init__(
         self,
         canceller: EchoCanceller | None = None,

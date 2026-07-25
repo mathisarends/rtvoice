@@ -9,9 +9,6 @@ _BYTES_PER_SAMPLE = 2
 
 
 class ReferenceTapOutput(AudioOutputDevice):
-    """Decorator that mirrors everything handed to the wrapped device into the shared
-    timeline, so the capture side knows what the speaker is about to emit."""
-
     def __init__(self, output: AudioOutputDevice, timeline: PlaybackTimeline):
         self._output = output
         self._timeline = timeline
@@ -38,9 +35,6 @@ class ReferenceTapOutput(AudioOutputDevice):
 
 
 class EchoCancellingInput(AudioInputDevice):
-    """Decorator that subtracts the assistant's own playback from the captured stream
-    before anyone - VAD included - gets to see it."""
-
     def __init__(
         self,
         input_device: AudioInputDevice,
@@ -84,15 +78,13 @@ class EchoCancellingInput(AudioInputDevice):
         duration = samples / self._sample_rate
         start = self._capture_start(self._clock() - duration, duration)
 
-        # deliberately read a little early: capture latency makes the true instant no
-        # newer than our estimate, and a canceller can only look backwards in time
+        # Capture latency can only make the estimate late, so looking back is safe.
         return self._timeline.read(start - self._alignment_margin_s, samples)
 
     def _capture_start(self, estimate: float, duration: float) -> float:
         cursor = self._capture_cursor
 
-        # advance in sample time so the far-end reads stay gap-free under scheduling
-        # jitter, and re-anchor to the wall clock only on real drift
+        # Sample time ignores scheduler jitter; wall time still corrects real drift.
         if cursor is None or abs(cursor - estimate) > self._resync_threshold_s:
             cursor = estimate
 

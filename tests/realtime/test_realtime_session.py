@@ -6,11 +6,12 @@ from transitbus import EventBus
 
 from rtvoice.agent.views import (
     AssistantVoice,
-    ConversationSeed,
+    InjectedAssistantMessage,
+    InjectedConversation,
+    InjectedUserMessage,
     NoiseReduction,
     RealtimeModel,
     ReasoningEffort,
-    SeedMessage,
     SemanticVAD,
     TranscriptionModel,
 )
@@ -41,7 +42,7 @@ class FakeWebSocket:
 
 def make_session(
     *,
-    conversation_seed: ConversationSeed | None = None,
+    injected_conversation: InjectedConversation | None = None,
 ) -> tuple[RealtimeSession, FakeWebSocket, list[str]]:
     event_bus = EventBus()
     websocket = FakeWebSocket()
@@ -70,7 +71,7 @@ def make_session(
             turn_detection=SemanticVAD(),
             tools=Tools(),
             audio_session=MagicMock(spec=AudioSession),
-            conversation_seed=conversation_seed,
+            injected_conversation=injected_conversation,
             inactivity_timeout_seconds=None,
             recording_path=None,
             provider=MagicMock(),
@@ -80,15 +81,17 @@ def make_session(
     return session, websocket, call_order
 
 
-class TestConversationSeedInjection:
+class TestInjectedConversation:
     @pytest.mark.asyncio
-    async def test_start_injects_seed_after_session_update_before_connected_event(
+    async def test_start_injects_conversation_after_session_update_before_connected_event(
         self,
     ) -> None:
-        seed = ConversationSeed.from_pairs(
+        conversation = InjectedConversation.from_pairs(
             ("Mein Name ist Max.", "Hallo Max, wie kann ich helfen?")
         )
-        session, websocket, call_order = make_session(conversation_seed=seed)
+        session, websocket, call_order = make_session(
+            injected_conversation=conversation
+        )
 
         await session.start()
         await session.stop()
@@ -102,7 +105,9 @@ class TestConversationSeedInjection:
         assert isinstance(websocket.send.call_args_list[0].args[0], SessionUpdateEvent)
 
     @pytest.mark.asyncio
-    async def test_start_does_not_send_conversation_items_without_seed(self) -> None:
+    async def test_start_does_not_send_conversation_items_without_injected_conversation(
+        self,
+    ) -> None:
         session, websocket, _ = make_session()
 
         await session.start()
@@ -113,9 +118,9 @@ class TestConversationSeedInjection:
             isinstance(event, ConversationItemCreateEvent) for event in sent_events
         )
 
-    def test_seed_user_message_uses_input_text_content(self) -> None:
+    def test_injected_user_message_uses_input_text_content(self) -> None:
         session, _, _ = make_session()
-        event = session._seed_message_event(SeedMessage.user("Ich bin Max."))
+        event = session._injected_message_event(InjectedUserMessage("Ich bin Max."))
 
         payload = event.model_dump(exclude_none=True)
         assert payload["item"]["role"] == "user"
@@ -123,9 +128,9 @@ class TestConversationSeedInjection:
             {"type": "input_text", "text": "Ich bin Max."}
         ]
 
-    def test_seed_assistant_message_uses_output_text_content(self) -> None:
+    def test_injected_assistant_message_uses_output_text_content(self) -> None:
         session, _, _ = make_session()
-        event = session._seed_message_event(SeedMessage.assistant("Hallo Max."))
+        event = session._injected_message_event(InjectedAssistantMessage("Hallo Max."))
 
         payload = event.model_dump(exclude_none=True)
         assert payload["item"]["role"] == "assistant"

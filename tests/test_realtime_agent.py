@@ -9,11 +9,11 @@ from rtvoice.agent.listener import AgentListener
 from rtvoice.agent.views import (
     AgentError,
     AssistantVoice,
-    ConversationSeed,
+    InjectedConversation,
+    InjectedUserMessage,
     NoiseReduction,
     RealtimeModel,
     ReasoningEffort,
-    SeedMessage,
     SemanticVAD,
     ServerVAD,
     TranscriptionModel,
@@ -96,14 +96,14 @@ class TestInitDefaults:
             "Plan my day", context="(no conversation yet)"
         )
 
-    def test_default_conversation_seed_is_none(self) -> None:
+    def test_default_injected_conversation_is_none(self) -> None:
         agent = make_agent()
-        assert agent._realtime_session._conversation_seed is None
+        assert agent._realtime_session._injected_conversation is None
 
-    def test_conversation_seed_is_passed_to_realtime_session(self) -> None:
-        seed = ConversationSeed([SeedMessage.user("Mein Name ist Max.")])
-        agent = make_agent(conversation_seed=seed)
-        assert agent._realtime_session._conversation_seed is seed
+    def test_injected_conversation_is_passed_to_realtime_session(self) -> None:
+        conversation = InjectedConversation([InjectedUserMessage("Mein Name ist Max.")])
+        agent = make_agent(injected_conversation=conversation)
+        assert agent._realtime_session._injected_conversation is conversation
 
     def test_custom_turn_detection_is_stored(self) -> None:
         vad = ServerVAD(silence_duration_ms=800)

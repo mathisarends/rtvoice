@@ -9,7 +9,7 @@ from rtvoice.agent.subagent import Subagent
 from rtvoice.agent.views import (
     AgentResult,
     AssistantVoice,
-    ConversationSeed,
+    InjectedConversation,
     NoiseReduction,
     OutputModality,
     RealtimeModel,
@@ -35,7 +35,7 @@ from rtvoice.events.views import (
 from rtvoice.realtime import OpenAIProvider, RealtimeProvider, RealtimeSession
 from rtvoice.shared.decorators import timed
 from rtvoice.skills import SkillManager, Skills
-from rtvoice.tokens import PricingCatalog, UsageReport
+from rtvoice.tokens import PricingCatalog
 from rtvoice.tools import ToolContext, Tools
 
 logger = logging.getLogger(__name__)
@@ -62,7 +62,7 @@ class RealtimeAgent[T]:
         enable_echo_cancellation: bool = False,
         context: T | None = None,
         listener: AgentListener | None = None,
-        conversation_seed: ConversationSeed | None = None,
+        injected_conversation: InjectedConversation | None = None,
         inactivity_timeout_seconds: float | None = None,
         recording_path: str | Path | None = None,
         provider: RealtimeProvider | None = None,
@@ -139,7 +139,7 @@ class RealtimeAgent[T]:
             turn_detection=effective_turn_detection,
             tools=self._tools,
             audio_session=audio_session,
-            conversation_seed=conversation_seed,
+            injected_conversation=injected_conversation,
             inactivity_timeout_seconds=inactivity_timeout_seconds,
             recording_path=recording_path_obj,
             provider=provider or OpenAIProvider(api_key=api_key),
@@ -250,9 +250,6 @@ class RealtimeAgent[T]:
 
     async def send_image(self, image_data_url: str, text: str = "") -> None:
         await self._realtime_session.send_image(image_data_url, text)
-
-    def usage_report(self) -> UsageReport:
-        return self._realtime_session.token_tracker.report()
 
     @timed()
     async def stop(self) -> None:

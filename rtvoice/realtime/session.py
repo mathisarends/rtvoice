@@ -10,12 +10,13 @@ from transitbus import EventBus
 
 from rtvoice.agent.views import (
     AssistantVoice,
-    ConversationSeed,
+    InjectedAssistantMessage,
+    InjectedConversation,
+    InjectedUserMessage,
     NoiseReduction,
     OutputModality,
     RealtimeModel,
     ReasoningEffort,
-    SeedMessage,
     SemanticVAD,
     ServerVAD,
     TranscriptionModel,
@@ -81,7 +82,7 @@ class RealtimeSession:
         turn_detection: TurnDetection,
         tools: Tools,
         audio_session: AudioSession,
-        conversation_seed: ConversationSeed | None,
+        injected_conversation: InjectedConversation | None,
         inactivity_timeout_seconds: float | None,
         recording_path: Path | None,
         provider: RealtimeProvider,
@@ -100,7 +101,7 @@ class RealtimeSession:
         self._turn_detection = turn_detection
         self._tools = tools
         self._audio_session = audio_session
-        self._conversation_seed = conversation_seed
+        self._injected_conversation = injected_conversation
         self._assistant_text_enabled = "text" in self._output_modalities
         self._transcription_enabled = self._transcription_model is not None
         self._inactivity_timeout_seconds = inactivity_timeout_seconds
@@ -184,23 +185,25 @@ class RealtimeSession:
             self._forward_task = asyncio.create_task(self._forward_events())
 
         await self._send_session_update()
-        await self._inject_conversation_seed()
+        await self._send_injected_conversation()
         await self._event_bus.dispatch(AgentSessionConnectedEvent())
         logger.info("Realtime session ready")
 
-    async def _inject_conversation_seed(self) -> None:
-        if not self._conversation_seed:
+    async def _send_injected_conversation(self) -> None:
+        if not self._injected_conversation:
             return
 
         logger.info(
-            "Injecting conversation seed [messages=%d]",
-            len(self._conversation_seed.messages),
+            "Injecting conversation [messages=%d]",
+            len(self._injected_conversation.messages),
         )
-        for message in self._conversation_seed.messages:
-            await self._websocket.send(self._seed_message_event(message))
+        for message in self._injected_conversation.messages:
+            await self._websocket.send(self._injected_message_event(message))
 
-    def _seed_message_event(self, message: SeedMessage) -> ConversationItemCreateEvent:
-        if message.role == "user":
+    def _injected_message_event(
+        self, message: InjectedUserMessage | InjectedAssistantMessage
+    ) -> ConversationItemCreateEvent:
+        if isinstance(message, InjectedUserMessage):
             return ConversationItemCreateEvent.user_message(message.text)
         return ConversationItemCreateEvent.assistant_message(message.text)
 

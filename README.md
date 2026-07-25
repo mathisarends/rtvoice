@@ -49,7 +49,7 @@ Run it, speak into your microphone, and the agent responds through your speakers
   - [Custom application context](#custom-application-context)
 - [Agent Skills](#agent-skills)
 - [Subagent](#subagent)
-- [Conversation seeds](#conversation-seeds)
+- [Injected conversation](#injected-conversation)
 - [Lifecycle listener](#lifecycle-listener)
 - [Custom audio devices](#custom-audio-devices)
 - [Echo cancellation](#echo-cancellation)
@@ -351,28 +351,33 @@ completion as the tool result.
 
 ---
 
-## Conversation seeds
+## Injected conversation
 
 Pre-fill the session with synthetic conversation history before the microphone opens. The model will behave as if those exchanges already happened.
 
 ```python
-from rtvoice import RealtimeAgent, ConversationSeed, SeedMessage
+from rtvoice import (
+    RealtimeAgent,
+    InjectedConversation,
+    InjectedUserMessage,
+    InjectedAssistantMessage,
+)
 
 agent = RealtimeAgent(
     instructions="You are a helpful assistant.",
-    conversation_seed=ConversationSeed(
+    injected_conversation=InjectedConversation(
         messages=[
-            SeedMessage.user("My name is Alice and I prefer short answers."),
-            SeedMessage.assistant("Got it, Alice. I'll keep things brief."),
+            InjectedUserMessage("My name is Alice and I prefer short answers."),
+            InjectedAssistantMessage("Got it, Alice. I'll keep things brief."),
         ]
     ),
 )
 ```
 
-Use `ConversationSeed.from_pairs()` for a more concise form when you have multiple user/assistant exchanges:
+Use `InjectedConversation.from_pairs()` for a more concise form when you have multiple user/assistant exchanges:
 
 ```python
-seed = ConversationSeed.from_pairs(
+conversation = InjectedConversation.from_pairs(
     ("My name is Alice.", "Nice to meet you, Alice."),
     ("I prefer short answers.", "Understood, I'll be brief."),
 )

@@ -124,33 +124,31 @@ TurnDetection = Annotated[SemanticVAD | ServerVAD, Field(discriminator="type")]
 
 
 @dataclass
-class SeedMessage:
-    """Pre-filled conversation message injected before live user input begins."""
+class InjectedUserMessage:
+    """Pre-filled user message injected before live user input begins."""
 
-    role: Literal["user", "assistant"]
     text: str
-
-    @classmethod
-    def user(cls, text: str) -> Self:
-        return cls(role="user", text=text)
-
-    @classmethod
-    def assistant(cls, text: str) -> Self:
-        return cls(role="assistant", text=text)
 
 
 @dataclass
-class ConversationSeed:
+class InjectedAssistantMessage:
+    """Pre-filled assistant message injected before live user input begins."""
+
+    text: str
+
+
+@dataclass
+class InjectedConversation:
     """Conversation items sent after session.update but before mic audio starts."""
 
-    messages: list[SeedMessage]
+    messages: list[InjectedUserMessage | InjectedAssistantMessage]
 
     @classmethod
     def from_pairs(cls, *pairs: tuple[str, str]) -> Self:
-        messages: list[SeedMessage] = []
+        messages: list[InjectedUserMessage | InjectedAssistantMessage] = []
         for user_text, assistant_text in pairs:
-            messages.append(SeedMessage.user(user_text))
-            messages.append(SeedMessage.assistant(assistant_text))
+            messages.append(InjectedUserMessage(user_text))
+            messages.append(InjectedAssistantMessage(assistant_text))
         return cls(messages=messages)
 
 

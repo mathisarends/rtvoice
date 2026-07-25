@@ -1,5 +1,5 @@
 """
-Conversation seed demo.
+Injected conversation demo.
 
 Running
 -------
@@ -12,7 +12,12 @@ import asyncio
 
 from dotenv import load_dotenv
 
-from rtvoice import ConversationSeed, RealtimeAgent, SeedMessage
+from rtvoice import (
+    InjectedAssistantMessage,
+    InjectedConversation,
+    InjectedUserMessage,
+    RealtimeAgent,
+)
 
 load_dotenv(override=True)
 
@@ -23,10 +28,10 @@ async def main() -> None:
             "Du bist ein knapper Support-Agent. "
             "Nutze den vorhandenen Kontext, ohne ihn erneut abzufragen."
         ),
-        conversation_seed=ConversationSeed(
+        injected_conversation=InjectedConversation(
             [
-                SeedMessage.user("Ich bin Max, Nutzer-ID 42, Premium-Kunde."),
-                SeedMessage.assistant(
+                InjectedUserMessage("Ich bin Max, Nutzer-ID 42, Premium-Kunde."),
+                InjectedAssistantMessage(
                     "Verstanden, Max. Ich habe deine Kundendaten im Kontext."
                 ),
             ]

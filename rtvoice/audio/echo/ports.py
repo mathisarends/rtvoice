@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 
-Clock = Callable[[], float]
+type Clock = Callable[[], float]
 
 
 class EchoCanceller(ABC):

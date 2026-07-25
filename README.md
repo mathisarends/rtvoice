@@ -512,14 +512,16 @@ Audio format: **16-bit PCM, 24 kHz, mono** in both directions.
 
 When speaker and microphone are separate devices (e.g. a laptop's built-in
 hardware without headphones), the microphone picks up the assistant's own
-playback and the agent interrupts itself. Pass `enable_echo_cancellation=True`
+playback and the agent interrupts itself. Pass an `EchoCancellation` instance
 to subtract the assistant's speech from the captured audio before it reaches
 turn detection:
 
 ```python
+from rtvoice import EchoCancellation, RealtimeAgent
+
 agent = RealtimeAgent(
     instructions="...",
-    enable_echo_cancellation=True,
+    echo_cancellation=EchoCancellation(),
 )
 ```
 

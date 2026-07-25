@@ -59,7 +59,7 @@ class RealtimeAgent[T]:
         subagent: Subagent | None = None,
         audio_input: AudioInputDevice | None = None,
         audio_output: AudioOutputDevice | None = None,
-        enable_echo_cancellation: bool = False,
+        echo_cancellation: EchoCancellation | None = None,
         context: T | None = None,
         listener: AgentListener | None = None,
         injected_conversation: InjectedConversation | None = None,
@@ -116,8 +116,8 @@ class RealtimeAgent[T]:
         input_device = audio_input or self._create_default_input()
         output_device = audio_output or self._create_default_output()
 
-        if enable_echo_cancellation:
-            input_device, output_device = EchoCancellation().wrap(
+        if echo_cancellation:
+            input_device, output_device = echo_cancellation.wrap(
                 input_device, output_device
             )
 

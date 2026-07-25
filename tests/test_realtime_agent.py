@@ -18,6 +18,7 @@ from rtvoice.agent.views import (
     ServerVAD,
     TranscriptionModel,
 )
+from rtvoice.audio import EchoCancellation
 from rtvoice.events.views import (
     AgentErrorEvent,
     AgentSessionConnectedEvent,
@@ -49,6 +50,25 @@ def make_agent(**kwargs) -> RealtimeAgent:
 
 
 class TestInitDefaults:
+    def test_echo_cancellation_wraps_devices_when_provided(self) -> None:
+        input_device = MagicMock()
+        output_device = MagicMock()
+        wrapped_input = MagicMock()
+        wrapped_output = MagicMock()
+        echo_cancellation = MagicMock(spec=EchoCancellation)
+        echo_cancellation.wrap.return_value = wrapped_input, wrapped_output
+
+        with patch("rtvoice.agent.realtime_agent.OpenAIProvider"):
+            agent = RealtimeAgent(
+                audio_input=input_device,
+                audio_output=output_device,
+                echo_cancellation=echo_cancellation,
+            )
+
+        echo_cancellation.wrap.assert_called_once_with(input_device, output_device)
+        assert agent._realtime_session._audio_session._input is wrapped_input
+        assert agent._realtime_session._audio_session._output is wrapped_output
+
     def test_default_model_is_realtime_2_1_mini(self) -> None:
         agent = make_agent()
         assert agent._realtime_session._model == RealtimeModel.GPT_REALTIME_2_1_MINI

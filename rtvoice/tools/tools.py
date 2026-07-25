@@ -165,7 +165,7 @@ class Tools:
             subagent: Inject[Subagent],
             conversation_history: Inject[ConversationHistory],
         ) -> str:
-            conversation_summary = conversation_history.format_summary()
+            conversation_summary = conversation_history.format()
             return await subagent.start(
                 params.task,
                 context=conversation_summary,

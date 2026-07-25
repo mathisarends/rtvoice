@@ -1,6 +1,10 @@
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from importlib.metadata import version
+
+from tokenary import ModelName
+from tokenary._generated import MODEL_PRICINGS_BY_NAME
 
 from rtvoice.tokens.models import (
     CostEstimate,
@@ -16,7 +20,7 @@ _MILLION = Decimal(1_000_000)
 @dataclass(frozen=True)
 class RealtimeRates:
     text_input: Decimal
-    text_cached_input: Decimal
+    text_cached_input: Decimal | None
     text_output: Decimal
     audio_input: Decimal
     audio_cached_input: Decimal
@@ -33,10 +37,10 @@ class TranscriptionRates:
 
 
 class PricingCatalog:
-    """OpenAI's USD rate card; token rates are per million tokens."""
+    """USD rate card; token rates are per million tokens."""
 
-    AS_OF = date(2026, 7, 25)
-    SOURCE = "https://developers.openai.com/api/docs/models"
+    AS_OF = date.today()
+    SOURCE = f"tokenary {version('tokenary')} generated catalog"
 
     def __init__(
         self,
@@ -44,8 +48,10 @@ class PricingCatalog:
         realtime: dict[str, RealtimeRates] | None = None,
         transcription: dict[str, TranscriptionRates] | None = None,
     ) -> None:
-        self._realtime = realtime or _REALTIME_RATES
-        self._transcription = transcription or _TRANSCRIPTION_RATES
+        self._realtime = _REALTIME_RATES if realtime is None else realtime
+        self._transcription = (
+            _TRANSCRIPTION_RATES if transcription is None else transcription
+        )
 
     def estimate(
         self,
@@ -118,11 +124,15 @@ class PricingCatalog:
             max(0, inputs["text"] - cached["text"]),
             rates.text_input,
         )
-        self._add_tokens(
-            items,
-            "realtime.input.text.cached",
-            cached["text"],
-            rates.text_cached_input,
+        complete = (
+            self._add_optional_tokens(
+                items,
+                "realtime.input.text.cached",
+                cached["text"],
+                rates.text_cached_input,
+                notes,
+            )
+            and complete
         )
         self._add_tokens(
             items,
@@ -301,54 +311,93 @@ class PricingCatalog:
         )
 
 
-_STANDARD = RealtimeRates(
-    text_input=Decimal("4"),
-    text_cached_input=Decimal("0.40"),
-    text_output=Decimal("16"),
-    audio_input=Decimal("32"),
-    audio_cached_input=Decimal("0.40"),
-    audio_output=Decimal("64"),
-    image_input=Decimal("5"),
-    image_cached_input=Decimal("0.50"),
+def _per_million(value: float | None) -> Decimal | None:
+    return None if value is None else Decimal(str(value)) * _MILLION
+
+
+def _required_per_million(value: float | None, field: str, model: str) -> Decimal:
+    rate = _per_million(value)
+    if rate is None:
+        raise ValueError(f"Tokenary has no {field} price for {model}.")
+    return rate
+
+
+def _realtime_rates(model: ModelName) -> RealtimeRates:
+    pricing = MODEL_PRICINGS_BY_NAME[model]
+    audio_cached = getattr(
+        pricing,
+        "cache_read_input_audio_token_cost",
+        None,
+    )
+    if audio_cached is None:
+        audio_cached = getattr(
+            pricing,
+            "cache_creation_input_audio_token_cost",
+            None,
+        )
+    return RealtimeRates(
+        text_input=_required_per_million(
+            pricing.input_cost_per_token,
+            "text input",
+            model,
+        ),
+        text_cached_input=_per_million(pricing.cache_read_input_token_cost),
+        text_output=_required_per_million(
+            pricing.output_cost_per_token,
+            "text output",
+            model,
+        ),
+        audio_input=_required_per_million(
+            pricing.input_cost_per_audio_token,
+            "audio input",
+            model,
+        ),
+        audio_cached_input=_required_per_million(
+            audio_cached,
+            "cached audio input",
+            model,
+        ),
+        audio_output=_required_per_million(
+            getattr(pricing, "output_cost_per_audio_token", None),
+            "audio output",
+            model,
+        ),
+        image_input=_per_million(getattr(pricing, "input_cost_per_image", None)),
+        image_cached_input=_per_million(
+            getattr(pricing, "cache_read_input_image_token_cost", None)
+        ),
+    )
+
+
+def _transcription_rates(model: ModelName) -> TranscriptionRates:
+    pricing = MODEL_PRICINGS_BY_NAME[model]
+    per_second = getattr(pricing, "input_cost_per_second", None)
+    if per_second is not None:
+        return TranscriptionRates(minute=Decimal(str(per_second)) * Decimal(60))
+    return TranscriptionRates(
+        input_tokens=_per_million(pricing.input_cost_per_token),
+        output_tokens=_per_million(pricing.output_cost_per_token),
+    )
+
+
+_REALTIME_MODELS = (
+    ModelName.GPT_REALTIME,
+    ModelName.GPT_REALTIME_1_5,
+    ModelName.GPT_REALTIME_2,
+    ModelName.GPT_REALTIME_2_1,
+    ModelName.GPT_REALTIME_2_1_MINI,
+    ModelName.GPT_REALTIME_2025_08_28,
+    ModelName.GPT_REALTIME_MINI,
+    ModelName.GPT_REALTIME_MINI_2025_10_06,
+    ModelName.GPT_REALTIME_MINI_2025_12_15,
 )
-_REASONING = RealtimeRates(
-    text_input=Decimal("4"),
-    text_cached_input=Decimal("0.40"),
-    text_output=Decimal("24"),
-    audio_input=Decimal("32"),
-    audio_cached_input=Decimal("0.40"),
-    audio_output=Decimal("64"),
-    image_input=Decimal("5"),
-    image_cached_input=Decimal("0.50"),
-)
-_MINI = RealtimeRates(
-    text_input=Decimal("0.60"),
-    text_cached_input=Decimal("0.06"),
-    text_output=Decimal("2.40"),
-    audio_input=Decimal("10"),
-    audio_cached_input=Decimal("0.30"),
-    audio_output=Decimal("20"),
-    image_input=Decimal("0.80"),
-    image_cached_input=Decimal("0.08"),
+_TRANSCRIPTION_MODELS = (
+    ModelName.WHISPER_1,
+    ModelName.GPT_4O_TRANSCRIBE,
+    ModelName.GPT_4O_MINI_TRANSCRIBE,
 )
 
-_REALTIME_RATES = {
-    "gpt-realtime-2.1": _REASONING,
-    "gpt-realtime-2": _REASONING,
-    "gpt-realtime-1.5": _STANDARD,
-    "gpt-realtime": _STANDARD,
-    "gpt-realtime-2.1-mini": _MINI,
-    "gpt-realtime-mini": _MINI,
-}
-
+_REALTIME_RATES = {model.value: _realtime_rates(model) for model in _REALTIME_MODELS}
 _TRANSCRIPTION_RATES = {
-    "whisper-1": TranscriptionRates(minute=Decimal("0.006")),
-    "gpt-4o-transcribe": TranscriptionRates(
-        input_tokens=Decimal("2.50"),
-        output_tokens=Decimal("10"),
-    ),
-    "gpt-4o-mini-transcribe": TranscriptionRates(
-        input_tokens=Decimal("1.25"),
-        output_tokens=Decimal("5"),
-    ),
+    model.value: _transcription_rates(model) for model in _TRANSCRIPTION_MODELS
 }

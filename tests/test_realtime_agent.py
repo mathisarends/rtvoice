@@ -49,9 +49,9 @@ def make_agent(**kwargs) -> RealtimeAgent:
 
 
 class TestInitDefaults:
-    def test_default_model_is_realtime_2_1(self) -> None:
+    def test_default_model_is_realtime_2_1_mini(self) -> None:
         agent = make_agent()
-        assert agent._realtime_session._model == RealtimeModel.GPT_REALTIME_2_1
+        assert agent._realtime_session._model == RealtimeModel.GPT_REALTIME_2_1_MINI
 
     def test_default_reasoning_effort_is_low(self) -> None:
         agent = make_agent()

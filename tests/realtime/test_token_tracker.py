@@ -161,6 +161,22 @@ async def test_prices_token_based_transcription_model() -> None:
 
 
 @pytest.mark.asyncio
+async def test_prices_dated_realtime_model_from_tokenary() -> None:
+    event_bus = EventBus()
+    tracker = TokenTracker(
+        event_bus=event_bus,
+        realtime_model="gpt-realtime-mini-2025-12-15",
+    )
+
+    await event_bus.dispatch(response_done())
+
+    report = tracker.report()
+    assert report.cost.total == Decimal("0.0010934")
+    assert report.cost.pricing_source.startswith("tokenary ")
+    assert report.cost.is_complete
+
+
+@pytest.mark.asyncio
 async def test_marks_estimate_incomplete_without_modality_details() -> None:
     event_bus = EventBus()
     tracker = TokenTracker(

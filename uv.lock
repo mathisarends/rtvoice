@@ -908,6 +908,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
+    { name = "tokenary" },
     { name = "transitbus" },
     { name = "websockets" },
 ]
@@ -938,6 +939,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "sounddevice", marker = "extra == 'audio'", specifier = ">=0.5.1" },
+    { name = "tokenary", specifier = ">=0.1.1" },
     { name = "transitbus", specifier = ">=0.1.0" },
     { name = "websockets", specifier = ">=15.0.1" },
 ]
@@ -1013,6 +1015,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/88/a1/d19dd9889cd4bce2e233c4fac007cd8daaf5b9fe6e6a5d432cf17be0b807/sounddevice-0.5.5-py3-none-win32.whl", hash = "sha256:1234cc9b4c9df97b6cbe748146ae0ec64dd7d6e44739e8e42eaa5b595313a103", size = 317765, upload-time = "2026-01-23T18:36:39.047Z" },
     { url = "https://files.pythonhosted.org/packages/c3/0e/002ed7c4c1c2ab69031f78989d3b789fee3a7fba9e586eb2b81688bf4961/sounddevice-0.5.5-py3-none-win_amd64.whl", hash = "sha256:cfc6b2c49fb7f555591c78cb8ecf48d6a637fd5b6e1db5fec6ed9365d64b3519", size = 365324, upload-time = "2026-01-23T18:36:40.496Z" },
     { url = "https://files.pythonhosted.org/packages/4e/39/a61d4b83a7746b70d23d9173be688c0c6bfc7173772344b7442c2c155497/sounddevice-0.5.5-py3-none-win_arm64.whl", hash = "sha256:3861901ddd8230d2e0e8ae62ac320cdd4c688d81df89da036dcb812f757bb3e6", size = 317115, upload-time = "2026-01-23T18:36:42.235Z" },
+]
+
+[[package]]
+name = "tokenary"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ad/d9/c1d81e6056712f597f33cd2e425017c5999ff0fbbcaacc6555455e869d2c/tokenary-0.1.1.tar.gz", hash = "sha256:e151da2591e110e5acb824345b933d835d4ef2067b8aab86e46e59db00d4d68d", size = 257874, upload-time = "2026-07-23T16:00:38.306Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7a/89/23820f0d6d2aac2854876f7e38439c87e5bc270f208ad98c9c5133d86ce5/tokenary-0.1.1-py3-none-any.whl", hash = "sha256:ff4dbb60583daead61f1588cccf66e1f0fad08ca8711bb74de140b8661d8e037", size = 164628, upload-time = "2026-07-23T16:00:36.861Z" },
 ]
 
 [[package]]

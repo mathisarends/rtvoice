@@ -551,15 +551,15 @@ agent = RealtimeAgent(
 from rtvoice import AssistantVoice, RealtimeAgent, RealtimeModel, ReasoningEffort
 
 agent = RealtimeAgent(
-    model=RealtimeModel.GPT_REALTIME_2_1,   # default; or GPT_REALTIME_2_1_MINI, GPT_REALTIME_2
-    reasoning_effort=ReasoningEffort.LOW,   # default for gpt-realtime-2.1
+    model=RealtimeModel.GPT_REALTIME_2_1_MINI,   # default; or GPT_REALTIME_2_1, GPT_REALTIME_2
+    reasoning_effort=ReasoningEffort.LOW,        # default for gpt-realtime-2.1-mini
     voice=AssistantVoice.CORAL,
-    speech_speed=1.2,                       # 0.25–1.5, default 1.0
+    speech_speed=1.2,                            # 0.25–1.5, default 1.0
     instructions="...",
 )
 ```
 
-`gpt-realtime-2.1` is the default model. It supports reasoning controls; start with `ReasoningEffort.LOW` for most voice agents and increase only for workflows that need deeper planning. Set `reasoning_effort=None` if you need to omit the `reasoning` session setting.
+`gpt-realtime-2.1-mini` is the default model. It supports reasoning controls; start with `ReasoningEffort.LOW` for most voice agents and increase only for workflows that need deeper planning. Set `reasoning_effort=None` if you need to omit the `reasoning` session setting.
 
 `GPT_REALTIME` and `GPT_REALTIME_MINI` remain available for compatibility but
 emit `DeprecationWarning`; migrate to `GPT_REALTIME_2_1` and
@@ -602,9 +602,10 @@ print(result.usage.tokens.realtime.cached_input_tokens)
 print(result.usage.cost.total, result.usage.cost.currency)
 ```
 
-The built-in price catalog is a dated USD snapshot. `agent.usage_report()`
-returns the current report while a session is running. Currency conversion is
-deliberately left to the caller because exchange rates fluctuate.
+The built-in USD prices come from Tokenary's generated catalog and update with
+the installed Tokenary version. `agent.usage_report()` returns the current
+report while a session is running. Currency conversion is deliberately left to
+the caller because exchange rates fluctuate.
 
 Pass a custom `PricingCatalog` to `RealtimeAgent` when using provider-specific
 or negotiated rates.

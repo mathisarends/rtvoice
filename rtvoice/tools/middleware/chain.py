@@ -1,10 +1,14 @@
 from collections.abc import Mapping, Sequence
 
-from rtvoice.tools.middleware.base import ToolHandler, ToolMiddleware, compose
-from rtvoice.tools.middleware.errors import ErrorBoundaryMiddleware
-from rtvoice.tools.middleware.logging import CallLoggingMiddleware
-from rtvoice.tools.middleware.resolution import ToolResolutionMiddleware
-from rtvoice.tools.middleware.validation import ParamValidationMiddleware
+from rtvoice.tools.middleware import (
+    CallLoggingMiddleware,
+    ErrorBoundaryMiddleware,
+    ParamValidationMiddleware,
+    ToolHandler,
+    ToolMiddleware,
+    ToolResolutionMiddleware,
+    compose,
+)
 from rtvoice.tools.views import Tool
 
 

@@ -36,6 +36,7 @@ from rtvoice.events.views import (
 from rtvoice.realtime import OpenAIProvider, RealtimeProvider, RealtimeSession
 from rtvoice.shared.decorators import timed
 from rtvoice.skills import SkillManager, Skills
+from rtvoice.skills.bash import BashRunner
 from rtvoice.tools import Inject, ToolContext, Tools
 from rtvoice.tools.params import HandoffParams
 from rtvoice.tools.results import ActionResult
@@ -114,10 +115,10 @@ class RealtimeAgent[T]:
         self._conversation_history = ConversationHistory(self._event_bus)
 
         self._skill_manager = SkillManager(skills) if skills is not None else None
-        self._tools = Tools(
-            skill_manager=self._skill_manager,
-            allowed_commands=allowed_commands or (),
+        self._bash_runner = BashRunner.for_skills(
+            self._skill_manager, allowed_commands or ()
         )
+        self._tools = Tools()
         if tools:
             self._tools.merge(tools)
 
@@ -128,7 +129,13 @@ class RealtimeAgent[T]:
         )
 
         self._tools.set_context(
-            ToolContext().provide(self._event_bus, self._conversation_history, context)
+            ToolContext().provide(
+                self._event_bus,
+                self._conversation_history,
+                context,
+                self._skill_manager,
+                self._bash_runner,
+            )
         )
         if self._supervisor:
             self._register_supervisor(self._supervisor)

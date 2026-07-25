@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from typing import Any, Self
 
 from pydantic import BaseModel
@@ -9,8 +9,13 @@ from pydantic import BaseModel
 from rtvoice.realtime.schemas import FunctionTool
 from rtvoice.skills.bash import BashRunner
 from rtvoice.skills.manager import SkillManager
-from rtvoice.tools.binding import ToolAvailability, ToolDescription
-from rtvoice.tools.di import ToolContext
+from rtvoice.tools.binding import (
+    ToolAvailability,
+    ToolDescription,
+    provided,
+    requires,
+)
+from rtvoice.tools.di import Inject, ToolContext
 from rtvoice.tools.executor import ToolExecutor
 from rtvoice.tools.params import BashParams, LoadSkillParams
 from rtvoice.tools.results import ActionResult
@@ -20,16 +25,12 @@ logger = logging.getLogger(__name__)
 
 
 class Tools:
-    def __init__(
-        self,
-        *,
-        skill_manager: SkillManager | None = None,
-        allowed_commands: Iterable[str] = (),
-    ):
+    def __init__(self):
         self.tools: dict[str, Tool] = {}
         self._context: ToolContext | None = None
         self._executor = ToolExecutor(self.tools, self._context)
-        self._register_default_tools(skill_manager, allowed_commands)
+        self._register_default_tools()
+        self._default_tool_names = frozenset(self.tools)
 
     def action(
         self,
@@ -101,6 +102,9 @@ class Tools:
 
     def merge(self, other: Tools) -> None:
         for tool in other.tools.values():
+            # every Tools carries the defaults, so merging must not collide on them
+            if tool.name in self._default_tool_names:
+                continue
             self._register_tool(tool)
 
     def is_registered(self, tool: Tool) -> bool:
@@ -111,26 +115,19 @@ class Tools:
             raise ValueError(f"Tool '{tool.name}' already registered")
         self.tools[tool.name] = tool
 
-    def _register_default_tools(
-        self,
-        skill_manager: SkillManager | None,
-        allowed_commands: Iterable[str],
-    ) -> None:
-        if skill_manager is None or skill_manager.size == 0:
-            return
-
-        bash_runner = BashRunner(
-            allowed_commands=tuple(dict.fromkeys(allowed_commands)),
-            allowed_script_dirs=skill_manager.directories,
-        )
-
+    def _register_default_tools(self) -> None:
         @self.action(
             "Load a skill's full instructions or one bundled resource. Call this "
             "before using a skill. Pass only a relative resource path.",
             name="load_skill",
             params=LoadSkillParams,
+            available_when=requires(
+                SkillManager, predicate=lambda manager: manager.size > 0
+            ),
         )
-        def load_skill(params: LoadSkillParams) -> ActionResult:
+        def load_skill(
+            params: LoadSkillParams, skill_manager: Inject[SkillManager]
+        ) -> ActionResult:
             return ActionResult.success(skill_manager.load(params.name, params.path))
 
         @self.action(
@@ -139,6 +136,9 @@ class Tools:
             name="bash",
             params=BashParams,
             kind=ActionKind.DESTRUCTIVE,
+            available_when=provided(BashRunner),
         )
-        async def bash(params: BashParams) -> ActionResult:
+        async def bash(
+            params: BashParams, bash_runner: Inject[BashRunner]
+        ) -> ActionResult:
             return ActionResult.success(await bash_runner.execute(params))

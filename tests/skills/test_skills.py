@@ -8,7 +8,7 @@ import pytest
 from rtvoice import RealtimeAgent, Skills, Supervisor
 from rtvoice.skills import SkillManager
 from rtvoice.skills.bash import BashArgs, BashRunner, validate_command
-from rtvoice.tools import Tools
+from rtvoice.tools import ToolContext, Tools
 
 
 def make_skill(
@@ -211,20 +211,38 @@ class TestBash:
 
 
 class TestDefaultTools:
-    def test_tools_registers_skill_defaults(self, tmp_path: Path) -> None:
+    def test_skill_defaults_are_hidden_without_dependencies(self) -> None:
+        tools = Tools()
+
+        exposed = {tool.name for tool in tools.get_tool_schema()}
+
+        assert "load_skill" not in exposed
+        assert "bash" not in exposed
+
+    def test_skill_defaults_are_exposed_once_injected(self, tmp_path: Path) -> None:
         make_skill(tmp_path)
         manager = SkillManager(Skills.from_local_dir(tmp_path))
+        tools = Tools()
+        tools.set_context(ToolContext(manager, BashRunner.for_skills(manager, ["cat"])))
 
-        tools = Tools(skill_manager=manager, allowed_commands=["cat"])
+        exposed = {tool.name for tool in tools.get_tool_schema()}
+
+        assert "load_skill" in exposed
+        assert "bash" in exposed
+
+    def test_merge_keeps_the_receivers_defaults(self) -> None:
+        tools = Tools()
+
+        tools.merge(Tools())
 
         assert tools.get("load_skill") is not None
-        assert tools.get("bash") is not None
 
     @pytest.mark.asyncio
-    async def test_load_skill_uses_manager(self, tmp_path: Path) -> None:
+    async def test_load_skill_uses_injected_manager(self, tmp_path: Path) -> None:
         make_skill(tmp_path)
         manager = SkillManager(Skills.from_local_dir(tmp_path))
-        tools = Tools(skill_manager=manager)
+        tools = Tools()
+        tools.set_context(ToolContext(manager))
 
         loaded = await tools.execute("load_skill", {"name": "internet-research"})
 

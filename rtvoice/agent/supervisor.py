@@ -17,6 +17,7 @@ from rtvoice.llm import (
     UserMessage,
 )
 from rtvoice.skills import SkillManager, Skills
+from rtvoice.skills.bash import BashRunner
 from rtvoice.tools import Tools
 from rtvoice.tools.di import ToolContext
 from rtvoice.tools.params import ClarifyParams, DoneParams
@@ -54,10 +55,10 @@ class Supervisor[T]:
         self.description = description
         self._llm = llm or ChatModel(model="gpt-5.4-mini")
         self._skill_manager = SkillManager(skills) if skills is not None else None
-        self._tools = Tools(
-            skill_manager=self._skill_manager,
-            allowed_commands=allowed_commands or (),
+        self._bash_runner = BashRunner.for_skills(
+            self._skill_manager, allowed_commands or ()
         )
+        self._tools = Tools()
         if tools:
             self._tools.merge(tools)
 
@@ -71,7 +72,9 @@ class Supervisor[T]:
         self.handoff_instructions = handoff_instructions
         self.result_instructions = result_instructions
 
-        self._tools.set_context(ToolContext(context))
+        self._tools.set_context(
+            ToolContext(context, self._skill_manager, self._bash_runner)
+        )
         self._pending_updates: asyncio.Queue[str] = asyncio.Queue()
 
         self._register_done_tool()

@@ -47,7 +47,7 @@ class RealtimeAgent[T]:
         self,
         *,
         instructions: str = "",
-        model: RealtimeModel = RealtimeModel.GPT_REALTIME_2,
+        model: RealtimeModel = RealtimeModel.GPT_REALTIME_2_1,
         reasoning_effort: ReasoningEffort | None = ReasoningEffort.LOW,
         voice: AssistantVoice = AssistantVoice.MARIN,
         speech_speed: float = 1.0,
@@ -69,6 +69,7 @@ class RealtimeAgent[T]:
         recording_path: str | Path | None = None,
         provider: RealtimeProvider | None = None,
         api_key: str | None = None,
+        enable_preambles: bool = True,
     ):
         self._supervisor = supervisor
 
@@ -159,6 +160,7 @@ class RealtimeAgent[T]:
             inactivity_timeout_seconds=inactivity_timeout_seconds,
             recording_path=recording_path_obj,
             provider=provider or OpenAIProvider(api_key=api_key),
+            enable_preambles=enable_preambles,
         )
 
         self._setup_shutdown_handlers()

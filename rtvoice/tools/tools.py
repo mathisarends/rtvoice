@@ -43,6 +43,12 @@ class Tools:
         holding_instruction: str | None = None,
         status: str | Callable | None = None,
     ) -> Callable:
+        """Register a tool.
+
+        ``holding_instruction`` is deprecated and retained as a no-op for API
+        compatibility. Configure native preambles in session instructions.
+        """
+
         def decorator(func: Callable) -> Callable:
             bound_func = getattr(self, func.__name__, func)
             tool = Tool(

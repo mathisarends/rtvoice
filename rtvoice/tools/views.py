@@ -268,6 +268,8 @@ class Tool:
         self.param_model = param_model
         self.schema = schema or _schema_builder.build(function, param_model=param_model)
         self.result_instruction = result_instruction
+        # Deprecated compatibility field. Realtime models now provide native
+        # preambles based on session instructions, so this is no longer sent.
         self.holding_instruction = holding_instruction
         self.status = status
         self._validate_status()

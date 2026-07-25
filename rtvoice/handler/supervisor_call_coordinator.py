@@ -148,21 +148,9 @@ class SupervisorCallCoordinator:
         self._active = active
 
         await self._event_bus.dispatch(SupervisorStartedEvent())
-        await self._send_holding_message(tool)
         active.runner_task = asyncio.create_task(self._run_supervisor_call(active))
         active.runner_task.add_done_callback(self._log_unhandled_runner_exception)
         await active.started.wait()
-
-    async def _send_holding_message(self, tool: Tool) -> None:
-        if not tool.holding_instruction:
-            return
-
-        await self._websocket.send(
-            ConversationResponseCreateEvent.from_instructions(
-                tool.holding_instruction,
-                tool_choice=ToolChoiceMode.NONE,
-            )
-        )
 
     async def _cancel_active_supervisor(self, _: CancelSupervisorCommand) -> None:
         if self._active is None:

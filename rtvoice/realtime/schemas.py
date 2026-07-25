@@ -30,15 +30,12 @@ class RealtimeClientEvent(StrEnum):
     CONVERSATION_ITEM_DELETE = "conversation.item.delete"
     RESPONSE_CREATE = "response.create"
     RESPONSE_CANCEL = "response.cancel"
-    TRANSCRIPTION_SESSION_UPDATE = "transcription_session.update"
     OUTPUT_AUDIO_BUFFER_CLEAR = "output_audio_buffer.clear"
 
 
 class RealtimeServerEvent(StrEnum):
     SESSION_CREATED = "session.created"
     SESSION_UPDATED = "session.updated"
-    TRANSCRIPTION_SESSION_CREATED = "transcription_session.created"
-    TRANSCRIPTION_SESSION_UPDATED = "transcription_session.updated"
     CONVERSATION_CREATED = "conversation.created"
     CONVERSATION_DELETED = "conversation.deleted"
     CONVERSATION_ITEM_CREATED = "conversation.item.created"
@@ -72,8 +69,6 @@ class RealtimeServerEvent(StrEnum):
     RESPONSE_CONTENT_PART_DONE = "response.content_part.done"
     RESPONSE_OUTPUT_TEXT_DELTA = "response.output_text.delta"
     RESPONSE_OUTPUT_TEXT_DONE = "response.output_text.done"
-    RESPONSE_TEXT_DELTA = "response.text.delta"
-    RESPONSE_TEXT_DONE = "response.text.done"
     RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DELTA = "response.output_audio_transcript.delta"
     RESPONSE_OUTPUT_AUDIO_TRANSCRIPT_DONE = "response.output_audio_transcript.done"
     RESPONSE_OUTPUT_AUDIO_DELTA = "response.output_audio.delta"
@@ -342,7 +337,7 @@ class ErrorDetails(BaseModel):
 
 class RealtimeSessionSettings(BaseModel):
     type: Literal["realtime"] = "realtime"
-    model: RealtimeModel = RealtimeModel.GPT_REALTIME_2
+    model: RealtimeModel = RealtimeModel.GPT_REALTIME_2_1
     reasoning: ReasoningSettings | None = None
     instructions: str | None = None
     audio: AudioSettings = Field(default_factory=AudioSettings)
@@ -637,26 +632,6 @@ class ResponseOutputTextDone(RealtimeBusEvent):
     text: str
 
 
-class ResponseTextDelta(RealtimeBusEvent):
-    type: Literal[RealtimeServerEvent.RESPONSE_TEXT_DELTA]
-    event_id: str
-    response_id: str
-    item_id: str
-    output_index: int
-    content_index: int
-    delta: str
-
-
-class ResponseTextDone(RealtimeBusEvent):
-    type: Literal[RealtimeServerEvent.RESPONSE_TEXT_DONE]
-    event_id: str
-    response_id: str
-    item_id: str
-    output_index: int
-    content_index: int
-    text: str
-
-
 class ConversationItemTruncatedEvent(RealtimeBusEvent):
     type: Literal[RealtimeServerEvent.CONVERSATION_ITEM_TRUNCATED] = (
         RealtimeServerEvent.CONVERSATION_ITEM_TRUNCATED
@@ -689,6 +664,15 @@ class RealtimeResponseObject(BaseModel):
     id: str
     status: str | None = None
     usage: TokenUsage | None = None
+    output: list[dict[str, Any]] = Field(default_factory=list)
+
+    @property
+    def function_call_ids(self) -> list[str]:
+        return [
+            item["call_id"]
+            for item in self.output
+            if item.get("type") == "function_call" and "call_id" in item
+        ]
 
 
 class ResponseCreatedEvent(RealtimeBusEvent):
@@ -774,8 +758,6 @@ ServerEvent = Annotated[
     | InputAudioTranscriptionCompleted
     | ResponseOutputTextDelta
     | ResponseOutputTextDone
-    | ResponseTextDelta
-    | ResponseTextDone
     | ResponseOutputAudioTranscriptDelta
     | ResponseOutputAudioTranscriptDone
     | ConversationItemTruncatedEvent

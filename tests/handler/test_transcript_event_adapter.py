@@ -13,7 +13,6 @@ from rtvoice.realtime.schemas import (
     ResponseOutputAudioTranscriptDone,
     ResponseOutputTextDelta,
     ResponseOutputTextDone,
-    ResponseTextDelta,
 )
 
 
@@ -179,28 +178,3 @@ class TestAssistantTranscription:
 
         assert len(received) == 1
         assert received[0].transcript == "Completed text"
-
-    @pytest.mark.asyncio
-    async def test_response_text_delta_dispatches_assistant_delta_event(
-        self, event_bus: EventBus, adapter: TranscriptEventAdapter
-    ) -> None:
-        received: list[AssistantTranscriptDeltaEvent] = []
-
-        async def capture(e: AssistantTranscriptDeltaEvent) -> None:
-            received.append(e)
-
-        event_bus.on(AssistantTranscriptDeltaEvent, capture)
-        await event_bus.dispatch(
-            ResponseTextDelta(
-                type=RealtimeServerEvent.RESPONSE_TEXT_DELTA,
-                event_id="evt_007",
-                item_id="item_006",
-                response_id="resp_005",
-                output_index=0,
-                content_index=0,
-                delta="world",
-            )
-        )
-
-        assert len(received) == 1
-        assert received[0].delta == "world"

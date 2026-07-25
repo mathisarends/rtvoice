@@ -13,8 +13,6 @@ from rtvoice.realtime.schemas import (
     ResponseOutputAudioTranscriptDone,
     ResponseOutputTextDelta,
     ResponseOutputTextDone,
-    ResponseTextDelta,
-    ResponseTextDone,
 )
 
 logger = logging.getLogger(__name__)
@@ -37,15 +35,7 @@ class TranscriptEventAdapter:
             self._on_assistant_text_delta,
         )
         self._event_bus.on(
-            ResponseTextDelta,
-            self._on_assistant_text_delta,
-        )
-        self._event_bus.on(
             ResponseOutputTextDone,
-            self._on_assistant_text_done,
-        )
-        self._event_bus.on(
-            ResponseTextDone,
             self._on_assistant_text_done,
         )
 
@@ -85,9 +75,7 @@ class TranscriptEventAdapter:
             )
         )
 
-    async def _on_assistant_text_delta(
-        self, event: ResponseOutputTextDelta | ResponseTextDelta
-    ) -> None:
+    async def _on_assistant_text_delta(self, event: ResponseOutputTextDelta) -> None:
         await self._event_bus.dispatch(
             AssistantTranscriptChunkReceivedEvent(chunk=event.delta)
         )
@@ -100,9 +88,7 @@ class TranscriptEventAdapter:
             )
         )
 
-    async def _on_assistant_text_done(
-        self, event: ResponseOutputTextDone | ResponseTextDone
-    ) -> None:
+    async def _on_assistant_text_done(self, event: ResponseOutputTextDone) -> None:
         await self._event_bus.dispatch(
             AssistantTranscriptCompletedEvent(
                 transcript=event.text,

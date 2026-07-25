@@ -1,5 +1,7 @@
 # rtvoice
 
+![rtvoice banner](static/banner.jpg)
+
 [![PyPI version](https://badge.fury.io/py/rtvoice.svg)](https://badge.fury.io/py/rtvoice)
 [![Python Version](https://img.shields.io/badge/python-3.13%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
 
@@ -122,12 +124,14 @@ Nested Pydantic models, typed lists, enums, literals, defaults, and `Field(descr
 
 ### Long-running tools
 
-Set `holding_instruction` to have the assistant speak a phrase while the tool runs. The agent will say it immediately after calling the tool, before the result arrives.
+Realtime models provide native preambles for long-running tools. By default,
+rtvoice adds guidance that asks the model to briefly acknowledge work before a
+tool call and to say when a result is still pending. Set
+`enable_preambles=False` on `RealtimeAgent` to disable that guidance.
 
 ```python
 @tools.action(
     "Search the web for a query",
-    holding_instruction="Let me search that for you, give me a moment.",
 )
 async def search_web(query: str) -> str:
     result = await do_search(query)
@@ -139,11 +143,13 @@ Optionally add `result_instruction` to tell the model how to present the result 
 ```python
 @tools.action(
     "Fetch the latest headlines",
-    holding_instruction="Fetching the news...",
     result_instruction="Summarise the headlines in two sentences.",
 )
 async def get_headlines() -> str: ...
 ```
+
+`holding_instruction` is retained as a deprecated no-op for source
+compatibility.
 
 ### Status templates
 
@@ -315,7 +321,6 @@ async def book_table(
 
 supervisor = Supervisor(
     description="Books restaurant tables on behalf of the user.",
-    holding_instruction="I'm checking availability, just a moment.",
     instructions="Use book_table to complete booking requests. Call done() when finished.",
     tools=tools,
     llm=ChatOpenAI(model="gpt-4o-mini"),
@@ -339,7 +344,7 @@ agent = RealtimeAgent(
 | `tools`                | `Tools` instance with the actions the supervisor may call |
 | `skills`               | Local Agent Skills exposed through progressive disclosure |
 | `allowed_commands`     | Commands the skill `bash` tool may execute                 |
-| `holding_instruction`  | Spoken while the supervisor works                         |
+| `holding_instruction`  | Deprecated no-op retained for source compatibility        |
 | `result_instructions`  | Tells the realtime model how to present the result        |
 | `handoff_instructions` | Extra guidance appended to the tool description           |
 | `max_iterations`       | Loop iteration cap (default: 10)                          |
@@ -545,15 +550,19 @@ agent = RealtimeAgent(
 from rtvoice import AssistantVoice, RealtimeAgent, RealtimeModel, ReasoningEffort
 
 agent = RealtimeAgent(
-    model=RealtimeModel.GPT_REALTIME_2,     # default; or GPT_REALTIME, GPT_REALTIME_MINI, GPT_REALTIME_1_5
-    reasoning_effort=ReasoningEffort.LOW,   # default for gpt-realtime-2
+    model=RealtimeModel.GPT_REALTIME_2_1,   # default; or GPT_REALTIME_2_1_MINI, GPT_REALTIME_2
+    reasoning_effort=ReasoningEffort.LOW,   # default for gpt-realtime-2.1
     voice=AssistantVoice.CORAL,
     speech_speed=1.2,                       # 0.25–1.5, default 1.0
     instructions="...",
 )
 ```
 
-`gpt-realtime-2` is the default model. It supports reasoning controls; start with `ReasoningEffort.LOW` for most voice agents and increase only for workflows that need deeper planning. Set `reasoning_effort=None` if you need to omit the `reasoning` session setting.
+`gpt-realtime-2.1` is the default model. It supports reasoning controls; start with `ReasoningEffort.LOW` for most voice agents and increase only for workflows that need deeper planning. Set `reasoning_effort=None` if you need to omit the `reasoning` session setting.
+
+`GPT_REALTIME` and `GPT_REALTIME_MINI` remain available for compatibility but
+emit `DeprecationWarning`; migrate to `GPT_REALTIME_2_1` and
+`GPT_REALTIME_2_1_MINI`, respectively.
 
 Available voices: `ALLOY`, `ASH`, `BALLAD`, `CORAL`, `ECHO`, `FABLE`, `ONYX`, `NOVA`, `SAGE`, `SHIMMER`, `VERSE`, `CEDAR`, `MARIN`.
 

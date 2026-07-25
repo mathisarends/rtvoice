@@ -33,9 +33,20 @@ async def send_function_call_output(
 
 
 async def send_response_event(ws: RealtimeWebSocket, tool: Tool) -> None:
-    event = (
-        ConversationResponseCreateEvent.from_instructions(tool.result_instruction)
-        if tool.result_instruction
-        else ConversationResponseCreateEvent()
+    instructions = [tool.result_instruction] if tool.result_instruction else []
+    await send_batched_response(ws, instructions)
+
+
+async def send_batched_response(
+    ws: RealtimeWebSocket, result_instructions: list[str]
+) -> None:
+    """Send exactly one follow-up response for a completed tool-call batch."""
+    if not result_instructions:
+        await ws.send(ConversationResponseCreateEvent())
+        return
+
+    await ws.send(
+        ConversationResponseCreateEvent.from_instructions(
+            "\n".join(result_instructions)
+        )
     )
-    await ws.send(event)

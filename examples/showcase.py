@@ -135,7 +135,6 @@ def build_supervisor() -> Supervisor:
         tools=build_tools(),
         llm=ChatOpenAI(model="gpt-4o-mini", temperature=0),
         max_iterations=12,
-        holding_instruction="On it...",
     )
 
 

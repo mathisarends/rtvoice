@@ -48,9 +48,9 @@ def make_agent(**kwargs) -> RealtimeAgent:
 
 
 class TestInitDefaults:
-    def test_default_model_is_realtime_2(self) -> None:
+    def test_default_model_is_realtime_2_1(self) -> None:
         agent = make_agent()
-        assert agent._realtime_session._model == RealtimeModel.GPT_REALTIME_2
+        assert agent._realtime_session._model == RealtimeModel.GPT_REALTIME_2_1
 
     def test_default_reasoning_effort_is_low(self) -> None:
         agent = make_agent()
@@ -93,8 +93,16 @@ class TestInitDefaults:
         assert agent._realtime_session._turn_detection == vad
 
     def test_custom_model_is_stored(self) -> None:
-        agent = make_agent(model=RealtimeModel.GPT_REALTIME)
-        assert agent._realtime_session._model == RealtimeModel.GPT_REALTIME
+        agent = make_agent(model=RealtimeModel.GPT_REALTIME_2)
+        assert agent._realtime_session._model == RealtimeModel.GPT_REALTIME_2
+
+    @pytest.mark.parametrize(
+        "model",
+        [RealtimeModel.GPT_REALTIME, RealtimeModel.GPT_REALTIME_MINI],
+    )
+    def test_deprecated_model_emits_warning(self, model: RealtimeModel) -> None:
+        with pytest.warns(DeprecationWarning, match="2027-01-20"):
+            make_agent(model=model)
 
     def test_custom_reasoning_effort_is_stored(self) -> None:
         agent = make_agent(reasoning_effort=ReasoningEffort.MINIMAL)

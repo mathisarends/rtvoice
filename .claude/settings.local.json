@@ -19,7 +19,16 @@
       "WebFetch(domain:www.latent.space)",
       "WebFetch(domain:platform.openai.com)",
       "WebFetch(domain:www.mindstudio.ai)",
-      "WebFetch(domain:apidog.com)"
+      "WebFetch(domain:apidog.com)",
+      "Bash(./.venv/Scripts/python.exe -m pytest tests/ -q)",
+      "Bash(python3 -c \"from PIL import Image; im=Image.open\\('static/banner.png'\\); print\\(im.size, im.mode\\)\")",
+      "Bash(where python *)",
+      "Bash(ffmpeg -i static/banner.png -vf \"alphaextract\" -frames:v 1 -f rawvideo -y /tmp/alpha_test.raw)",
+      "Bash(ffmpeg -i static/banner.png -filter_complex \"alphaextract,signalstats\" -f null -)",
+      "Bash(ffmpeg -i static/banner.png -vf \"alphaextract,signalstats,metadata=print\" -f null -)",
+      "Bash(ffmpeg -i static/banner.png -vf scale=1600:-1 -compression_level 9 -pred mixed -y /tmp/banner_1600.png)",
+      "Bash(ffmpeg -i static/banner.png -vf scale=1600:-1 -q:v 4 -y /tmp/banner_1600.jpg)",
+      "Bash(git add *)"
     ]
   }
 }

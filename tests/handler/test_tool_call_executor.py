@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -9,6 +10,9 @@ from rtvoice.realtime.schemas import (
     ConversationItemCreateEvent,
     ConversationResponseCreateEvent,
     FunctionCallItem,
+    RealtimeResponseObject,
+    RealtimeServerEvent,
+    ResponseDoneEvent,
 )
 from rtvoice.tools.views import Tool
 
@@ -27,10 +31,10 @@ def websocket() -> AsyncMock:
 
 @pytest.fixture
 def tools() -> MagicMock:
-    t = MagicMock()
-    t.get = MagicMock(return_value=None)
-    t.execute = AsyncMock(return_value="tool_result")
-    return t
+    registry = MagicMock()
+    registry.get = MagicMock(return_value=None)
+    registry.execute = AsyncMock(return_value="tool_result")
+    return registry
 
 
 @pytest.fixture
@@ -43,101 +47,153 @@ def executor(
 def make_function_call_item(
     name: str = "get_weather",
     call_id: str = "call_001",
+    response_id: str = "resp_001",
     arguments: dict | None = None,
 ) -> FunctionCallItem:
     return FunctionCallItem(
-        event_id="evt_001",
+        event_id=f"evt_{call_id}",
         call_id=call_id,
-        item_id="item_001",
+        item_id=f"item_{call_id}",
         output_index=0,
-        response_id="resp_001",
+        response_id=response_id,
         name=name,
         arguments=arguments or {},
     )
 
 
-def make_immediate_tool(name: str = "get_weather") -> MagicMock:
+def make_response_done(response_id: str = "resp_001") -> ResponseDoneEvent:
+    return ResponseDoneEvent(
+        type=RealtimeServerEvent.RESPONSE_DONE,
+        event_id=f"evt_done_{response_id}",
+        response=RealtimeResponseObject(id=response_id),
+    )
+
+
+def make_tool(
+    name: str = "get_weather", result_instruction: str | None = None
+) -> MagicMock:
     tool = MagicMock(spec=Tool)
     tool.name = name
-    tool.result_instruction = None
+    tool.result_instruction = result_instruction
     tool.holding_instruction = None
     return tool
 
 
-class TestImmediateTool:
+class TestToolBatching:
     @pytest.mark.asyncio
-    async def test_immediate_tool_sends_function_call_output(
+    async def test_single_tool_waits_for_response_done(
         self,
         event_bus: EventBus,
         executor: ToolCallExecutor,
         websocket: AsyncMock,
         tools: MagicMock,
     ) -> None:
-        tools.get.return_value = make_immediate_tool()
+        tools.get.return_value = make_tool()
 
         await event_bus.dispatch(make_function_call_item())
+        assert websocket.send.call_count == 0
 
-        sent_types = [type(c.args[0]) for c in websocket.send.call_args_list]
-        assert ConversationItemCreateEvent in sent_types
-
-    @pytest.mark.asyncio
-    async def test_immediate_tool_sends_response_create_after_result(
-        self,
-        event_bus: EventBus,
-        executor: ToolCallExecutor,
-        websocket: AsyncMock,
-        tools: MagicMock,
-    ) -> None:
-        tools.get.return_value = make_immediate_tool()
-
-        await event_bus.dispatch(make_function_call_item())
-
-        sent_types = [type(c.args[0]) for c in websocket.send.call_args_list]
-        assert ConversationResponseCreateEvent in sent_types
-
-    @pytest.mark.asyncio
-    async def test_immediate_tool_executes_with_arguments(
-        self,
-        event_bus: EventBus,
-        executor: ToolCallExecutor,
-        tools: MagicMock,
-    ) -> None:
-        tools.get.return_value = make_immediate_tool()
-        call = make_function_call_item(arguments={"city": "Berlin"})
-
-        await event_bus.dispatch(call)
-
-        tools.execute.assert_called_once_with("get_weather", {"city": "Berlin"})
-
-    @pytest.mark.asyncio
-    async def test_response_create_uses_result_instruction_when_present(
-        self,
-        event_bus: EventBus,
-        executor: ToolCallExecutor,
-        websocket: AsyncMock,
-        tools: MagicMock,
-    ) -> None:
-        tool = make_immediate_tool()
-        tool.result_instruction = "Present this naturally to the user"
-        tools.get.return_value = tool
-
-        await event_bus.dispatch(make_function_call_item())
-
-        response_events = [
-            call.args[0]
-            for call in websocket.send.call_args_list
-            if isinstance(call.args[0], ConversationResponseCreateEvent)
+        await event_bus.dispatch(make_response_done())
+        sent_types = [type(call.args[0]) for call in websocket.send.call_args_list]
+        assert sent_types == [
+            ConversationItemCreateEvent,
+            ConversationResponseCreateEvent,
         ]
 
-        assert len(response_events) == 1
-        assert response_events[0].response is not None
-        assert (
-            response_events[0].response.instructions
-            == "Present this naturally to the user"
+    @pytest.mark.asyncio
+    async def test_parallel_tools_send_all_outputs_then_one_response(
+        self,
+        event_bus: EventBus,
+        executor: ToolCallExecutor,
+        websocket: AsyncMock,
+        tools: MagicMock,
+    ) -> None:
+        tools.get.side_effect = make_tool
+        tools.execute.side_effect = ["sunny", "free"]
+
+        await event_bus.dispatch(make_function_call_item("get_weather", "call_weather"))
+        await event_bus.dispatch(
+            make_function_call_item("get_calendar", "call_calendar")
+        )
+        await event_bus.dispatch(make_response_done())
+
+        events = [call.args[0] for call in websocket.send.call_args_list]
+        assert sum(isinstance(e, ConversationItemCreateEvent) for e in events) == 2
+        assert sum(isinstance(e, ConversationResponseCreateEvent) for e in events) == 1
+        assert isinstance(events[-1], ConversationResponseCreateEvent)
+        assert [e.item.call_id for e in events[:-1]] == [
+            "call_weather",
+            "call_calendar",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_parallel_execution_starts_before_response_done(
+        self,
+        event_bus: EventBus,
+        executor: ToolCallExecutor,
+        tools: MagicMock,
+    ) -> None:
+        started = [asyncio.Event(), asyncio.Event()]
+        release = asyncio.Event()
+
+        async def execute(name: str, arguments: dict) -> str:
+            started[0 if name == "first" else 1].set()
+            await release.wait()
+            return name
+
+        tools.get.side_effect = make_tool
+        tools.execute.side_effect = execute
+        await event_bus.dispatch(make_function_call_item("first", "call_1"))
+        await event_bus.dispatch(make_function_call_item("second", "call_2"))
+        await asyncio.gather(*(event.wait() for event in started))
+        release.set()
+        await event_bus.dispatch(make_response_done())
+
+    @pytest.mark.asyncio
+    async def test_failures_do_not_drop_other_outputs(
+        self,
+        event_bus: EventBus,
+        executor: ToolCallExecutor,
+        websocket: AsyncMock,
+        tools: MagicMock,
+    ) -> None:
+        tools.get.side_effect = make_tool
+        tools.execute.side_effect = [RuntimeError("boom"), "ok"]
+
+        await event_bus.dispatch(make_function_call_item("broken", "call_1"))
+        await event_bus.dispatch(make_function_call_item("working", "call_2"))
+        await event_bus.dispatch(make_response_done())
+
+        events = [call.args[0] for call in websocket.send.call_args_list]
+        assert len(events) == 3
+        assert events[0].item.output == "Tool execution failed: boom"
+        assert events[1].item.output == "ok"
+        assert isinstance(events[2], ConversationResponseCreateEvent)
+
+    @pytest.mark.asyncio
+    async def test_result_instructions_are_merged(
+        self,
+        event_bus: EventBus,
+        executor: ToolCallExecutor,
+        websocket: AsyncMock,
+        tools: MagicMock,
+    ) -> None:
+        tools.get.side_effect = [
+            make_tool("first", "Explain the weather."),
+            make_tool("second", "Mention the appointment."),
+        ]
+
+        await event_bus.dispatch(make_function_call_item("first", "call_1"))
+        await event_bus.dispatch(make_function_call_item("second", "call_2"))
+        await event_bus.dispatch(make_response_done())
+
+        response = websocket.send.call_args_list[-1].args[0]
+        assert response.response.instructions == (
+            "Explain the weather.\nMention the appointment."
         )
 
     @pytest.mark.asyncio
-    async def test_non_string_result_is_serialized_to_function_output(
+    async def test_non_string_result_is_serialized(
         self,
         event_bus: EventBus,
         executor: ToolCallExecutor,
@@ -148,95 +204,52 @@ class TestImmediateTool:
             city: str
             temperature: int
 
-        tools.get.return_value = make_immediate_tool()
+        tools.get.return_value = make_tool()
         tools.execute.return_value = WeatherPayload(city="Berlin", temperature=18)
 
         await event_bus.dispatch(make_function_call_item())
+        await event_bus.dispatch(make_response_done())
 
-        item_events = [
-            call.args[0]
-            for call in websocket.send.call_args_list
-            if isinstance(call.args[0], ConversationItemCreateEvent)
-        ]
+        item = websocket.send.call_args_list[0].args[0]
+        assert item.item.output == '{"city":"Berlin","temperature":18}'
 
-        assert len(item_events) == 1
-        assert item_events[0].item.output == '{"city":"Berlin","temperature":18}'
-
-
-class TestUnknownTool:
     @pytest.mark.asyncio
-    async def test_unknown_tool_does_not_send_to_websocket(
+    async def test_executes_with_arguments(
+        self,
+        event_bus: EventBus,
+        executor: ToolCallExecutor,
+        tools: MagicMock,
+    ) -> None:
+        tools.get.return_value = make_tool()
+        await event_bus.dispatch(make_function_call_item(arguments={"city": "Berlin"}))
+        await event_bus.dispatch(make_response_done())
+        tools.execute.assert_awaited_once_with("get_weather", {"city": "Berlin"})
+
+
+class TestUnknownAndSupervisorTools:
+    @pytest.mark.asyncio
+    async def test_unknown_tool_is_ignored(
         self,
         event_bus: EventBus,
         executor: ToolCallExecutor,
         websocket: AsyncMock,
         tools: MagicMock,
     ) -> None:
-        tools.get.return_value = None
-
-        await event_bus.dispatch(make_function_call_item(name="nonexistent_tool"))
-
+        await event_bus.dispatch(make_function_call_item(name="missing"))
+        await event_bus.dispatch(make_response_done())
         websocket.send.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_unknown_tool_does_not_execute(
-        self,
-        event_bus: EventBus,
-        executor: ToolCallExecutor,
-        tools: MagicMock,
-    ) -> None:
-        tools.get.return_value = None
-
-        await event_bus.dispatch(make_function_call_item(name="nonexistent_tool"))
-
-        tools.execute.assert_not_called()
-
-
-class TestSupervisorToolSkipped:
-    @pytest.fixture
-    def executor_with_supervisor(
-        self, event_bus: EventBus, tools: MagicMock, websocket: AsyncMock
-    ) -> ToolCallExecutor:
-        return ToolCallExecutor(
-            event_bus, tools, websocket, supervisor_tool_name="slow_job"
-        )
-
-    @pytest.mark.asyncio
-    async def test_supervisor_tool_is_not_executed(
-        self,
-        event_bus: EventBus,
-        executor_with_supervisor: ToolCallExecutor,
-        tools: MagicMock,
-    ) -> None:
-        tools.get.return_value = make_immediate_tool(name="slow_job")
-
-        await event_bus.dispatch(make_function_call_item(name="slow_job"))
-
         tools.execute.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_supervisor_tool_does_not_send_to_websocket(
+    async def test_supervisor_tool_is_skipped(
         self,
         event_bus: EventBus,
-        executor_with_supervisor: ToolCallExecutor,
         websocket: AsyncMock,
         tools: MagicMock,
     ) -> None:
-        tools.get.return_value = make_immediate_tool(name="slow_job")
-
+        ToolCallExecutor(event_bus, tools, websocket, supervisor_tool_name="slow_job")
+        tools.get.return_value = make_tool("slow_job")
         await event_bus.dispatch(make_function_call_item(name="slow_job"))
-
+        await event_bus.dispatch(make_response_done())
         websocket.send.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_non_supervisor_tool_still_executes(
-        self,
-        event_bus: EventBus,
-        executor_with_supervisor: ToolCallExecutor,
-        tools: MagicMock,
-    ) -> None:
-        tools.get.return_value = make_immediate_tool(name="get_weather")
-
-        await event_bus.dispatch(make_function_call_item(name="get_weather"))
-
-        tools.execute.assert_called_once_with("get_weather", {})
+        tools.execute.assert_not_called()

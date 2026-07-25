@@ -1,3 +1,4 @@
+import warnings
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -12,10 +13,29 @@ type OutputModality = Literal["text", "audio"]
 
 
 class RealtimeModel(StrEnum):
+    GPT_REALTIME_2_1 = "gpt-realtime-2.1"
+    GPT_REALTIME_2_1_MINI = "gpt-realtime-2.1-mini"
     GPT_REALTIME_2 = "gpt-realtime-2"
+    GPT_REALTIME_1_5 = "gpt-realtime-1.5"
     GPT_REALTIME = "gpt-realtime"
     GPT_REALTIME_MINI = "gpt-realtime-mini"
-    GPT_REALTIME_1_5 = "gpt-realtime-1.5"
+
+    def warn_if_deprecated(self, *, stacklevel: int = 2) -> None:
+        replacement = _DEPRECATED_REALTIME_MODELS.get(self)
+        if replacement is None:
+            return
+        warnings.warn(
+            f"{self.value!r} is deprecated and scheduled for shutdown on "
+            f"2027-01-20; use {replacement.value!r} instead.",
+            DeprecationWarning,
+            stacklevel=stacklevel,
+        )
+
+
+_DEPRECATED_REALTIME_MODELS = {
+    RealtimeModel.GPT_REALTIME: RealtimeModel.GPT_REALTIME_2_1,
+    RealtimeModel.GPT_REALTIME_MINI: RealtimeModel.GPT_REALTIME_2_1_MINI,
+}
 
 
 class ReasoningEffort(StrEnum):

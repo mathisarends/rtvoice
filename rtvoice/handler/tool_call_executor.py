@@ -1,23 +1,39 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from transitbus import EventBus
 
 from rtvoice.handler.tool_call_helpers import (
+    send_batched_response,
     send_function_call_output,
-    send_response_event,
     serialize_tool_result,
 )
-from rtvoice.realtime.schemas import FunctionCallItem
+from rtvoice.realtime.schemas import FunctionCallItem, ResponseDoneEvent
 from rtvoice.realtime.websocket import RealtimeWebSocket
 
 if TYPE_CHECKING:
     from rtvoice.tools import Tools
+    from rtvoice.tools.views import Tool
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _PendingCall:
+    call_id: str
+    tool: Tool
+    task: asyncio.Task
+
+
+@dataclass
+class _ResponseBatch:
+    response_id: str
+    calls: list[_PendingCall] = field(default_factory=list)
 
 
 class ToolCallExecutor:
@@ -31,11 +47,13 @@ class ToolCallExecutor:
         self._tools = tools
         self._websocket = websocket
         self._supervisor_tool_name = supervisor_tool_name
+        self._batches: dict[str, _ResponseBatch] = {}
 
-        event_bus.on(FunctionCallItem, self._handle_tool_call)
+        event_bus.on(FunctionCallItem, self._on_function_call)
+        event_bus.on(ResponseDoneEvent, self._on_response_done)
         logger.debug("ToolCallExecutor initialized")
 
-    async def _handle_tool_call(self, event: FunctionCallItem) -> None:
+    async def _on_function_call(self, event: FunctionCallItem) -> None:
         if self._is_supervisor_tool(event.name):
             return
 
@@ -50,12 +68,37 @@ class ToolCallExecutor:
             json.dumps(event.arguments or {}, ensure_ascii=False),
         )
 
-        result = await self._tools.execute(event.name, event.arguments or {})
-        serialized = serialize_tool_result(result)
+        task = asyncio.create_task(
+            self._tools.execute(event.name, event.arguments or {})
+        )
+        batch = self._batches.setdefault(
+            event.response_id, _ResponseBatch(response_id=event.response_id)
+        )
+        batch.calls.append(_PendingCall(call_id=event.call_id, tool=tool, task=task))
 
-        logger.info("Tool result: '%s' [result=%s]", event.name, serialized)
-        await send_function_call_output(self._websocket, event.call_id, serialized)
-        await send_response_event(self._websocket, tool)
+    async def _on_response_done(self, event: ResponseDoneEvent) -> None:
+        batch = self._batches.pop(event.response_id, None)
+        if not batch or not batch.calls:
+            return
 
-    def _is_supervisor_tool(self, tool_name: str) -> bool:
+        results = await asyncio.gather(
+            *(call.task for call in batch.calls), return_exceptions=True
+        )
+        result_instructions: list[str] = []
+
+        for call, result in zip(batch.calls, results, strict=True):
+            if isinstance(result, BaseException):
+                logger.error("Tool '%s' failed: %s", call.tool.name, result)
+                serialized = f"Tool execution failed: {result}"
+            else:
+                serialized = serialize_tool_result(result)
+                logger.info("Tool result: '%s' [result=%s]", call.tool.name, serialized)
+
+            await send_function_call_output(self._websocket, call.call_id, serialized)
+            if call.tool.result_instruction:
+                result_instructions.append(call.tool.result_instruction)
+
+        await send_batched_response(self._websocket, result_instructions)
+
+    def _is_supervisor_tool(self, tool_name: str | None) -> bool:
         return tool_name == self._supervisor_tool_name

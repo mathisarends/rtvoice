@@ -69,6 +69,7 @@ class Supervisor[T]:
         self._max_iterations = max_iterations
         self.handoff_instructions = handoff_instructions
         self.result_instructions = result_instructions
+        # Deprecated compatibility field; native realtime preambles replace it.
         self.holding_instruction = holding_instruction
 
         self._tools.set_context(ToolContext(context=context))

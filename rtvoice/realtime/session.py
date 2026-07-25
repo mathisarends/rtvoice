@@ -68,6 +68,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_PREAMBLE_GUIDANCE = (
+    "When you are about to call a tool that may take a moment, first say a short, "
+    "natural acknowledgment of what you are doing. If the user asks for a result "
+    "that is not ready yet, tell them you are still working on it."
+)
+
 
 class RealtimeSession:
     def __init__(
@@ -91,7 +97,9 @@ class RealtimeSession:
         inactivity_timeout_seconds: float | None,
         recording_path: Path | None,
         provider: RealtimeProvider,
+        enable_preambles: bool = True,
     ):
+        model.warn_if_deprecated(stacklevel=3)
         self._event_bus = event_bus
         self._model = model
         self._reasoning_effort = reasoning_effort
@@ -111,6 +119,7 @@ class RealtimeSession:
         self._inactivity_timeout_enabled = inactivity_timeout_enabled
         self._inactivity_timeout_seconds = inactivity_timeout_seconds
         self._recording_path = recording_path
+        self._enable_preambles = enable_preambles
 
         self._websocket = RealtimeWebSocket(model=model, provider=provider)
         self._forward_task: asyncio.Task | None = None
@@ -312,6 +321,12 @@ class RealtimeSession:
             else InputAudioTranscriptionSettings(model=self._transcription_model)
         )
 
+        instructions = self._instructions
+        if self._enable_preambles and self._tools.get_tool_schema():
+            instructions = "\n\n".join(
+                part for part in (instructions, _PREAMBLE_GUIDANCE) if part
+            )
+
         return RealtimeSessionSettings(
             model=self._model,
             reasoning=(
@@ -319,7 +334,7 @@ class RealtimeSession:
                 if self._reasoning_effort is None
                 else {"effort": self._reasoning_effort}
             ),
-            instructions=self._instructions,
+            instructions=instructions,
             output_modalities=self._output_modalities,
             tool_choice=ToolChoiceMode.AUTO,
             tools=self._tools.get_tool_schema(),

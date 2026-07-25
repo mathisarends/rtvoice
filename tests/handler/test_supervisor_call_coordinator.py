@@ -172,20 +172,27 @@ class TestToolCallHandling:
         assert tool is None
 
     @pytest.mark.asyncio
-    async def test_sends_holding_response_immediately_when_configured(
+    async def test_holding_instruction_is_a_no_op(
         self,
         event_bus: EventBus,
         coordinator: SupervisorCallCoordinator,
         websocket: AsyncMock,
         tools: Tools,
     ) -> None:
-        register_tool(tools, holding_instruction="Please wait briefly.")
+        tool = register_tool(tools, holding_instruction="Please wait briefly.")
+        release = asyncio.Event()
+
+        async def blocking_tool(query: str | None = None) -> str:
+            await release.wait()
+            return "tool_result"
+
+        tool.function = blocking_tool
 
         await event_bus.dispatch(make_function_call_item())
 
-        assert websocket.send.call_count >= 1
-        sent = websocket.send.call_args_list[0][0][0]
-        assert isinstance(sent, ConversationResponseCreateEvent)
+        websocket.send.assert_not_called()
+        release.set()
+        await asyncio.sleep(0.05)
 
     @pytest.mark.asyncio
     async def test_does_not_send_holding_response_without_instruction(
@@ -282,7 +289,7 @@ class TestResultDelivery:
         pass
 
     @pytest.mark.asyncio
-    async def test_delivers_function_call_output_after_holding(
+    async def test_delivers_function_call_output(
         self,
         event_bus: EventBus,
         coordinator: SupervisorCallCoordinator,

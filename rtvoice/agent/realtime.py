@@ -35,6 +35,8 @@ from rtvoice.events.views import (
 )
 from rtvoice.realtime import OpenAIProvider, RealtimeProvider, RealtimeSession
 from rtvoice.shared.decorators import timed
+from rtvoice.skills import SkillRuntime, Skills
+from rtvoice.skills.runtime import append_skill_prompt
 from rtvoice.tools import Inject, ToolContext, Tools
 
 logger = logging.getLogger(__name__)
@@ -54,6 +56,8 @@ class RealtimeAgent[T]:
         noise_reduction: NoiseReduction = NoiseReduction.FAR_FIELD,
         turn_detection: TurnDetection | None = None,
         tools: Tools | None = None,
+        skills: Skills | None = None,
+        allowed_commands: list[str] | None = None,
         supervisor: Supervisor | None = None,
         audio_input: AudioInputDevice | None = None,
         audio_output: AudioOutputDevice | None = None,
@@ -110,6 +114,15 @@ class RealtimeAgent[T]:
         self._tools = Tools()
         if tools:
             self._tools.merge(tools)
+
+        self._skill_runtime = (
+            SkillRuntime(skills, allowed_commands=allowed_commands or ())
+            if skills is not None
+            else None
+        )
+        if self._skill_runtime is not None:
+            self._skill_runtime.register_tools(self._tools)
+        instructions = append_skill_prompt(instructions, self._skill_runtime)
 
         self._tools.set_context(
             ToolContext(

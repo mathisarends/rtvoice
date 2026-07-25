@@ -14,6 +14,7 @@ from .agent.views import (
     TurnDetection,
 )
 from .realtime import AzureOpenAIProvider, OpenAIProvider, RealtimeProvider
+from .skills import Skill, Skills
 from .tools import Inject, ToolContext, Tools
 
 __all__ = [
@@ -33,6 +34,8 @@ __all__ = [
     "SemanticEagerness",
     "SemanticVAD",
     "ServerVAD",
+    "Skill",
+    "Skills",
     "Supervisor",
     "ToolContext",
     "Tools",

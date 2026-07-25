@@ -16,6 +16,8 @@ from rtvoice.llm import (
     ToolResultMessage,
     UserMessage,
 )
+from rtvoice.skills import SkillRuntime, Skills
+from rtvoice.skills.runtime import append_skill_prompt
 from rtvoice.tools import Tools
 from rtvoice.tools.di import ToolContext
 
@@ -40,6 +42,8 @@ class Supervisor[T]:
         instructions: str,
         llm: ChatModel | None = None,
         tools: Tools | None = None,
+        skills: Skills | None = None,
+        allowed_commands: list[str] | None = None,
         max_iterations: int = 10,
         handoff_instructions: str | None = None,
         result_instructions: str | None = None,
@@ -48,11 +52,19 @@ class Supervisor[T]:
     ) -> None:
         self.name = "supervisor"
         self.description = description
-        self._instructions = instructions
         self._llm = llm or ChatModel(model="gpt-5.4-mini")
         self._tools = Tools()
         if tools:
             self._tools.merge(tools)
+
+        self._skill_runtime = (
+            SkillRuntime(skills, allowed_commands=allowed_commands or ())
+            if skills is not None
+            else None
+        )
+        if self._skill_runtime is not None:
+            self._skill_runtime.register_tools(self._tools)
+        self._instructions = append_skill_prompt(instructions, self._skill_runtime)
 
         self._max_iterations = max_iterations
         self.handoff_instructions = handoff_instructions

@@ -45,6 +45,7 @@ Run it, speak into your microphone, and the agent responds through your speakers
   - [Status templates](#status-templates)
   - [Context injection](#context-injection)
   - [Custom application context](#custom-application-context)
+- [Agent Skills](#agent-skills)
 - [Supervisor](#supervisor)
 - [Conversation seeds](#conversation-seeds)
 - [Lifecycle listener](#lifecycle-listener)
@@ -229,6 +230,70 @@ agent = RealtimeAgent(
 
 ---
 
+## Agent Skills
+
+`rtvoice` supports the [Agent Skills](https://agentskills.io/specification) folder
+format with progressive disclosure. A skills directory contains one subdirectory
+per skill:
+
+```text
+skills/
+└── internet-research/
+    ├── SKILL.md
+    ├── scripts/
+    ├── references/
+    └── assets/
+```
+
+`SKILL.md` starts with the standard YAML frontmatter:
+
+```markdown
+---
+name: internet-research
+description: Research current sources. Use when up-to-date facts are required.
+---
+
+# Internet Research
+
+Follow the workflow in `references/workflow.md`.
+```
+
+Pass a `Skills` source to either `RealtimeAgent` or `Supervisor`:
+
+```python
+from rtvoice import RealtimeAgent, Skills, Supervisor
+
+skills = Skills.from_local_dir("./skills")
+
+supervisor = Supervisor(
+    description="Handles research tasks.",
+    instructions="Use the relevant skill before researching.",
+    skills=skills,
+    allowed_commands=["cat", "python"],
+)
+
+agent = RealtimeAgent(
+    instructions="Help the user and load relevant skills before using them.",
+    skills=skills,
+    allowed_commands=["cat"],
+    supervisor=supervisor,
+)
+```
+
+At startup, only each skill's `name` and `description` are added to the agent
+prompt. When relevant, the model calls the automatically registered
+`load_skill` tool for the full instructions. Referenced resources are loaded
+individually with `load_skill(name=..., path=...)`, and bundled scripts or
+allowlisted commands can be executed with the automatically registered `bash`
+tool.
+
+`bash` is deny-by-default. Set `allowed_commands` narrowly for commands required
+by the selected skills. Direct script execution is limited to files inside an
+available skill directory, working directories cannot escape those directories,
+and command substitution and shell control-flow constructs are rejected.
+
+---
+
 ## Supervisor
 
 Delegate complex, multi-step tasks to one LLM-driven supervisor. The voice agent hands off, speaks a holding phrase, and presents the result when done.
@@ -272,6 +337,8 @@ agent = RealtimeAgent(
 | `instructions`         | System prompt for the supervisor's own LLM loop           |
 | `llm`                  | `ChatOpenAI(model=...)` or any `ChatModel` implementation |
 | `tools`                | `Tools` instance with the actions the supervisor may call |
+| `skills`               | Local Agent Skills exposed through progressive disclosure |
+| `allowed_commands`     | Commands the skill `bash` tool may execute                 |
 | `holding_instruction`  | Spoken while the supervisor works                         |
 | `result_instructions`  | Tells the realtime model how to present the result        |
 | `handoff_instructions` | Extra guidance appended to the tool description           |

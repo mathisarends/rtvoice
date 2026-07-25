@@ -12,7 +12,14 @@
       "Bash(cat backend/requirements.txt)",
       "Bash(cat backend/setup.py)",
       "Bash(uv sync *)",
-      "Bash(uv run *)"
+      "Bash(uv run *)",
+      "WebSearch",
+      "WebFetch(domain:developers.openai.com)",
+      "WebFetch(domain:openai.com)",
+      "WebFetch(domain:www.latent.space)",
+      "WebFetch(domain:platform.openai.com)",
+      "WebFetch(domain:www.mindstudio.ai)",
+      "WebFetch(domain:apidog.com)"
     ]
   }
 }

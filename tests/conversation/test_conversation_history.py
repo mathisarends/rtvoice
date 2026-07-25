@@ -3,6 +3,7 @@ from transitbus import EventBus
 
 from rtvoice.conversation import ConversationHistory, ConversationTurn
 from rtvoice.events.views import (
+    AssistantInterruptedEvent,
     AssistantTranscriptCompletedEvent,
     UserTranscriptCompletedEvent,
 )
@@ -107,6 +108,61 @@ class TestTurns:
         assert history.turns == []
 
 
+class TestInterruptions:
+    @pytest.mark.asyncio
+    async def test_marks_completed_assistant_turn_by_item(
+        self, bus: EventBus, history: ConversationHistory
+    ) -> None:
+        await bus.dispatch(
+            AssistantTranscriptCompletedEvent(
+                transcript="This was not fully heard.",
+                item_id="item-1",
+                output_index=0,
+                content_index=0,
+            )
+        )
+        await bus.dispatch(AssistantInterruptedEvent(item_id="item-1", played_ms=500))
+
+        assert history.turns[0].interrupted is True
+        assert history.turns[0].played_ms == 500
+
+    @pytest.mark.asyncio
+    async def test_marks_assistant_turn_when_interrupt_arrives_first(
+        self, bus: EventBus, history: ConversationHistory
+    ) -> None:
+        await bus.dispatch(
+            AssistantInterruptedEvent(response_id="response-1", played_ms=500)
+        )
+        await bus.dispatch(
+            AssistantTranscriptCompletedEvent(
+                transcript="This was not fully heard.",
+                item_id="item-1",
+                output_index=0,
+                content_index=0,
+                response_id="response-1",
+            )
+        )
+
+        assert history.turns[0].interrupted is True
+        assert history.turns[0].played_ms == 500
+
+    @pytest.mark.asyncio
+    async def test_does_not_mark_unrelated_assistant_turn(
+        self, bus: EventBus, history: ConversationHistory
+    ) -> None:
+        await bus.dispatch(
+            AssistantTranscriptCompletedEvent(
+                transcript="This was fully heard.",
+                item_id="item-1",
+                output_index=0,
+                content_index=0,
+            )
+        )
+        await bus.dispatch(AssistantInterruptedEvent(item_id="item-2", played_ms=500))
+
+        assert history.turns[0].interrupted is False
+
+
 class TestFormat:
     def test_format_returns_placeholder_when_empty(
         self, history: ConversationHistory
@@ -150,3 +206,114 @@ class TestFormat:
         )
 
         assert "[ASSISTANT]:" in history.format()
+
+    @pytest.mark.asyncio
+    async def test_two_seconds_at_default_speed_keeps_five_words(
+        self, bus: EventBus, history: ConversationHistory
+    ) -> None:
+        transcript = "one two three four five six seven eight nine ten"
+        await bus.dispatch(
+            AssistantTranscriptCompletedEvent(
+                transcript=transcript,
+                item_id="item-1",
+                output_index=0,
+                content_index=0,
+            )
+        )
+        await bus.dispatch(AssistantInterruptedEvent(item_id="item-1", played_ms=2_000))
+
+        assert history.format() == (
+            "[ASSISTANT, INTERRUPTED]: one two three four five <INTERRUPTED>"
+        )
+
+    @pytest.mark.asyncio
+    async def test_speech_speed_scales_estimated_word_count(
+        self, bus: EventBus, history: ConversationHistory
+    ) -> None:
+        await bus.dispatch(
+            AssistantTranscriptCompletedEvent(
+                transcript="one two three four five six seven eight nine ten",
+                item_id="item-1",
+                output_index=0,
+                content_index=0,
+            )
+        )
+        await bus.dispatch(
+            AssistantInterruptedEvent(
+                item_id="item-1",
+                played_ms=2_000,
+                speech_speed=1.5,
+            )
+        )
+
+        assert history.format() == (
+            "[ASSISTANT, INTERRUPTED]: one two three four five six seven <INTERRUPTED>"
+        )
+
+    @pytest.mark.asyncio
+    async def test_fractional_word_estimate_rounds_down(
+        self, bus: EventBus, history: ConversationHistory
+    ) -> None:
+        await bus.dispatch(
+            AssistantTranscriptCompletedEvent(
+                transcript="one two three",
+                item_id="item-1",
+                output_index=0,
+                content_index=0,
+            )
+        )
+        await bus.dispatch(AssistantInterruptedEvent(item_id="item-1", played_ms=799))
+
+        assert history.format() == ("[ASSISTANT, INTERRUPTED]: one <INTERRUPTED>")
+
+    @pytest.mark.asyncio
+    async def test_less_than_one_estimated_word_keeps_only_marker(
+        self, bus: EventBus, history: ConversationHistory
+    ) -> None:
+        await bus.dispatch(
+            AssistantTranscriptCompletedEvent(
+                transcript="one two three",
+                item_id="item-1",
+                output_index=0,
+                content_index=0,
+            )
+        )
+        await bus.dispatch(AssistantInterruptedEvent(item_id="item-1", played_ms=399))
+
+        assert history.format() == "[ASSISTANT, INTERRUPTED]: <INTERRUPTED>"
+
+    @pytest.mark.asyncio
+    async def test_missing_playback_duration_keeps_only_marker(
+        self, bus: EventBus, history: ConversationHistory
+    ) -> None:
+        await bus.dispatch(
+            AssistantTranscriptCompletedEvent(
+                transcript="one two three",
+                item_id="item-1",
+                output_index=0,
+                content_index=0,
+            )
+        )
+        await bus.dispatch(AssistantInterruptedEvent(item_id="item-1"))
+
+        assert history.format() == "[ASSISTANT, INTERRUPTED]: <INTERRUPTED>"
+
+    @pytest.mark.asyncio
+    async def test_estimate_longer_than_transcript_keeps_full_text_and_marker(
+        self, bus: EventBus, history: ConversationHistory
+    ) -> None:
+        await bus.dispatch(
+            AssistantTranscriptCompletedEvent(
+                transcript="one two three",
+                item_id="item-1",
+                output_index=0,
+                content_index=0,
+            )
+        )
+        await bus.dispatch(
+            AssistantInterruptedEvent(item_id="item-1", played_ms=10_000)
+        )
+
+        assert history.format() == (
+            "[ASSISTANT, INTERRUPTED]: one two three <INTERRUPTED>"
+        )

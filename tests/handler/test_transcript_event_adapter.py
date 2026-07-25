@@ -99,6 +99,7 @@ class TestAssistantTranscription:
 
         assert len(received) == 1
         assert received[0].transcript == "I am the assistant."
+        assert received[0].response_id == "resp_001"
         assert received[0].item_id == "item_002"
         assert received[0].output_index == 0
         assert received[0].content_index == 0

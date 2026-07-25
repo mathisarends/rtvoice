@@ -186,6 +186,7 @@ class TestSpeechSpeedClipping:
     def test_value_within_range_is_unchanged(self) -> None:
         agent = make_agent(speech_speed=1.0)
         assert agent._realtime_session._speech_speed == 1.0
+        assert agent._realtime_session._barge_in_coordinator._speech_speed == 1.0
 
     def test_speech_speed_below_minimum_is_clipped_to_minimum(self) -> None:
         agent = make_agent(speech_speed=0.1)
@@ -214,6 +215,14 @@ class TestSpeechSpeedClipping:
         with caplog.at_level(logging.WARNING, logger="rtvoice.service"):
             make_agent(speech_speed=1.2)
         assert not any("out of range" in r.message for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_runtime_update_is_used_for_interruption_estimate(self) -> None:
+        agent = make_agent()
+
+        await agent.set_speech_speed(1.5)
+
+        assert agent._realtime_session._barge_in_coordinator._speech_speed == 1.5
 
 
 class TestInitWarnings:

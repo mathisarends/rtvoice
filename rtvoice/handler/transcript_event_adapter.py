@@ -72,6 +72,7 @@ class TranscriptEventAdapter:
                 item_id=event.item_id,
                 output_index=event.output_index,
                 content_index=event.content_index,
+                response_id=event.response_id,
             )
         )
 
@@ -95,5 +96,6 @@ class TranscriptEventAdapter:
                 item_id=event.item_id,
                 output_index=event.output_index,
                 content_index=event.content_index,
+                response_id=event.response_id,
             )
         )

@@ -10,3 +10,5 @@ possible. When the user corrects a mistake, record it below as a short bullet
   restate the signature.
 - Register injectable dependencies such as `Subagent` in the tool layer.
 - Store constructor dependencies used by handlers, including `event_bus`, on `self`.
+- Use semantic aliases for primitive mapping keys/values; prefer module helpers
+  over static key-building methods.

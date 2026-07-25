@@ -132,6 +132,7 @@ class RealtimeSession:
             event_bus=self._event_bus,
             websocket=self._websocket,
             audio_session=self._audio_session,
+            speech_speed=self._speech_speed,
         )
 
         if self._transcription_enabled or self._assistant_text_enabled:
@@ -224,6 +225,7 @@ class RealtimeSession:
     @timed()
     async def update_speech_speed(self, speed: float) -> None:
         self._speech_speed = speed
+        self._barge_in_coordinator.set_speech_speed(speed)
 
         if not self._websocket.is_connected:
             logger.warning("Cannot update speed - WebSocket not connected")

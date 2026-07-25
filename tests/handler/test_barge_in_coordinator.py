@@ -3,7 +3,11 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from transitbus import EventBus
 
-from rtvoice.events.views import AssistantInterruptedEvent, InterruptAssistantCommand
+from rtvoice.events.views import (
+    AssistantInterruptedEvent,
+    AudioPlaybackCompletedEvent,
+    InterruptAssistantCommand,
+)
 from rtvoice.handler import BargeInCoordinator
 from rtvoice.realtime.schemas import (
     ConversationItemTruncateEvent,
@@ -99,6 +103,20 @@ class TestStateTracking:
         assert coordinator._assistant_is_speaking is True
 
     @pytest.mark.asyncio
+    async def test_playback_timer_starts_with_first_audio_chunk(
+        self,
+        event_bus: EventBus,
+        coordinator: BargeInCoordinator,
+    ) -> None:
+        coordinator._clock = MagicMock(return_value=123.0)
+
+        await event_bus.dispatch(make_response_created())
+        assert coordinator._start_time is None
+
+        await event_bus.dispatch(make_audio_delta())
+        assert coordinator._start_time == 123.0
+
+    @pytest.mark.asyncio
     async def test_audio_delta_tracks_item_id_for_matching_response(
         self, event_bus: EventBus, coordinator: BargeInCoordinator
     ) -> None:
@@ -121,12 +139,18 @@ class TestStateTracking:
         assert coordinator._item_id is None
 
     @pytest.mark.asyncio
-    async def test_response_done_resets_state(
+    async def test_response_done_retains_state_until_playback_completes(
         self, event_bus: EventBus, coordinator: BargeInCoordinator
     ) -> None:
         await event_bus.dispatch(make_response_created())
         await event_bus.dispatch(make_audio_delta())
         await event_bus.dispatch(make_response_done())
+
+        assert coordinator._response_id == "resp_001"
+        assert coordinator._item_id == "item_001"
+        assert coordinator._assistant_is_speaking is False
+
+        await event_bus.dispatch(AudioPlaybackCompletedEvent())
 
         assert coordinator._response_id is None
         assert coordinator._item_id is None
@@ -229,18 +253,26 @@ class TestBargeIn:
 
     @pytest.mark.asyncio
     async def test_interrupt_command_dispatches_assistant_interrupted_event(
-        self, event_bus: EventBus, coordinator: BargeInCoordinator
+        self,
+        event_bus: EventBus,
+        coordinator: BargeInCoordinator,
     ) -> None:
         received: list[AssistantInterruptedEvent] = []
+        coordinator._clock = MagicMock(side_effect=[100.0, 102.0])
 
         async def capture(e: AssistantInterruptedEvent) -> None:
             received.append(e)
 
         event_bus.on(AssistantInterruptedEvent, capture)
+        coordinator.set_speech_speed(1.5)
         await event_bus.dispatch(make_response_created())
+        await event_bus.dispatch(make_audio_delta())
         await event_bus.dispatch(InterruptAssistantCommand())
 
         assert len(received) == 1
+        assert received[0].response_id == "resp_001"
+        assert received[0].played_ms == 2_000
+        assert received[0].speech_speed == 1.5
 
     @pytest.mark.asyncio
     async def test_interrupt_command_is_noop_when_nothing_is_playing(
@@ -271,3 +303,26 @@ class TestBargeIn:
         await event_bus.dispatch(make_speech_started())
 
         assert len(received) == 1
+
+    @pytest.mark.asyncio
+    async def test_barge_in_after_response_done_still_marks_buffered_audio(
+        self,
+        event_bus: EventBus,
+        coordinator: BargeInCoordinator,
+        audio_session: MagicMock,
+    ) -> None:
+        received: list[AssistantInterruptedEvent] = []
+
+        async def capture(e: AssistantInterruptedEvent) -> None:
+            received.append(e)
+
+        event_bus.on(AssistantInterruptedEvent, capture)
+        await event_bus.dispatch(make_response_created())
+        await event_bus.dispatch(make_audio_delta())
+        await event_bus.dispatch(make_response_done())
+        audio_session.is_playing = False
+
+        await event_bus.dispatch(make_speech_started())
+
+        assert len(received) == 1
+        assert received[0].item_id == "item_001"

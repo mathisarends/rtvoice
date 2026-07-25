@@ -66,6 +66,7 @@ class AssistantTranscriptCompletedEvent(Event):
     item_id: str
     output_index: int
     content_index: int
+    response_id: str | None = None
 
 
 class UserInactivityCountdownEvent(Event):
@@ -79,6 +80,8 @@ class UserInactivityTimeoutEvent(Event):
 class AssistantInterruptedEvent(Event):
     item_id: str | None = None
     played_ms: int | None = None
+    response_id: str | None = None
+    speech_speed: float = 1.0
 
 
 class AudioPlaybackCompletedEvent(Event):

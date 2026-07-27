@@ -7,6 +7,10 @@ from typing import TYPE_CHECKING
 
 from transitbus import EventBus
 
+from rtvoice.events.views import (
+    ToolExecutionCompletedEvent,
+    ToolExecutionStartedEvent,
+)
 from rtvoice.handler.tool_call_helpers import (
     send_batched_response,
     send_function_call_output,
@@ -57,11 +61,16 @@ class ToolCallExecutor:
             logger.error("Tool '%s' not found", event.name)
             return
 
+        batch = self._batches.get(event.response_id)
+        if batch is None:
+            batch = _ResponseBatch(response_id=event.response_id)
+            self._batches[event.response_id] = batch
+            await self.event_bus.dispatch(
+                ToolExecutionStartedEvent(response_id=event.response_id)
+            )
+
         task = asyncio.create_task(
             self._tools.execute(event.name, event.arguments or {})
-        )
-        batch = self._batches.setdefault(
-            event.response_id, _ResponseBatch(response_id=event.response_id)
         )
         batch.calls.append(_PendingCall(call_id=event.call_id, tool=tool, task=task))
 
@@ -74,16 +83,29 @@ class ToolCallExecutor:
             *(call.task for call in batch.calls), return_exceptions=True
         )
         result_instructions: list[str] = []
+        should_respond = False
 
         for call, result in zip(batch.calls, results, strict=True):
             if isinstance(result, BaseException):
                 logger.error("Tool '%s' crashed: %s", call.tool.name, result)
                 serialized = f"Tool execution failed: {result}"
+                should_respond = True
             else:
                 serialized = serialize_tool_result(result)
+                if result.respond is not None:
+                    should_respond |= result.respond
+                else:
+                    should_respond |= call.tool.respond if result.ok else True
 
             await send_function_call_output(self._websocket, call.call_id, serialized)
             if call.tool.result_instruction:
                 result_instructions.append(call.tool.result_instruction)
 
-        await send_batched_response(self._websocket, result_instructions)
+        if should_respond:
+            await send_batched_response(self._websocket, result_instructions)
+        await self.event_bus.dispatch(
+            ToolExecutionCompletedEvent(
+                response_id=batch.response_id,
+                response_pending=should_respond,
+            )
+        )

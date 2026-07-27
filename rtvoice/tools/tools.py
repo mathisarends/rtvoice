@@ -49,6 +49,7 @@ class Tools:
         *,
         params: type[BaseModel] | None = None,
         result_instruction: str | None = None,
+        respond: bool = True,
         status: str | Callable | None = None,
         kind: ActionKind = ActionKind.GENERIC,
         available_when: ToolAvailability | None = None,
@@ -61,6 +62,7 @@ class Tools:
                     fn=func,
                     param_model=params,
                     result_instruction=result_instruction,
+                    respond=respond,
                     status=status,
                     kind=kind,
                     available_when=available_when,
@@ -156,7 +158,6 @@ class Tools:
                 render=_describe_subagent,
                 default="Delegate a task to the subagent.",
             ),
-            name="subagent",
             params=SubagentParams,
             available_when=provided(Subagent),
         )

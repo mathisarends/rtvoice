@@ -77,6 +77,15 @@ class UserInactivityTimeoutEvent(Event):
     timeout_seconds: float
 
 
+class ToolExecutionStartedEvent(Event):
+    response_id: str
+
+
+class ToolExecutionCompletedEvent(Event):
+    response_id: str
+    response_pending: bool
+
+
 class AssistantInterruptedEvent(Event):
     item_id: str | None = None
     played_ms: int | None = None

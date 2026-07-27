@@ -45,9 +45,11 @@ class Tool:
         name: str,
         description: str | ToolDescription,
         fn: Callable,
+        *,
         param_model: type[BaseModel] | None = None,
         schema: FunctionParameters | None = None,
         result_instruction: str | None = None,
+        respond: bool = True,
         status: str | Callable | None = None,
         kind: ActionKind = ActionKind.GENERIC,
         available_when: ToolAvailability | None = None,
@@ -58,6 +60,7 @@ class Tool:
         self.param_model = param_model
         self.schema = schema or build_schema(fn, param_model=param_model)
         self.result_instruction = result_instruction
+        self.respond = respond
         self.status = status
         self.kind = kind
         self.available_when = available_when

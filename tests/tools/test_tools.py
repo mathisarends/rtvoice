@@ -103,6 +103,25 @@ class TestExecute:
 
         assert result.value == "Hello World"
 
+    def test_registers_action_response_default(self, tools: Tools) -> None:
+        @tools.action(description="Quiet action", respond=False)
+        async def quiet() -> None: ...
+
+        tool = tools.get("quiet")
+
+        assert tool is not None
+        assert tool.respond is False
+
+    @pytest.mark.asyncio
+    async def test_result_overrides_action_response_default(self, tools: Tools) -> None:
+        @tools.action(description="Usually quiet", respond=False)
+        async def sometimes_loud() -> ActionResult:
+            return ActionResult.success(respond=True)
+
+        result = await tools.execute("sometimes_loud")
+
+        assert result.respond is True
+
 
 class TestPrepareArguments:
     @pytest.mark.asyncio

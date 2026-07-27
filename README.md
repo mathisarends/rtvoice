@@ -147,6 +147,33 @@ Optionally add `result_instruction` to tell the model how to present the result 
 async def get_headlines() -> str: ...
 ```
 
+Set `respond=False` when a successful action needs no assistant follow-up:
+
+```python
+@tools.action("Turn on the lights", respond=False)
+async def turn_on_lights() -> None:
+    await lights.turn_on()
+```
+
+An action can override that default per call. This lets the model choose through
+a tool parameter whether a spoken response is useful:
+
+```python
+from rtvoice.tools import ActionResult
+
+class LightParams(BaseModel):
+    room: str
+    respond: bool = Field(description="Whether to confirm this action aloud")
+
+@tools.action("Turn on the lights", params=LightParams)
+async def turn_on_lights(params: LightParams) -> ActionResult:
+    await lights.turn_on(params.room)
+    return ActionResult.success(respond=params.respond)
+```
+
+Tool output is still added to the conversation when no response is created.
+Failures respond by default.
+
 ### Status templates
 
 `status` is a spoken update for tools registered with `param_model=`. Use `{field_name}` placeholders from the Pydantic model — rtvoice validates them at registration time.

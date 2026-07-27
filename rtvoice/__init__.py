@@ -30,9 +30,10 @@ from .tokens import (
     TokenTracker,
     UsageReport,
 )
-from .tools import Inject, ToolContext, Tools
+from .tools import ActionKind, Inject, ToolContext, Tools
 
 __all__ = [
+    "ActionKind",
     "AgentListener",
     "AssistantVoice",
     "AzureOpenAIProvider",

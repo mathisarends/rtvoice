@@ -14,3 +14,4 @@ possible. When the user corrects a mistake, record it below as a short bullet
   over static key-building methods.
 - Keep public extension APIs minimal and generic; use `system_prompt: str`
   instead of an opinionated prompt/memory model or ambiguous `instructions`.
+- Keep listener event payloads flat when fields suffice; avoid nested metadata wrappers.

@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
 
 from transitbus import EventBus
 
@@ -12,11 +15,15 @@ from rtvoice.events.views import (
     AssistantStoppedRespondingEvent,
     AssistantTranscriptCompletedEvent,
     AssistantTranscriptDeltaEvent,
+    ToolExecutedEvent,
     UserInactivityCountdownEvent,
     UserStartedSpeakingEvent,
     UserStoppedSpeakingEvent,
     UserTranscriptCompletedEvent,
 )
+
+if TYPE_CHECKING:
+    from rtvoice.tools.views import ActionKind
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +75,14 @@ class AgentListener:
 
     async def on_assistant_stopped_responding(self) -> None:
         """Assistant finished streaming its audio response."""
+
+    async def on_tool_executed(
+        self,
+        name: str,
+        action_kind: ActionKind,
+        silent: bool,
+    ) -> None:
+        """Runs after the tool's effective response behavior is known."""
 
 
 class AgentListenerBridge:
@@ -129,6 +144,7 @@ class AgentListenerBridge:
             UserInactivityCountdownEvent,
             self._on_user_inactivity_countdown,
         )
+        self._event_bus.on(ToolExecutedEvent, self._on_tool_executed)
 
     async def _on_user_transcript_completed(
         self, event: UserTranscriptCompletedEvent
@@ -177,6 +193,13 @@ class AgentListenerBridge:
         self, event: UserInactivityCountdownEvent
     ) -> None:
         await self._listener.on_user_inactivity_countdown(event.remaining_seconds)
+
+    async def _on_tool_executed(self, event: ToolExecutedEvent) -> None:
+        await self._listener.on_tool_executed(
+            event.name,
+            event.action_kind,
+            event.silent,
+        )
 
     def _warn_countdown_mismatch_if_necessary(self) -> None:
         overrides_countdown = self._listener_overrides_countdown()

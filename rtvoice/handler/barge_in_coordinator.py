@@ -19,6 +19,7 @@ from rtvoice.realtime.schemas import (
     ResponseOutputAudioDeltaEvent,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
+from rtvoice.shared.speech_speed import DEFAULT_SPEECH_SPEED, SpeechSpeed
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ class BargeInCoordinator:
         event_bus: EventBus,
         websocket: RealtimeWebSocket,
         audio_session: AudioSession,
-        speech_speed: float = 1.0,
+        speech_speed: SpeechSpeed = DEFAULT_SPEECH_SPEED,
         clock: Callable[[], float] = time.monotonic,
     ):
         self._event_bus = event_bus
@@ -143,5 +144,5 @@ class BargeInCoordinator:
         self._start_time = None
         self._assistant_is_speaking = False
 
-    def set_speech_speed(self, speed: float) -> None:
+    def set_speech_speed(self, speed: SpeechSpeed) -> None:
         self._speech_speed = speed

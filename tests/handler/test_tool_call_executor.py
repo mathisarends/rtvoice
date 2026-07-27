@@ -5,6 +5,11 @@ import pytest
 from pydantic import BaseModel
 from transitbus import EventBus
 
+from rtvoice.events.views import (
+    ToolExecutedEvent,
+    ToolExecutionCompletedEvent,
+    ToolExecutionStartedEvent,
+)
 from rtvoice.handler import ToolCallExecutor
 from rtvoice.realtime.schemas import (
     ConversationItemCreateEvent,
@@ -14,7 +19,7 @@ from rtvoice.realtime.schemas import (
     RealtimeServerEvent,
     ResponseDoneEvent,
 )
-from rtvoice.tools import ActionResult
+from rtvoice.tools import ActionKind, ActionResult
 from rtvoice.tools.views import Tool
 
 
@@ -71,11 +76,16 @@ def make_response_done(response_id: str = "resp_001") -> ResponseDoneEvent:
 
 
 def make_tool(
-    name: str = "get_weather", result_instruction: str | None = None
+    name: str = "get_weather",
+    result_instruction: str | None = None,
+    respond: bool = True,
+    kind: ActionKind = ActionKind.GENERIC,
 ) -> MagicMock:
     tool = MagicMock(spec=Tool)
     tool.name = name
     tool.result_instruction = result_instruction
+    tool.respond = respond
+    tool.kind = kind
     return tool
 
 
@@ -232,6 +242,141 @@ class TestToolBatching:
         await event_bus.dispatch(make_function_call_item(arguments={"city": "Berlin"}))
         await event_bus.dispatch(make_response_done())
         tools.execute.assert_awaited_once_with("get_weather", {"city": "Berlin"})
+
+    @pytest.mark.asyncio
+    async def test_silent_result_sends_output_without_creating_response(
+        self,
+        event_bus: EventBus,
+        executor: ToolCallExecutor,
+        websocket: AsyncMock,
+        tools: MagicMock,
+    ) -> None:
+        tools.get.return_value = make_tool()
+        tools.execute.return_value = ActionResult.success("done", respond=False)
+
+        await event_bus.dispatch(make_function_call_item())
+        await event_bus.dispatch(make_response_done())
+
+        events = [call.args[0] for call in websocket.send.call_args_list]
+        assert len(events) == 1
+        assert isinstance(events[0], ConversationItemCreateEvent)
+        assert events[0].item.output == "done"
+
+    @pytest.mark.asyncio
+    async def test_silent_batch_dispatches_tool_lifecycle(
+        self,
+        event_bus: EventBus,
+        executor: ToolCallExecutor,
+        tools: MagicMock,
+    ) -> None:
+        started: list[ToolExecutionStartedEvent] = []
+        completed: list[ToolExecutionCompletedEvent] = []
+        executed: list[ToolExecutedEvent] = []
+        event_bus.on(ToolExecutionStartedEvent, started.append)
+        event_bus.on(ToolExecutionCompletedEvent, completed.append)
+        event_bus.on(ToolExecutedEvent, executed.append)
+        tools.get.return_value = make_tool(
+            respond=False,
+            kind=ActionKind.MUTATE,
+        )
+
+        await event_bus.dispatch(make_function_call_item())
+        await event_bus.dispatch(make_response_done())
+
+        assert [event.response_id for event in started] == ["resp_001"]
+        assert len(completed) == 1
+        assert completed[0].response_id == "resp_001"
+        assert completed[0].response_pending is False
+        assert len(executed) == 1
+        assert executed[0].name == "get_weather"
+        assert executed[0].action_kind is ActionKind.MUTATE
+        assert executed[0].silent is True
+
+    @pytest.mark.asyncio
+    async def test_execution_event_uses_result_response_override(
+        self,
+        event_bus: EventBus,
+        executor: ToolCallExecutor,
+        tools: MagicMock,
+    ) -> None:
+        executed: list[ToolExecutedEvent] = []
+        event_bus.on(ToolExecutedEvent, executed.append)
+        tools.get.return_value = make_tool(respond=False)
+        tools.execute.return_value = ActionResult.success(respond=True)
+
+        await event_bus.dispatch(make_function_call_item())
+        await event_bus.dispatch(make_response_done())
+
+        assert executed[0].silent is False
+
+    @pytest.mark.asyncio
+    async def test_silent_action_sends_output_without_creating_response(
+        self,
+        event_bus: EventBus,
+        executor: ToolCallExecutor,
+        websocket: AsyncMock,
+        tools: MagicMock,
+    ) -> None:
+        tools.get.return_value = make_tool(respond=False)
+
+        await event_bus.dispatch(make_function_call_item())
+        await event_bus.dispatch(make_response_done())
+
+        assert len(websocket.send.call_args_list) == 1
+
+    @pytest.mark.asyncio
+    async def test_silent_action_failure_creates_response(
+        self,
+        event_bus: EventBus,
+        executor: ToolCallExecutor,
+        websocket: AsyncMock,
+        tools: MagicMock,
+    ) -> None:
+        tools.get.return_value = make_tool(respond=False)
+        tools.execute.return_value = ActionResult.fail("boom")
+
+        await event_bus.dispatch(make_function_call_item())
+        await event_bus.dispatch(make_response_done())
+
+        events = [call.args[0] for call in websocket.send.call_args_list]
+        assert isinstance(events[-1], ConversationResponseCreateEvent)
+
+    @pytest.mark.asyncio
+    async def test_mixed_batch_creates_response(
+        self,
+        event_bus: EventBus,
+        executor: ToolCallExecutor,
+        websocket: AsyncMock,
+        tools: MagicMock,
+    ) -> None:
+        tools.get.side_effect = make_tool
+        tools.execute.side_effect = [
+            ActionResult.success("quiet", respond=False),
+            ActionResult.success("loud", respond=True),
+        ]
+
+        await event_bus.dispatch(make_function_call_item("quiet", "call_1"))
+        await event_bus.dispatch(make_function_call_item("loud", "call_2"))
+        await event_bus.dispatch(make_response_done())
+
+        events = [call.args[0] for call in websocket.send.call_args_list]
+        assert isinstance(events[-1], ConversationResponseCreateEvent)
+
+    @pytest.mark.asyncio
+    async def test_silent_failure_override_suppresses_response(
+        self,
+        event_bus: EventBus,
+        executor: ToolCallExecutor,
+        websocket: AsyncMock,
+        tools: MagicMock,
+    ) -> None:
+        tools.get.return_value = make_tool()
+        tools.execute.return_value = ActionResult.fail("boom", respond=False)
+
+        await event_bus.dispatch(make_function_call_item())
+        await event_bus.dispatch(make_response_done())
+
+        assert len(websocket.send.call_args_list) == 1
 
 
 class TestUnknownTools:

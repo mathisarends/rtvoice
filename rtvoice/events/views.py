@@ -2,19 +2,25 @@ from typing import TYPE_CHECKING, Any
 
 from transitbus import Event
 
+from rtvoice.shared.speech_speed import DEFAULT_SPEECH_SPEED, SpeechSpeed
+
 if TYPE_CHECKING:
     from rtvoice.agent.views import AgentError
     from rtvoice.realtime.schemas import ToolChoiceMode
+    from rtvoice.tools.views import ActionKind
 
+    type ActionKindValue = ActionKind
     type AgentErrorValue = AgentError
     type ToolChoiceValue = ToolChoiceMode
 else:
+    type ActionKindValue = Any
     type AgentErrorValue = Any
     type ToolChoiceValue = Any
 
 
 class UpdateSpeechSpeedCommand(Event):
-    speed: float
+    # clamped on construction, so no dispatcher can emit an out-of-range speed
+    speed: SpeechSpeed
 
 
 class UpdateToolChoiceCommand(Event):
@@ -77,11 +83,26 @@ class UserInactivityTimeoutEvent(Event):
     timeout_seconds: float
 
 
+class ToolExecutionStartedEvent(Event):
+    response_id: str
+
+
+class ToolExecutionCompletedEvent(Event):
+    response_id: str
+    response_pending: bool
+
+
+class ToolExecutedEvent(Event):
+    name: str
+    action_kind: ActionKindValue
+    silent: bool
+
+
 class AssistantInterruptedEvent(Event):
     item_id: str | None = None
     played_ms: int | None = None
     response_id: str | None = None
-    speech_speed: float = 1.0
+    speech_speed: SpeechSpeed = DEFAULT_SPEECH_SPEED
 
 
 class AudioPlaybackCompletedEvent(Event):

@@ -14,11 +14,13 @@ from rtvoice.events.views import (
     AssistantStoppedRespondingEvent,
     AssistantTranscriptCompletedEvent,
     AssistantTranscriptDeltaEvent,
+    ToolExecutedEvent,
     UserInactivityCountdownEvent,
     UserStartedSpeakingEvent,
     UserStoppedSpeakingEvent,
     UserTranscriptCompletedEvent,
 )
+from rtvoice.tools import ActionKind
 
 
 def make_bridge(
@@ -51,7 +53,7 @@ class ListenerWithTranscriptDelta(AgentListener):
 
 class RecordingListener(AgentListener):
     def __init__(self) -> None:
-        self.calls: list[tuple[str, str | int | AgentError | None]] = []
+        self.calls: list[tuple[str, object]] = []
 
     async def on_agent_starting(self) -> None:
         self.calls.append(("on_agent_starting", None))
@@ -88,6 +90,14 @@ class RecordingListener(AgentListener):
 
     async def on_user_inactivity_countdown(self, remaining_seconds: int) -> None:
         self.calls.append(("on_user_inactivity_countdown", remaining_seconds))
+
+    async def on_tool_executed(
+        self,
+        name: str,
+        action_kind: ActionKind,
+        silent: bool,
+    ) -> None:
+        self.calls.append(("on_tool_executed", (name, action_kind, silent)))
 
 
 class TestListenerOverrideChecks:
@@ -176,6 +186,12 @@ class TestListenerBridgeEventPropagation:
         await bridge._event_bus.dispatch(
             UserInactivityCountdownEvent(remaining_seconds=5)
         )
+        execution = ToolExecutedEvent(
+            name="turn_on_lights",
+            action_kind=ActionKind.MUTATE,
+            silent=True,
+        )
+        await bridge._event_bus.dispatch(execution)
 
         assert listener.calls == [
             ("on_agent_starting", None),
@@ -190,4 +206,8 @@ class TestListenerBridgeEventPropagation:
             ("on_assistant_started_responding", None),
             ("on_assistant_stopped_responding", None),
             ("on_user_inactivity_countdown", 5),
+            (
+                "on_tool_executed",
+                ("turn_on_lights", ActionKind.MUTATE, True),
+            ),
         ]

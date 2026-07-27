@@ -5,6 +5,8 @@ from transitbus import EventBus
 
 from rtvoice.events.views import (
     AudioPlaybackCompletedEvent,
+    ToolExecutionCompletedEvent,
+    ToolExecutionStartedEvent,
     UserInactivityCountdownEvent,
     UserInactivityTimeoutEvent,
 )
@@ -104,6 +106,64 @@ class TestMonitoringStateTransitions:
 
         await event_bus.dispatch(make_response_created())
         assert wt._is_monitoring is False
+
+    @pytest.mark.asyncio
+    async def test_monitoring_waits_for_silent_tool_completion(
+        self, event_bus: EventBus
+    ) -> None:
+        wt = ConversationInactivityMonitor(event_bus, timeout_seconds=10.0)
+
+        await event_bus.dispatch(make_speech_stopped())
+        await event_bus.dispatch(ToolExecutionStartedEvent(response_id="resp_001"))
+        await event_bus.dispatch(AudioPlaybackCompletedEvent())
+
+        assert wt._is_monitoring is False
+
+        await event_bus.dispatch(
+            ToolExecutionCompletedEvent(
+                response_id="resp_001",
+                response_pending=False,
+            )
+        )
+
+        assert wt._is_monitoring is True
+        assert wt._timer.elapsed() < 0.1
+
+    @pytest.mark.asyncio
+    async def test_pending_response_ignores_previous_playback_completion(
+        self, event_bus: EventBus
+    ) -> None:
+        wt = ConversationInactivityMonitor(event_bus, timeout_seconds=10.0)
+
+        await event_bus.dispatch(make_speech_stopped())
+        await event_bus.dispatch(ToolExecutionStartedEvent(response_id="resp_001"))
+        await event_bus.dispatch(
+            ToolExecutionCompletedEvent(
+                response_id="resp_001",
+                response_pending=True,
+            )
+        )
+        await event_bus.dispatch(AudioPlaybackCompletedEvent())
+
+        assert wt._is_monitoring is False
+
+        await event_bus.dispatch(make_response_created("resp_002"))
+        await event_bus.dispatch(AudioPlaybackCompletedEvent())
+
+        assert wt._is_monitoring is True
+
+    @pytest.mark.asyncio
+    async def test_restart_creates_fresh_monitoring_cycle(
+        self, event_bus: EventBus
+    ) -> None:
+        wt = ConversationInactivityMonitor(event_bus, timeout_seconds=10.0)
+
+        await event_bus.dispatch(make_speech_stopped())
+        first_task = wt._check_task
+        await event_bus.dispatch(make_response_created())
+        await event_bus.dispatch(AudioPlaybackCompletedEvent())
+
+        assert wt._check_task is not first_task
 
 
 class TestTimeoutFiring:

@@ -37,6 +37,7 @@ from rtvoice.handler import (
     SpeechActivityEventAdapter,
     ToolCallExecutor,
     TranscriptEventAdapter,
+    TranscriptLogger,
 )
 from rtvoice.realtime.port import RealtimeProvider
 from rtvoice.realtime.schemas import (
@@ -126,6 +127,7 @@ class RealtimeSession:
         self._event_bus.on(UpdateSpeechSpeedCommand, self._on_update_speech_speed)
 
     def _setup_handlers(self) -> None:
+        self._transcript_logger = TranscriptLogger(event_bus=self._event_bus)
         self._audio_bridge = AudioBridge(
             event_bus=self._event_bus,
             audio_session=self._audio_session,

@@ -42,12 +42,6 @@ class TranscriptEventAdapter:
     async def _on_user_transcript_completed(
         self, event: InputAudioTranscriptionCompleted
     ) -> None:
-        logger.info(
-            "User transcript completed: '%s' (item_id=%s)",
-            event.transcript,
-            event.item_id,
-        )
-
         if event.usage:
             logger.debug("Transcription usage: %s", event.usage)
 
@@ -60,12 +54,6 @@ class TranscriptEventAdapter:
     async def _on_assistant_transcript_completed(
         self, event: ResponseOutputAudioTranscriptDone
     ) -> None:
-        logger.info(
-            "Assistant transcript completed: '%s' (response_id=%s)",
-            event.transcript,
-            event.response_id,
-        )
-
         await self._event_bus.dispatch(
             AssistantTranscriptCompletedEvent(
                 transcript=event.transcript,

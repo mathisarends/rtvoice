@@ -5,6 +5,7 @@ from .conversation_inactivity_monitor import ConversationInactivityMonitor
 from .speech_activity_event_adapter import SpeechActivityEventAdapter
 from .tool_call_executor import ToolCallExecutor
 from .transcript_event_adapter import TranscriptEventAdapter
+from .transcript_logger import TranscriptLogger
 
 __all__ = [
     "AudioBridge",
@@ -14,4 +15,5 @@ __all__ = [
     "SpeechActivityEventAdapter",
     "ToolCallExecutor",
     "TranscriptEventAdapter",
+    "TranscriptLogger",
 ]

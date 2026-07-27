@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from transitbus import EventBus
 
 from rtvoice.events.views import (
+    ToolExecutedEvent,
     ToolExecutionCompletedEvent,
     ToolExecutionStartedEvent,
 )
@@ -18,7 +19,7 @@ from rtvoice.realtime.schemas import (
     RealtimeServerEvent,
     ResponseDoneEvent,
 )
-from rtvoice.tools import ActionResult
+from rtvoice.tools import ActionKind, ActionResult
 from rtvoice.tools.views import Tool
 
 
@@ -78,11 +79,13 @@ def make_tool(
     name: str = "get_weather",
     result_instruction: str | None = None,
     respond: bool = True,
+    kind: ActionKind = ActionKind.GENERIC,
 ) -> MagicMock:
     tool = MagicMock(spec=Tool)
     tool.name = name
     tool.result_instruction = result_instruction
     tool.respond = respond
+    tool.kind = kind
     return tool
 
 
@@ -268,9 +271,14 @@ class TestToolBatching:
     ) -> None:
         started: list[ToolExecutionStartedEvent] = []
         completed: list[ToolExecutionCompletedEvent] = []
+        executed: list[ToolExecutedEvent] = []
         event_bus.on(ToolExecutionStartedEvent, started.append)
         event_bus.on(ToolExecutionCompletedEvent, completed.append)
-        tools.get.return_value = make_tool(respond=False)
+        event_bus.on(ToolExecutedEvent, executed.append)
+        tools.get.return_value = make_tool(
+            respond=False,
+            kind=ActionKind.MUTATE,
+        )
 
         await event_bus.dispatch(make_function_call_item())
         await event_bus.dispatch(make_response_done())
@@ -279,6 +287,27 @@ class TestToolBatching:
         assert len(completed) == 1
         assert completed[0].response_id == "resp_001"
         assert completed[0].response_pending is False
+        assert len(executed) == 1
+        assert executed[0].name == "get_weather"
+        assert executed[0].action_kind is ActionKind.MUTATE
+        assert executed[0].silent is True
+
+    @pytest.mark.asyncio
+    async def test_execution_event_uses_result_response_override(
+        self,
+        event_bus: EventBus,
+        executor: ToolCallExecutor,
+        tools: MagicMock,
+    ) -> None:
+        executed: list[ToolExecutedEvent] = []
+        event_bus.on(ToolExecutedEvent, executed.append)
+        tools.get.return_value = make_tool(respond=False)
+        tools.execute.return_value = ActionResult.success(respond=True)
+
+        await event_bus.dispatch(make_function_call_item())
+        await event_bus.dispatch(make_response_done())
+
+        assert executed[0].silent is False
 
     @pytest.mark.asyncio
     async def test_silent_action_sends_output_without_creating_response(

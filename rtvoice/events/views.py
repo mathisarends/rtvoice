@@ -5,10 +5,13 @@ from transitbus import Event
 if TYPE_CHECKING:
     from rtvoice.agent.views import AgentError
     from rtvoice.realtime.schemas import ToolChoiceMode
+    from rtvoice.tools.views import ActionKind
 
+    type ActionKindValue = ActionKind
     type AgentErrorValue = AgentError
     type ToolChoiceValue = ToolChoiceMode
 else:
+    type ActionKindValue = Any
     type AgentErrorValue = Any
     type ToolChoiceValue = Any
 
@@ -84,6 +87,12 @@ class ToolExecutionStartedEvent(Event):
 class ToolExecutionCompletedEvent(Event):
     response_id: str
     response_pending: bool
+
+
+class ToolExecutedEvent(Event):
+    name: str
+    action_kind: ActionKindValue
+    silent: bool
 
 
 class AssistantInterruptedEvent(Event):

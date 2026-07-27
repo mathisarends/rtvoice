@@ -460,6 +460,17 @@ agent = RealtimeAgent(
 | `on_agent_interrupted()`                          | User interrupted the assistant mid-response                                 |
 | `on_agent_error(error)`                           | Session or API error                                                        |
 | `on_user_inactivity_countdown(remaining_seconds)` | Fires each second before inactivity timeout                                 |
+| `on_tool_executed(name, action_kind, silent)`     | Tool completed with its kind and effective silent state                      |
+
+```python
+from rtvoice import ActionKind, AgentListener
+
+class MyListener(AgentListener):
+    async def on_tool_executed(
+        self, name: str, action_kind: ActionKind, silent: bool
+    ) -> None:
+        print(name, action_kind, silent)
+```
 
 ---
 

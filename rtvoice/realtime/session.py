@@ -27,6 +27,7 @@ from rtvoice.events.views import (
     AgentSessionConnectedEvent,
     AgentStoppedEvent,
     InterruptAssistantCommand,
+    UpdateSpeechSpeedCommand,
 )
 from rtvoice.handler import (
     AudioBridge,
@@ -55,6 +56,7 @@ from rtvoice.realtime.schemas import (
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
+from rtvoice.shared.speech_speed import SpeechSpeed
 from rtvoice.tokens.models import UsageReport
 from rtvoice.tokens.pricing import PricingCatalog
 from rtvoice.tokens.tracker import TokenTracker
@@ -75,7 +77,7 @@ class RealtimeSession:
         reasoning_effort: ReasoningEffort | None,
         instructions: str,
         voice: AssistantVoice,
-        speech_speed: float,
+        speech_speed: SpeechSpeed,
         transcription_model: TranscriptionModel | None,
         output_modalities: list[OutputModality],
         noise_reduction: NoiseReduction,
@@ -121,6 +123,7 @@ class RealtimeSession:
         self._setup_handlers()
 
         self._event_bus.on(AgentStoppedEvent, self._on_agent_stopped)
+        self._event_bus.on(UpdateSpeechSpeedCommand, self._on_update_speech_speed)
 
     def _setup_handlers(self) -> None:
         self._audio_bridge = AudioBridge(
@@ -219,16 +222,16 @@ class RealtimeSession:
         await self._websocket.send(SessionUpdateEvent(session=settings))
 
     @timed()
-    async def update_speech_speed(self, speed: float) -> None:
-        self._speech_speed = speed
-        self._barge_in_coordinator.set_speech_speed(speed)
+    async def _on_update_speech_speed(self, event: UpdateSpeechSpeedCommand) -> None:
+        self._speech_speed = event.speed
+        self._barge_in_coordinator.set_speech_speed(event.speed)
 
         if not self._websocket.is_connected:
             logger.warning("Cannot update speed - WebSocket not connected")
             return
 
-        logger.info("Updating speech speed [speed=%s]", speed)
-        await self._websocket.send(SpeedUpdateEvent.from_speed(speed))
+        logger.info("Updating speech speed [speed=%s]", event.speed)
+        await self._websocket.send(SpeedUpdateEvent.from_speed(event.speed))
 
     async def interrupt(self) -> None:
         await self._event_bus.dispatch(InterruptAssistantCommand())

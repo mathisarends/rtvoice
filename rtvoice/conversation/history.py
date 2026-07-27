@@ -9,6 +9,7 @@ from rtvoice.events.views import (
     AssistantTranscriptCompletedEvent,
     UserTranscriptCompletedEvent,
 )
+from rtvoice.shared.speech_speed import DEFAULT_SPEECH_SPEED, SpeechSpeed
 
 _ESTIMATED_WORDS_PER_MINUTE = 150
 _INTERRUPTION_MARKER = "<INTERRUPTED>"
@@ -20,7 +21,7 @@ type _TurnIndex = int
 @dataclass(frozen=True)
 class _Interruption:
     played_ms: int | None
-    speech_speed: float
+    speech_speed: SpeechSpeed
 
 
 def _assistant_keys(item_id: str, response_id: str | None) -> set[_AssistantTurnKey]:
@@ -45,7 +46,7 @@ def _estimated_heard_words(turn: ConversationTurn) -> int:
         return 0
     return int(
         max(turn.played_ms, 0)
-        * max(turn.speech_speed, 0)
+        * turn.speech_speed
         * _ESTIMATED_WORDS_PER_MINUTE
         / 60_000
     )
@@ -96,7 +97,9 @@ class ConversationHistory:
                 transcript=event.transcript,
                 interrupted=interruption is not None,
                 played_ms=interruption.played_ms if interruption else None,
-                speech_speed=interruption.speech_speed if interruption else 1.0,
+                speech_speed=(
+                    interruption.speech_speed if interruption else DEFAULT_SPEECH_SPEED
+                ),
             )
         )
         self._assistant_turns.update(dict.fromkeys(keys, turn_index))

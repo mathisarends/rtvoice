@@ -31,10 +31,12 @@ from rtvoice.events.views import (
     AgentStoppedEvent,
     AudioPlaybackCompletedEvent,
     StopAgentCommand,
+    UpdateSpeechSpeedCommand,
     UserInactivityTimeoutEvent,
 )
 from rtvoice.realtime import OpenAIProvider, RealtimeProvider, RealtimeSession
 from rtvoice.shared.decorators import timed
+from rtvoice.shared.speech_speed import SpeechSpeed
 from rtvoice.skills import SkillManager, Skills
 from rtvoice.tokens import PricingCatalog
 from rtvoice.tools import ToolContext, Tools
@@ -74,8 +76,6 @@ class RealtimeAgent[T]:
 
         if api_key and provider:
             raise ValueError("Pass either `provider` or `api_key`, not both.")
-
-        clipped_speech_speed = self._clip_speech_speed(speech_speed)
 
         normalized_output_modalities = self._normalize_output_modalities(
             output_modalities
@@ -143,7 +143,7 @@ class RealtimeAgent[T]:
             # Agent-level "system prompt" becomes Session-level "instructions" (the model's own param name).
             instructions=system_prompt,
             voice=voice,
-            speech_speed=clipped_speech_speed,
+            speech_speed=SpeechSpeed(speech_speed),
             transcription_model=transcription_model,
             output_modalities=normalized_output_modalities,
             noise_reduction=noise_reduction,
@@ -173,18 +173,6 @@ class RealtimeAgent[T]:
         from rtvoice.audio import SpeakerOutput
 
         return SpeakerOutput()
-
-    def _clip_speech_speed(self, speed: float) -> float:
-        clipped = max(0.25, min(speed, 1.5))
-
-        if speed != clipped:
-            logger.warning(
-                "Speech speed %.2f is out of range [0.25, 1.5], clipping to %.2f",
-                speed,
-                clipped,
-            )
-
-        return clipped
 
     def _normalize_output_modalities(
         self, output_modalities: list[OutputModality] | None
@@ -249,12 +237,8 @@ class RealtimeAgent[T]:
             usage=self._realtime_session.usage_report,
         )
 
-    async def set_speech_speed(
-        self,
-        speed: float,
-    ) -> None:
-        clipped = self._clip_speech_speed(speed)
-        await self._realtime_session.update_speech_speed(clipped)
+    async def set_speech_speed(self, speed: float) -> None:
+        await self._event_bus.dispatch(UpdateSpeechSpeedCommand(speed=speed))
 
     async def interrupt(self) -> None:
         await self._realtime_session.interrupt()

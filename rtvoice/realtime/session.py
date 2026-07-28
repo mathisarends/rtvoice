@@ -9,18 +9,9 @@ from typing import TYPE_CHECKING
 from transitbus import EventBus
 
 from rtvoice.agent.views import (
-    AssistantVoice,
     InjectedAssistantMessage,
     InjectedConversation,
     InjectedUserMessage,
-    NoiseReduction,
-    OutputModality,
-    RealtimeModel,
-    ReasoningEffort,
-    SemanticVAD,
-    ServerVAD,
-    TranscriptionModel,
-    TurnDetection,
 )
 from rtvoice.audio import AudioSession
 from rtvoice.events.views import (
@@ -41,23 +32,17 @@ from rtvoice.handler import (
 )
 from rtvoice.realtime.port import RealtimeProvider
 from rtvoice.realtime.schemas import (
-    AudioInputSettings,
-    AudioOutputSettings,
-    AudioSettings,
     ConversationItemCreateEvent,
     ConversationResponseCreateEvent,
-    InputAudioTranscriptionSettings,
-    RealtimeSessionSettings,
-    SemanticVADSettings,
-    ServerVADSettings,
     SessionUpdateEvent,
     SpeedUpdateEvent,
-    ToolChoiceMode,
-    TurnDetectionSettings,
+)
+from rtvoice.realtime.session_settings import (
+    RealtimeSessionSettings,
+    build_session_payload,
 )
 from rtvoice.realtime.websocket import RealtimeWebSocket
 from rtvoice.shared.decorators import timed
-from rtvoice.shared.speech_speed import SpeechSpeed
 from rtvoice.tokens.models import UsageReport
 from rtvoice.tokens.pricing import PricingCatalog
 from rtvoice.tokens.tracker import TokenTracker
@@ -74,48 +59,35 @@ class RealtimeSession:
         self,
         *,
         event_bus: EventBus,
-        model: RealtimeModel,
-        reasoning_effort: ReasoningEffort | None,
-        instructions: str,
-        voice: AssistantVoice,
-        speech_speed: SpeechSpeed,
-        transcription_model: TranscriptionModel | None,
-        output_modalities: list[OutputModality],
-        noise_reduction: NoiseReduction,
-        turn_detection: TurnDetection,
+        settings: RealtimeSessionSettings,
         tools: Tools,
         audio_session: AudioSession,
-        injected_conversation: InjectedConversation | None,
-        inactivity_timeout_seconds: float | None,
-        recording_path: Path | None,
         provider: RealtimeProvider,
+        injected_conversation: InjectedConversation | None = None,
+        inactivity_timeout_seconds: float | None = None,
+        recording_path: Path | None = None,
         pricing_catalog: PricingCatalog | None = None,
     ):
-        model.warn_if_deprecated(stacklevel=3)
+        settings.model.warn_if_deprecated(stacklevel=3)
         self._event_bus = event_bus
-        self._model = model
-        self._reasoning_effort = reasoning_effort
-        self._instructions = instructions
-        self._voice = voice
-        self._speech_speed = speech_speed
-        self._transcription_model = transcription_model
-        self._output_modalities = list(dict.fromkeys(output_modalities))
-        self._noise_reduction = noise_reduction
-        self._turn_detection = turn_detection
+        self._settings = settings
         self._tools = tools
         self._audio_session = audio_session
         self._injected_conversation = injected_conversation
-        self._assistant_text_enabled = "text" in self._output_modalities
-        self._transcription_enabled = self._transcription_model is not None
         self._inactivity_timeout_seconds = inactivity_timeout_seconds
         self._recording_path = recording_path
 
-        self._websocket = RealtimeWebSocket(model=model, provider=provider)
+        # settings are frozen; only the speed is retunable mid-session
+        self._speech_speed = settings.speech_speed
+
+        self._websocket = RealtimeWebSocket(model=settings.model, provider=provider)
         self._token_tracker = TokenTracker(
             event_bus=event_bus,
-            realtime_model=model.value,
+            realtime_model=settings.model.value,
             transcription_model=(
-                transcription_model.value if transcription_model is not None else None
+                settings.transcription_model.value
+                if settings.transcription_model is not None
+                else None
             ),
             pricing_catalog=pricing_catalog,
         )
@@ -140,7 +112,10 @@ class RealtimeSession:
             speech_speed=self._speech_speed,
         )
 
-        if self._transcription_enabled or self._assistant_text_enabled:
+        if (
+            self._settings.transcription_enabled
+            or self._settings.assistant_text_enabled
+        ):
             self._transcript_event_adapter = TranscriptEventAdapter(
                 event_bus=self._event_bus
             )
@@ -169,8 +144,12 @@ class RealtimeSession:
             )
 
     @property
-    def recorpding_path(self) -> Path | None:
+    def recording_path(self) -> Path | None:
         return self._recording_path
+
+    @property
+    def settings(self) -> RealtimeSessionSettings:
+        return self._settings
 
     @property
     def usage_report(self) -> UsageReport:
@@ -210,17 +189,8 @@ class RealtimeSession:
         return ConversationItemCreateEvent.assistant_message(message.text)
 
     async def _send_session_update(self) -> None:
-        logger.info(
-            "Applying session settings [model=%s, reasoning_effort=%s, voice=%s, speed=%s, turn_detection=%s, transcription=%s, output_modalities=%s]",
-            self._model,
-            self._reasoning_effort,
-            self._voice,
-            self._speech_speed,
-            type(self._turn_detection).__name__,
-            self._transcription_model,
-            self._output_modalities,
-        )
-        settings = self._build_session_settings()
+        logger.info("Applying session settings [%s]", self._settings.summary)
+        settings = build_session_payload(self._settings, self._tools.get_schema())
         await self._websocket.send(SessionUpdateEvent(session=settings))
 
     @timed()
@@ -287,51 +257,3 @@ class RealtimeSession:
 
         await self._websocket.close()
         logger.info("Realtime session stopped")
-
-    def _build_session_settings(
-        self,
-    ) -> RealtimeSessionSettings:
-        match self._turn_detection:
-            case SemanticVAD(eagerness=eagerness):
-                turn_detection_settings: TurnDetectionSettings = SemanticVADSettings(
-                    eagerness=eagerness
-                )
-            case ServerVAD(
-                threshold=threshold,
-                prefix_padding_ms=prefix_padding_ms,
-                silence_duration_ms=silence_duration_ms,
-            ):
-                turn_detection_settings = ServerVADSettings(
-                    threshold=threshold,
-                    prefix_padding_ms=prefix_padding_ms,
-                    silence_duration_ms=silence_duration_ms,
-                )
-
-        transcription_settings = (
-            None
-            if self._transcription_model is None
-            else InputAudioTranscriptionSettings(model=self._transcription_model)
-        )
-
-        return RealtimeSessionSettings(
-            model=self._model,
-            reasoning=(
-                None
-                if self._reasoning_effort is None
-                else {"effort": self._reasoning_effort}
-            ),
-            instructions=self._instructions,
-            output_modalities=self._output_modalities,
-            tool_choice=ToolChoiceMode.AUTO,
-            tools=self._tools.get_schema(),
-            audio=AudioSettings(
-                input=AudioInputSettings.with_noise_reduction(
-                    turn_detection=turn_detection_settings,
-                    noise_reduction=self._noise_reduction,
-                    transcription=transcription_settings,
-                ),
-                output=AudioOutputSettings(
-                    voice=self._voice.value, speed=self._speech_speed
-                ),
-            ),
-        )

@@ -5,20 +5,16 @@ import pytest
 from transitbus import EventBus
 
 from rtvoice.agent.views import (
-    AssistantVoice,
     InjectedAssistantMessage,
     InjectedConversation,
     InjectedUserMessage,
-    NoiseReduction,
     RealtimeModel,
-    ReasoningEffort,
-    SemanticVAD,
-    TranscriptionModel,
 )
 from rtvoice.audio import AudioSession
 from rtvoice.events.views import AgentSessionConnectedEvent
 from rtvoice.realtime.schemas import ConversationItemCreateEvent, SessionUpdateEvent
 from rtvoice.realtime.session import RealtimeSession
+from rtvoice.realtime.session_settings import RealtimeSessionSettings
 from rtvoice.tools import Tools
 
 
@@ -60,21 +56,14 @@ def make_session(
     with patch.object(RealtimeSession, "_setup_handlers"):
         session = RealtimeSession(
             event_bus=event_bus,
-            model=RealtimeModel.GPT_REALTIME_2_1_MINI,
-            reasoning_effort=ReasoningEffort.LOW,
-            instructions="Test assistant",
-            voice=AssistantVoice.MARIN,
-            speech_speed=1.0,
-            transcription_model=TranscriptionModel.WHISPER_1,
-            output_modalities=["audio"],
-            noise_reduction=NoiseReduction.FAR_FIELD,
-            turn_detection=SemanticVAD(),
+            settings=RealtimeSessionSettings(
+                model=RealtimeModel.GPT_REALTIME_2_1_MINI,
+                instructions="Test assistant",
+            ),
             tools=Tools(),
             audio_session=MagicMock(spec=AudioSession),
-            injected_conversation=injected_conversation,
-            inactivity_timeout_seconds=None,
-            recording_path=None,
             provider=MagicMock(),
+            injected_conversation=injected_conversation,
         )
     session._websocket = websocket
 
@@ -146,17 +135,16 @@ class TestInjectedConversation:
         ]
 
 
-class TestSessionSettings:
-    def test_maps_system_prompt_to_wire_instructions(self) -> None:
-        session, _, _ = make_session()
+class TestSessionUpdate:
+    @pytest.mark.asyncio
+    async def test_session_update_carries_the_settings_and_tool_schema(self) -> None:
+        session, websocket, _ = make_session()
 
-        payload = session._build_session_settings().model_dump(exclude_none=True)
+        await session.start()
+        await session.stop()
 
-        assert payload["instructions"] == "Test assistant"
-
-    def test_build_session_settings_includes_reasoning_effort(self) -> None:
-        session, _, _ = make_session()
-
-        payload = session._build_session_settings().model_dump(exclude_none=True)
-
-        assert payload["reasoning"] == {"effort": ReasoningEffort.LOW}
+        sent = websocket.send.call_args_list[0].args[0]
+        assert isinstance(sent, SessionUpdateEvent)
+        assert sent.session.instructions == "Test assistant"
+        assert sent.session.model == RealtimeModel.GPT_REALTIME_2_1_MINI
+        assert sent.session.tools == session._tools.get_schema()

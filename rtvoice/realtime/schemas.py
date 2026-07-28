@@ -12,7 +12,14 @@ from pydantic import (
 )
 from transitbus import Event
 
-from rtvoice.agent.views import RealtimeModel, ReasoningEffort
+from rtvoice.agent.views import (
+    NoiseReduction,
+    OutputModality,
+    RealtimeModel,
+    ReasoningEffort,
+    SemanticEagerness,
+    TranscriptionModel,
+)
 
 # ============================================================================
 # Enums
@@ -79,22 +86,6 @@ class RealtimeServerEvent(StrEnum):
     ERROR = "error"
 
 
-class TranscriptionModel(StrEnum):
-    WHISPER_1 = "whisper-1"
-    GPT_4O_TRANSCRIBE = "gpt-4o-transcribe"
-    GPT_4O_MINI_TRANSCRIBE = "gpt-4o-mini-transcribe"
-
-
-class NoiseReductionType(StrEnum):
-    NEAR_FIELD = "near_field"
-    FAR_FIELD = "far_field"
-
-
-class TurnDetectionType(StrEnum):
-    SERVER_VAD = "server_vad"
-    SEMANTIC_VAD = "semantic_vad"
-
-
 class AudioInputFormat(StrEnum):
     PCM = "audio/pcm"
     ULAW = "audio/pcmu"
@@ -105,9 +96,6 @@ class AudioOutputFormat(StrEnum):
     PCM16 = "pcm16"
     G711_ULAW = "g711_ulaw"
     G711_ALAW = "g711_alaw"
-
-
-type OutputModality = Literal["text", "audio"]
 
 
 class MessageRole(StrEnum):
@@ -147,7 +135,7 @@ class AudioOutputFormatSettings(BaseModel):
 
 
 class InputAudioNoiseReductionSettings(BaseModel):
-    type: NoiseReductionType
+    type: NoiseReduction
 
 
 class ServerVADSettings(BaseModel):
@@ -162,7 +150,7 @@ class ServerVADSettings(BaseModel):
 
 class SemanticVADSettings(BaseModel):
     type: Literal["semantic_vad"] = "semantic_vad"
-    eagerness: Literal["low", "medium", "high", "auto"] = "auto"
+    eagerness: SemanticEagerness = SemanticEagerness.AUTO
     # low    = wait up to 8 s for a natural endpoint
     # medium = wait up to 4 s (same as "auto" default)
     # high   = wait up to 2 s (most responsive)
@@ -191,25 +179,9 @@ class AudioInputSettings(BaseModel):
     transcription: InputAudioTranscriptionSettings | None = None
     noise_reduction: InputAudioNoiseReductionSettings | None = Field(
         default_factory=lambda: InputAudioNoiseReductionSettings(
-            type=NoiseReductionType.FAR_FIELD
+            type=NoiseReduction.FAR_FIELD
         )
     )
-
-    @classmethod
-    def with_noise_reduction(
-        cls,
-        *,
-        turn_detection: TurnDetectionSettings,
-        noise_reduction: str,
-        transcription: InputAudioTranscriptionSettings | None,
-    ) -> Self:
-        return cls(
-            turn_detection=turn_detection,
-            noise_reduction=InputAudioNoiseReductionSettings(
-                type=NoiseReductionType(noise_reduction)
-            ),
-            transcription=transcription,
-        )
 
 
 class AudioSettings(BaseModel):
@@ -477,7 +449,7 @@ class ErrorDetails(BaseModel):
     param: str | None = None
 
 
-class RealtimeSessionSettings(BaseModel):
+class RealtimeSessionPayload(BaseModel):
     type: Literal["realtime"] = "realtime"
     model: RealtimeModel = RealtimeModel.GPT_REALTIME_2_1
     reasoning: ReasoningSettings | None = None
@@ -657,7 +629,7 @@ class SessionUpdateEvent(BaseModel):
         RealtimeClientEvent.SESSION_UPDATE
     )
     event_id: str | None = None
-    session: RealtimeSessionSettings
+    session: RealtimeSessionPayload
 
 
 class ResponseCancelEvent(BaseModel):
@@ -684,7 +656,7 @@ class SessionCreatedEvent(RealtimeBusEvent):
         RealtimeServerEvent.SESSION_CREATED
     )
     event_id: str
-    session: RealtimeSessionSettings
+    session: RealtimeSessionPayload
 
 
 class SessionUpdatedEvent(RealtimeBusEvent):
@@ -692,7 +664,7 @@ class SessionUpdatedEvent(RealtimeBusEvent):
         RealtimeServerEvent.SESSION_UPDATED
     )
     event_id: str
-    session: RealtimeSessionSettings
+    session: RealtimeSessionPayload
 
 
 class ErrorEvent(RealtimeBusEvent):

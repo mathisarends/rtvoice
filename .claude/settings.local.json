@@ -47,7 +47,10 @@
       "Bash(xargs grep -liE \"usage|token|cost|price\")",
       "Bash(.venv/Scripts/python.exe *)",
       "Bash(xargs ls)",
-      "Bash(awk '/^PRICING_GPT_REALTIME/,/^\\\\\\)/' .venv/Lib/site-packages/tokenary/_generated.py)"
+      "Bash(awk '/^PRICING_GPT_REALTIME/,/^\\\\\\)/' .venv/Lib/site-packages/tokenary/_generated.py)",
+      "Bash(ruff check *)",
+      "Bash(mv rtvoice/realtime/session_config.py rtvoice/realtime/session_settings.py)",
+      "Bash(mv tests/realtime/test_session_config.py tests/realtime/test_session_settings.py)"
     ]
   }
 }

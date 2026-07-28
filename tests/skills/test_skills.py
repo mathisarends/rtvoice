@@ -246,7 +246,7 @@ class TestAgentIntegration:
                 audio_output=audio_output,
             )
 
-        system_prompt = agent._realtime_session._instructions
+        system_prompt = agent._realtime_session.settings.instructions
         assert system_prompt.startswith("You are helpful.")
         assert "<name>internet-research</name>" in system_prompt
         assert "Use the bundled workflow" not in system_prompt

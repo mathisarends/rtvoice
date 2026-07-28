@@ -75,33 +75,39 @@ class TestInitDefaults:
 
     def test_default_model_is_realtime_2_1_mini(self) -> None:
         agent = make_agent()
-        assert agent._realtime_session._model == RealtimeModel.GPT_REALTIME_2_1_MINI
+        assert (
+            agent._realtime_session.settings.model
+            == RealtimeModel.GPT_REALTIME_2_1_MINI
+        )
 
     def test_default_reasoning_effort_is_low(self) -> None:
         agent = make_agent()
-        assert agent._realtime_session._reasoning_effort == ReasoningEffort.LOW
+        assert agent._realtime_session.settings.reasoning_effort == ReasoningEffort.LOW
 
     def test_default_voice_is_marin(self) -> None:
         agent = make_agent()
-        assert agent._realtime_session._voice == AssistantVoice.MARIN
+        assert agent._realtime_session.settings.voice == AssistantVoice.MARIN
 
     def test_default_noise_reduction_is_far_field(self) -> None:
         agent = make_agent()
-        assert agent._realtime_session._noise_reduction == NoiseReduction.FAR_FIELD
+        assert (
+            agent._realtime_session.settings.noise_reduction == NoiseReduction.FAR_FIELD
+        )
 
     def test_default_turn_detection_is_semantic_vad(self) -> None:
         agent = make_agent()
-        assert isinstance(agent._realtime_session._turn_detection, SemanticVAD)
+        assert isinstance(agent._realtime_session.settings.turn_detection, SemanticVAD)
 
     def test_default_transcription_model_is_whisper(self) -> None:
         agent = make_agent()
         assert (
-            agent._realtime_session._transcription_model == TranscriptionModel.WHISPER_1
+            agent._realtime_session.settings.transcription_model
+            == TranscriptionModel.WHISPER_1
         )
 
     def test_system_prompt_is_passed_to_realtime_session(self) -> None:
         agent = make_agent(system_prompt="Be concise.")
-        assert agent._realtime_session._instructions == "Be concise."
+        assert agent._realtime_session.settings.instructions == "Be concise."
 
     def test_default_inactivity_timeout_disabled(self) -> None:
         agent = make_agent()
@@ -152,11 +158,11 @@ class TestInitDefaults:
     def test_custom_turn_detection_is_stored(self) -> None:
         vad = ServerVAD(silence_duration_ms=800)
         agent = make_agent(turn_detection=vad)
-        assert agent._realtime_session._turn_detection == vad
+        assert agent._realtime_session.settings.turn_detection == vad
 
     def test_custom_model_is_stored(self) -> None:
         agent = make_agent(model=RealtimeModel.GPT_REALTIME_2)
-        assert agent._realtime_session._model == RealtimeModel.GPT_REALTIME_2
+        assert agent._realtime_session.settings.model == RealtimeModel.GPT_REALTIME_2
 
     @pytest.mark.parametrize(
         "model",
@@ -168,7 +174,9 @@ class TestInitDefaults:
 
     def test_custom_reasoning_effort_is_stored(self) -> None:
         agent = make_agent(reasoning_effort=ReasoningEffort.MINIMAL)
-        assert agent._realtime_session._reasoning_effort == ReasoningEffort.MINIMAL
+        assert (
+            agent._realtime_session.settings.reasoning_effort == ReasoningEffort.MINIMAL
+        )
 
     def test_recording_path_is_converted_to_path_object(self, tmp_path) -> None:
         agent = make_agent(recording_path=str(tmp_path / "rec.wav"))

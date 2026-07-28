@@ -35,7 +35,12 @@ from rtvoice.events.views import (
     UpdateSpeechSpeedCommand,
     UserInactivityTimeoutEvent,
 )
-from rtvoice.realtime import OpenAIProvider, RealtimeProvider, RealtimeSession
+from rtvoice.realtime import (
+    OpenAIProvider,
+    RealtimeProvider,
+    RealtimeSession,
+    RealtimeSessionSettings,
+)
 from rtvoice.shared.decorators import timed
 from rtvoice.shared.speech_speed import SpeechSpeed
 from rtvoice.skills import Skills, register_skill_tools
@@ -77,12 +82,6 @@ class RealtimeAgent[T]:
 
         if api_key and provider:
             raise ValueError("Pass either `provider` or `api_key`, not both.")
-
-        normalized_output_modalities = self._normalize_output_modalities(
-            output_modalities
-        )
-        assistant_text_enabled = "text" in normalized_output_modalities
-        effective_turn_detection: TurnDetection = turn_detection or SemanticVAD()
 
         self._listener = listener
         recording_path_obj = Path(recording_path) if recording_path else None
@@ -140,8 +139,7 @@ class RealtimeAgent[T]:
             output_device=output_device,
         )
 
-        self._realtime_session = RealtimeSession(
-            event_bus=self._event_bus,
+        session_settings = RealtimeSessionSettings(
             model=model,
             reasoning_effort=reasoning_effort,
             # Agent-level "system prompt" becomes Session-level "instructions" (the model's own param name).
@@ -149,15 +147,20 @@ class RealtimeAgent[T]:
             voice=voice,
             speech_speed=SpeechSpeed(speech_speed),
             transcription_model=transcription_model,
-            output_modalities=normalized_output_modalities,
+            output_modalities=tuple(output_modalities or ["audio"]),
             noise_reduction=noise_reduction,
-            turn_detection=effective_turn_detection,
+            turn_detection=turn_detection or SemanticVAD(),
+        )
+
+        self._realtime_session = RealtimeSession(
+            event_bus=self._event_bus,
+            settings=session_settings,
             tools=self._tools,
             audio_session=audio_session,
+            provider=provider or OpenAIProvider(api_key=api_key),
             injected_conversation=injected_conversation,
             inactivity_timeout_seconds=inactivity_timeout_seconds,
             recording_path=recording_path_obj,
-            provider=provider or OpenAIProvider(api_key=api_key),
             pricing_catalog=pricing_catalog,
         )
 
@@ -165,7 +168,7 @@ class RealtimeAgent[T]:
         self._listener_bridge: AgentListenerBridge | None = None
         self._setup_listener(
             inactivity_timeout_enabled=inactivity_timeout_seconds is not None,
-            assistant_text_enabled=assistant_text_enabled,
+            assistant_text_enabled=session_settings.assistant_text_enabled,
         )
 
     def _create_default_input(self) -> AudioInputDevice:
@@ -177,12 +180,6 @@ class RealtimeAgent[T]:
         from rtvoice.audio import SpeakerOutput
 
         return SpeakerOutput()
-
-    def _normalize_output_modalities(
-        self, output_modalities: list[OutputModality] | None
-    ) -> list[OutputModality]:
-        modalities = output_modalities or ["audio"]
-        return list(dict.fromkeys(modalities))
 
     def _setup_shutdown_handlers(self) -> None:
         self._event_bus.on(UserInactivityTimeoutEvent, self._on_inactivity_timeout)

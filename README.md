@@ -468,15 +468,15 @@ class MyListener(AgentListener):
 
 ## Custom audio devices
 
-Implement `AudioInputDevice` or `AudioOutputDevice` from `rtvoice.audio` to replace the default microphone or speaker — useful for telephony, file playback, testing, or embedded hardware.
+Implement `AudioInput` or `AudioOutput` from `rtvoice.audio` to replace the default microphone or speaker — useful for telephony, file playback, testing, or embedded hardware.
 
 ### Custom input
 
 ```python
 from collections.abc import AsyncIterator
-from rtvoice.audio import AudioInputDevice
+from rtvoice.audio import AudioInput
 
-class CustomMicrophone(AudioInputDevice):
+class CustomMicrophone(AudioInput):
     def __init__(self):
         self._active = False
 
@@ -506,9 +506,9 @@ agent = RealtimeAgent(
 ### Custom output
 
 ```python
-from rtvoice.audio import AudioOutputDevice
+from rtvoice.audio import AudioOutput
 
-class CustomSpeaker(AudioOutputDevice):
+class CustomSpeaker(AudioOutput):
     def __init__(self):
         self._playing = False
 
@@ -560,7 +560,7 @@ agent = RealtimeAgent(
 This is a core feature of rtvoice: an adaptive NLMS filter learns the
 loudspeaker-to-microphone path and removes it in real time, leaving barge-in
 intact — unlike simple gating, the user can still interrupt the assistant
-while it speaks. It works with any `AudioInputDevice`/`AudioOutputDevice`
+while it speaks. It works with any `AudioInput`/`AudioOutput`
 pair, including custom ones.
 
 ---
@@ -641,7 +641,9 @@ result = await agent.run()
 print(result.recording_path)   # Path to the saved file
 ```
 
-The returned `AgentResult` also contains `result.turns` — a list of `ConversationTurn` objects with role and text for every exchange.
+The returned `AgentResult` also contains `result.turns` — one `UserTurn`,
+`AssistantTurn`, or `ToolTurn` per exchange (`ConversationTurn` is the union of
+the three; each carries a `role` and a `transcript`).
 
 ---
 

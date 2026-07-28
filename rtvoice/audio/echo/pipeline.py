@@ -4,7 +4,7 @@ from rtvoice.audio.echo.cancellers import NlmsEchoCanceller
 from rtvoice.audio.echo.devices import EchoCancellingInput, ReferenceTapOutput
 from rtvoice.audio.echo.ports import Clock, EchoCanceller
 from rtvoice.audio.echo.timeline import PlaybackTimeline
-from rtvoice.audio.ports import AudioInputDevice, AudioOutputDevice
+from rtvoice.audio.ports import AudioInput, AudioOutput
 
 
 class EchoCancellation:
@@ -25,8 +25,8 @@ class EchoCancellation:
         self._wrapped = False
 
     def wrap(
-        self, input_device: AudioInputDevice, output_device: AudioOutputDevice
-    ) -> tuple[AudioInputDevice, AudioOutputDevice]:
+        self, input_device: AudioInput, output_device: AudioOutput
+    ) -> tuple[AudioInput, AudioOutput]:
         if self._wrapped:
             raise RuntimeError(
                 "EchoCancellation holds filter state for a single device pair - "

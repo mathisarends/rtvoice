@@ -1,9 +1,14 @@
 from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from transitbus import EventBus
 
-from rtvoice.conversation.views import ConversationTurn
+from rtvoice.conversation.views import (
+    AssistantTurn,
+    ConversationTurn,
+    ToolTurn,
+    UserTurn,
+)
 from rtvoice.events.views import (
     AssistantInterruptedEvent,
     AssistantTranscriptCompletedEvent,
@@ -11,9 +16,6 @@ from rtvoice.events.views import (
     UserTranscriptCompletedEvent,
 )
 from rtvoice.shared.speech_speed import DEFAULT_SPEECH_SPEED, SpeechSpeed
-
-_ESTIMATED_WORDS_PER_MINUTE = 150
-_INTERRUPTION_MARKER = "<INTERRUPTED>"
 
 type _AssistantTurnKey = str
 type _TurnIndex = int
@@ -42,31 +44,6 @@ def _interruption_keys(
     return set()
 
 
-def _estimated_heard_words(turn: ConversationTurn) -> int:
-    if turn.played_ms is None:
-        return 0
-    return int(
-        max(turn.played_ms, 0)
-        * turn.speech_speed
-        * _ESTIMATED_WORDS_PER_MINUTE
-        / 60_000
-    )
-
-
-def _format_turn(turn: ConversationTurn) -> str:
-    if turn.role != "assistant" or not turn.interrupted:
-        return f"[{turn.role.upper()}]: {turn.transcript}"
-
-    heard_words = _estimated_heard_words(turn)
-    heard_prefix = " ".join(turn.transcript.split()[:heard_words])
-    content = (
-        f"{heard_prefix} {_INTERRUPTION_MARKER}"
-        if heard_prefix
-        else _INTERRUPTION_MARKER
-    )
-    return f"[ASSISTANT, INTERRUPTED]: {content}"
-
-
 class ConversationHistory:
     def __init__(self, event_bus: EventBus):
         self._event_bus = event_bus
@@ -80,12 +57,10 @@ class ConversationHistory:
         self._event_bus.on(ToolExecutedEvent, self._on_tool_executed)
 
     async def _on_user(self, event: UserTranscriptCompletedEvent) -> None:
-        self._turns.append(ConversationTurn(role="user", transcript=event.transcript))
+        self._turns.append(UserTurn(transcript=event.transcript))
 
     async def _on_tool_executed(self, event: ToolExecutedEvent) -> None:
-        self._turns.append(
-            ConversationTurn(role="tool", transcript=f"{event.name}: {event.result}")
-        )
+        self._turns.append(ToolTurn(name=event.name, result=event.result))
 
     async def _on_assistant(self, event: AssistantTranscriptCompletedEvent) -> None:
         keys = _assistant_keys(event.item_id, event.response_id)
@@ -99,8 +74,7 @@ class ConversationHistory:
         )
         turn_index: _TurnIndex = len(self._turns)
         self._turns.append(
-            ConversationTurn(
-                role="assistant",
+            AssistantTurn(
                 transcript=event.transcript,
                 interrupted=interruption is not None,
                 played_ms=interruption.played_ms if interruption else None,
@@ -121,26 +95,31 @@ class ConversationHistory:
         }
         if turn_indices:
             for turn_index in turn_indices:
-                self._turns[turn_index] = replace(
-                    self._turns[turn_index],
-                    interrupted=True,
-                    played_ms=event.played_ms,
-                    speech_speed=event.speech_speed,
-                )
+                self._mark_interrupted(turn_index, interruption)
             return
         if keys:
             self._pending_interruptions.update(dict.fromkeys(keys, interruption))
             return
 
         for turn_index in range(len(self._turns) - 1, -1, -1):
-            if self._turns[turn_index].role == "assistant":
-                self._turns[turn_index] = replace(
-                    self._turns[turn_index],
-                    interrupted=True,
-                    played_ms=event.played_ms,
-                    speech_speed=event.speech_speed,
-                )
+            if isinstance(self._turns[turn_index], AssistantTurn):
+                self._mark_interrupted(turn_index, interruption)
                 return
+
+    def _mark_interrupted(
+        self, turn_index: _TurnIndex, interruption: _Interruption
+    ) -> None:
+        turn = self._turns[turn_index]
+        if not isinstance(turn, AssistantTurn):
+            return
+
+        self._turns[turn_index] = turn.model_copy(
+            update={
+                "interrupted": True,
+                "played_ms": interruption.played_ms,
+                "speech_speed": interruption.speech_speed,
+            }
+        )
 
     def add(self, turn: ConversationTurn) -> None:
         self._turns.append(turn)
@@ -156,5 +135,5 @@ class ConversationHistory:
         if not self._turns:
             return "(no conversation yet)"
 
-        lines = [_format_turn(turn) for turn in self._turns]
+        lines = [turn.format() for turn in self._turns]
         return "\n".join(lines)

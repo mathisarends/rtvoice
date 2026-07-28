@@ -3,13 +3,13 @@ from collections.abc import AsyncIterator
 
 from rtvoice.audio.echo.ports import Clock, EchoCanceller
 from rtvoice.audio.echo.timeline import PlaybackTimeline
-from rtvoice.audio.ports import AudioInputDevice, AudioOutputDevice
+from rtvoice.audio.ports import AudioInput, AudioOutput
 
 _BYTES_PER_SAMPLE = 2
 
 
-class ReferenceTapOutput(AudioOutputDevice):
-    def __init__(self, output: AudioOutputDevice, timeline: PlaybackTimeline):
+class ReferenceTapOutput(AudioOutput):
+    def __init__(self, output: AudioOutput, timeline: PlaybackTimeline):
         self._output = output
         self._timeline = timeline
 
@@ -34,10 +34,10 @@ class ReferenceTapOutput(AudioOutputDevice):
         self._timeline.discard_pending()
 
 
-class EchoCancellingInput(AudioInputDevice):
+class EchoCancellingInput(AudioInput):
     def __init__(
         self,
-        input_device: AudioInputDevice,
+        input_device: AudioInput,
         timeline: PlaybackTimeline,
         canceller: EchoCanceller,
         *,

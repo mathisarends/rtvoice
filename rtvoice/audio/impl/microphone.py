@@ -2,10 +2,10 @@ import asyncio
 import threading
 from collections.abc import AsyncIterator
 
-from rtvoice.audio.ports import AudioInputDevice
+from rtvoice.audio.ports import AudioInput
 
 
-class MicrophoneInput(AudioInputDevice):
+class MicrophoneInput(AudioInput):
     def __init__(
         self,
         device_index: int | None = None,

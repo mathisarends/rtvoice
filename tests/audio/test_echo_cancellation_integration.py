@@ -5,7 +5,7 @@ import pytest
 np = pytest.importorskip("numpy")
 
 from rtvoice.audio.echo import EchoCancellation
-from rtvoice.audio.ports import AudioInputDevice, AudioOutputDevice
+from rtvoice.audio.ports import AudioInput, AudioOutput
 
 SAMPLE_RATE = 16000
 FRAME_SAMPLES = 512
@@ -22,7 +22,7 @@ class FakeClock:
         self.now += samples / SAMPLE_RATE
 
 
-class RoomInput(AudioInputDevice):
+class RoomInput(AudioInput):
     def __init__(self, chunks: list[bytes], clock: FakeClock):
         self._chunks = chunks
         self._clock = clock
@@ -44,7 +44,7 @@ class RoomInput(AudioInputDevice):
             yield chunk
 
 
-class SpeakerOutput(AudioOutputDevice):
+class SpeakerOutput(AudioOutput):
     def __init__(self) -> None:
         self.played: list[bytes] = []
 

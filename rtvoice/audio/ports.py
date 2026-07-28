@@ -1,44 +1,44 @@
-import abc
+from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 
 
-class AudioInputDevice(abc.ABC):
-    @abc.abstractmethod
+class AudioInput(ABC):
+    @abstractmethod
     async def start(self) -> None:
         """Open the device and begin capture."""
 
-    @abc.abstractmethod
+    @abstractmethod
     async def stop(self) -> None:
         """Stop capture and release resources."""
 
-    @abc.abstractmethod
+    @abstractmethod
     def stream_chunks(self) -> AsyncIterator[bytes]:
         """Yield raw 16-bit PCM chunks."""
 
     @property
-    @abc.abstractmethod
+    @abstractmethod
     def is_active(self) -> bool:
         """Whether the device is currently capturing."""
 
 
-class AudioOutputDevice(abc.ABC):
-    @abc.abstractmethod
+class AudioOutput(ABC):
+    @abstractmethod
     async def start(self) -> None:
         """Open the device and prepare for playback."""
 
-    @abc.abstractmethod
+    @abstractmethod
     async def stop(self) -> None:
         """Stop playback and release resources."""
 
-    @abc.abstractmethod
+    @abstractmethod
     async def play_chunk(self, chunk: bytes) -> None:
         """Enqueue a raw 16-bit PCM chunk."""
 
     @property
-    @abc.abstractmethod
+    @abstractmethod
     def is_playing(self) -> bool:
         """Whether audio is currently playing or queued."""
 
-    @abc.abstractmethod
+    @abstractmethod
     async def clear_buffer(self) -> None:
         """Discard all queued audio immediately."""

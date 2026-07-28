@@ -1,13 +1,13 @@
 from collections.abc import AsyncIterator
 
-from rtvoice.audio.ports import AudioInputDevice, AudioOutputDevice
+from rtvoice.audio.ports import AudioInput, AudioOutput
 
 
 class AudioSession:
     def __init__(
         self,
-        input_device: AudioInputDevice,
-        output_device: AudioOutputDevice,
+        input_device: AudioInput,
+        output_device: AudioOutput,
     ):
         self._input = input_device
         self._output = output_device

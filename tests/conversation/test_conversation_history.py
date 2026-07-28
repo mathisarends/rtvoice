@@ -1,7 +1,7 @@
 import pytest
 from transitbus import EventBus
 
-from rtvoice.conversation import ConversationHistory, ConversationTurn
+from rtvoice.conversation import AssistantTurn, ConversationHistory, UserTurn
 from rtvoice.events.views import (
     AssistantInterruptedEvent,
     AssistantTranscriptCompletedEvent,
@@ -72,8 +72,8 @@ class TestSeed:
     def test_seed_prepends_turns(self, history: ConversationHistory) -> None:
         history.seed(
             [
-                ConversationTurn(role="user", transcript="Seeded question"),
-                ConversationTurn(role="assistant", transcript="Seeded answer"),
+                UserTurn(transcript="Seeded question"),
+                AssistantTurn(transcript="Seeded answer"),
             ]
         )
 
@@ -84,7 +84,7 @@ class TestSeed:
     async def test_seeded_turns_precede_live_turns(
         self, bus: EventBus, history: ConversationHistory
     ) -> None:
-        history.seed([ConversationTurn(role="user", transcript="Seeded")])
+        history.seed([UserTurn(transcript="Seeded")])
         await bus.dispatch(
             UserTranscriptCompletedEvent(transcript="Live", item_id="item-1")
         )

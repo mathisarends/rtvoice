@@ -9,7 +9,7 @@ from rtvoice.audio.echo import (
     PlaybackTimeline,
     ReferenceTapOutput,
 )
-from rtvoice.audio.ports import AudioInputDevice, AudioOutputDevice
+from rtvoice.audio.ports import AudioInput, AudioOutput
 
 SAMPLE_RATE = 100
 
@@ -29,7 +29,7 @@ class FakeClock:
         self.now += seconds
 
 
-class FakeInput(AudioInputDevice):
+class FakeInput(AudioInput):
     def __init__(self, chunks: list[bytes], clock: FakeClock | None = None):
         self._chunks = chunks
         self._clock = clock
@@ -53,7 +53,7 @@ class FakeInput(AudioInputDevice):
             yield chunk
 
 
-class FakeOutput(AudioOutputDevice):
+class FakeOutput(AudioOutput):
     def __init__(self) -> None:
         self.played: list[bytes] = []
         self.started = False

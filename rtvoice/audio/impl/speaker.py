@@ -2,12 +2,12 @@ import logging
 import queue
 import threading
 
-from rtvoice.audio.ports import AudioOutputDevice
+from rtvoice.audio.ports import AudioOutput
 
 logger = logging.getLogger(__name__)
 
 
-class SpeakerOutput(AudioOutputDevice):
+class SpeakerOutput(AudioOutput):
     def __init__(
         self,
         device_index: int | None = None,

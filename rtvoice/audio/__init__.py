@@ -1,11 +1,11 @@
 from .echo import EchoCancellation, EchoCanceller
 from .impl import MicrophoneInput, SpeakerOutput
-from .ports import AudioInputDevice, AudioOutputDevice
+from .ports import AudioInput, AudioOutput
 from .session import AudioSession
 
 __all__ = [
-    "AudioInputDevice",
-    "AudioOutputDevice",
+    "AudioInput",
+    "AudioOutput",
     "AudioSession",
     "EchoCancellation",
     "EchoCanceller",

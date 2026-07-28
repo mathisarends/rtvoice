@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from pathlib import Path
+from typing import assert_never
 
 from transitbus import EventBus
 
@@ -10,7 +11,10 @@ from rtvoice.agent.text_agent import TextAgent, register_text_agent_tool
 from rtvoice.agent.views import (
     AgentResult,
     AssistantVoice,
+    InjectedAssistantMessage,
     InjectedConversation,
+    InjectedMessage,
+    InjectedUserMessage,
     NoiseReduction,
     OutputModality,
     RealtimeModel,
@@ -20,12 +24,17 @@ from rtvoice.agent.views import (
     TurnDetection,
 )
 from rtvoice.audio import (
-    AudioInputDevice,
-    AudioOutputDevice,
+    AudioInput,
+    AudioOutput,
     AudioSession,
     EchoCancellation,
 )
-from rtvoice.conversation import ConversationHistory, ConversationTurn
+from rtvoice.conversation import (
+    AssistantTurn,
+    ConversationHistory,
+    ConversationTurn,
+    UserTurn,
+)
 from rtvoice.events.views import (
     AgentStartingEvent,
     AgentStoppedEvent,
@@ -49,6 +58,16 @@ from rtvoice.tools import ToolContext, Tools
 logger = logging.getLogger(__name__)
 
 
+def _injected_turn(message: InjectedMessage) -> ConversationTurn:
+    match message:
+        case InjectedUserMessage(text=text):
+            return UserTurn(transcript=text)
+        case InjectedAssistantMessage(text=text):
+            return AssistantTurn(transcript=text)
+        case _:
+            assert_never(message)
+
+
 class RealtimeAgent[T]:
     def __init__(
         self,
@@ -66,8 +85,8 @@ class RealtimeAgent[T]:
         tool_injection_context: T | None = None,
         skills: Skills | None = None,
         text_agent: TextAgent | None = None,
-        audio_input: AudioInputDevice | None = None,
-        audio_output: AudioOutputDevice | None = None,
+        audio_input: AudioInput | None = None,
+        audio_output: AudioOutput | None = None,
         echo_cancellation: EchoCancellation | None = None,
         listener: AgentListener | None = None,
         injected_conversation: InjectedConversation | None = None,
@@ -93,8 +112,7 @@ class RealtimeAgent[T]:
         self._conversation_history = ConversationHistory(self._event_bus)
         if injected_conversation:
             self._conversation_history.seed(
-                ConversationTurn(role=message.role, transcript=message.text)
-                for message in injected_conversation.messages
+                _injected_turn(message) for message in injected_conversation.messages
             )
 
         self._skills = skills
@@ -165,12 +183,12 @@ class RealtimeAgent[T]:
             assistant_text_enabled=session_settings.assistant_text_enabled,
         )
 
-    def _create_default_input(self) -> AudioInputDevice:
+    def _create_default_input(self) -> AudioInput:
         from rtvoice.audio import MicrophoneInput
 
         return MicrophoneInput()
 
-    def _create_default_output(self) -> AudioOutputDevice:
+    def _create_default_output(self) -> AudioOutput:
         from rtvoice.audio import SpeakerOutput
 
         return SpeakerOutput()
@@ -243,16 +261,12 @@ class RealtimeAgent[T]:
             text, base64_image=base64_image
         )
         if sent:
-            self._conversation_history.add(
-                ConversationTurn(role="user", transcript=text)
-            )
+            self._conversation_history.add(UserTurn(transcript=text))
 
     async def send_assistant_message(self, text: str) -> None:
         sent = await self._realtime_session.send_assistant_message(text)
         if sent:
-            self._conversation_history.add(
-                ConversationTurn(role="assistant", transcript=text)
-            )
+            self._conversation_history.add(AssistantTurn(transcript=text))
 
     @timed()
     async def stop(self) -> None:

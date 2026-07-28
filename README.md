@@ -272,6 +272,9 @@ matching object wins. Framework dependencies are registered before application
 dependencies and cannot be shadowed by a user-supplied subtype. `None` entries
 are ignored.
 
+See [`examples/tool_dependencies.py`](examples/tool_dependencies.py) for a
+runnable example with a params model and two injected dependencies.
+
 ---
 
 ## Agent Skills

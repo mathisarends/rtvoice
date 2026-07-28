@@ -4,15 +4,11 @@ import asyncio
 import logging
 from contextlib import suppress
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, assert_never
 
 from transitbus import EventBus
 
-from rtvoice.agent.views import (
-    InjectedAssistantMessage,
-    InjectedConversation,
-    InjectedUserMessage,
-)
+from rtvoice.agent.views import InjectedConversation, InjectedMessage
 from rtvoice.audio import AudioSession
 from rtvoice.events.views import (
     AgentSessionConnectedEvent,
@@ -182,11 +178,15 @@ class RealtimeSession:
             await self._websocket.send(self._injected_message_event(message))
 
     def _injected_message_event(
-        self, message: InjectedUserMessage | InjectedAssistantMessage
+        self, message: InjectedMessage
     ) -> ConversationItemCreateEvent:
-        if isinstance(message, InjectedUserMessage):
-            return ConversationItemCreateEvent.user_message(message.text)
-        return ConversationItemCreateEvent.assistant_message(message.text)
+        match message.role:
+            case "user":
+                return ConversationItemCreateEvent.user_message(message.text)
+            case "assistant":
+                return ConversationItemCreateEvent.assistant_message(message.text)
+            case _:
+                assert_never(message)
 
     async def _send_session_update(self) -> None:
         logger.info("Applying session settings [%s]", self._settings.summary)

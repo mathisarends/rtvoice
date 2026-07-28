@@ -125,19 +125,24 @@ type TurnDetection = SemanticVAD | ServerVAD
 class InjectedUserMessage(BaseModel):
     """Pre-filled user message injected before live user input begins."""
 
+    role: Literal["user"] = "user"
     text: str
 
 
 class InjectedAssistantMessage(BaseModel):
     """Pre-filled assistant message injected before live user input begins."""
 
+    role: Literal["assistant"] = "assistant"
     text: str
+
+
+type InjectedMessage = InjectedUserMessage | InjectedAssistantMessage
 
 
 class InjectedConversation(BaseModel):
     """Conversation items sent after session.update but before mic audio starts."""
 
-    messages: list[InjectedUserMessage | InjectedAssistantMessage]
+    messages: list[InjectedMessage]
 
 
 class AgentError(BaseModel):

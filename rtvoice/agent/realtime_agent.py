@@ -11,7 +11,6 @@ from rtvoice.agent.views import (
     AgentResult,
     AssistantVoice,
     InjectedConversation,
-    InjectedUserMessage,
     NoiseReduction,
     OutputModality,
     RealtimeModel,
@@ -94,12 +93,7 @@ class RealtimeAgent[T]:
         self._conversation_history = ConversationHistory(self._event_bus)
         if injected_conversation:
             self._conversation_history.seed(
-                ConversationTurn(
-                    role="user"
-                    if isinstance(message, InjectedUserMessage)
-                    else "assistant",
-                    transcript=message.text,
-                )
+                ConversationTurn(role=message.role, transcript=message.text)
                 for message in injected_conversation.messages
             )
 

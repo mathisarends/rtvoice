@@ -1,8 +1,7 @@
 import warnings
-from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Literal, Self
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -123,37 +122,25 @@ class ServerVAD(BaseModel):
 TurnDetection = Annotated[SemanticVAD | ServerVAD, Field(discriminator="type")]
 
 
-@dataclass
-class InjectedUserMessage:
+class InjectedUserMessage(BaseModel):
     """Pre-filled user message injected before live user input begins."""
 
     text: str
 
 
-@dataclass
-class InjectedAssistantMessage:
+class InjectedAssistantMessage(BaseModel):
     """Pre-filled assistant message injected before live user input begins."""
 
     text: str
 
 
-@dataclass
-class InjectedConversation:
+class InjectedConversation(BaseModel):
     """Conversation items sent after session.update but before mic audio starts."""
 
     messages: list[InjectedUserMessage | InjectedAssistantMessage]
 
-    @classmethod
-    def from_pairs(cls, *pairs: tuple[str, str]) -> Self:
-        messages: list[InjectedUserMessage | InjectedAssistantMessage] = []
-        for user_text, assistant_text in pairs:
-            messages.append(InjectedUserMessage(user_text))
-            messages.append(InjectedAssistantMessage(assistant_text))
-        return cls(messages=messages)
 
-
-@dataclass
-class AgentError:
+class AgentError(BaseModel):
     type: str
     message: str
 

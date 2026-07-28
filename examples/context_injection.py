@@ -29,10 +29,10 @@ async def main() -> None:
             "Nutze den vorhandenen Kontext, ohne ihn erneut abzufragen."
         ),
         injected_conversation=InjectedConversation(
-            [
-                InjectedUserMessage("Ich bin Max, Nutzer-ID 42, Premium-Kunde."),
+            messages=[
+                InjectedUserMessage(text="Ich bin Max, Nutzer-ID 42, Premium-Kunde."),
                 InjectedAssistantMessage(
-                    "Verstanden, Max. Ich habe deine Kundendaten im Kontext."
+                    text="Verstanden, Max. Ich habe deine Kundendaten im Kontext."
                 ),
             ]
         ),

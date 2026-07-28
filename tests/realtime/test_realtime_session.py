@@ -86,8 +86,11 @@ class TestInjectedConversation:
     async def test_start_injects_conversation_after_session_update_before_connected_event(
         self,
     ) -> None:
-        conversation = InjectedConversation.from_pairs(
-            ("Mein Name ist Max.", "Hallo Max, wie kann ich helfen?")
+        conversation = InjectedConversation(
+            messages=[
+                InjectedUserMessage(text="Mein Name ist Max."),
+                InjectedAssistantMessage(text="Hallo Max, wie kann ich helfen?"),
+            ]
         )
         session, websocket, call_order = make_session(
             injected_conversation=conversation
@@ -120,7 +123,9 @@ class TestInjectedConversation:
 
     def test_injected_user_message_uses_input_text_content(self) -> None:
         session, _, _ = make_session()
-        event = session._injected_message_event(InjectedUserMessage("Ich bin Max."))
+        event = session._injected_message_event(
+            InjectedUserMessage(text="Ich bin Max.")
+        )
 
         payload = event.model_dump(exclude_none=True)
         assert payload["item"]["role"] == "user"
@@ -130,7 +135,9 @@ class TestInjectedConversation:
 
     def test_injected_assistant_message_uses_output_text_content(self) -> None:
         session, _, _ = make_session()
-        event = session._injected_message_event(InjectedAssistantMessage("Hallo Max."))
+        event = session._injected_message_event(
+            InjectedAssistantMessage(text="Hallo Max.")
+        )
 
         payload = event.model_dump(exclude_none=True)
         assert payload["item"]["role"] == "assistant"

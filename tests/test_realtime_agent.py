@@ -127,15 +127,17 @@ class TestInitDefaults:
         assert agent._realtime_session._injected_conversation is None
 
     def test_injected_conversation_is_passed_to_realtime_session(self) -> None:
-        conversation = InjectedConversation([InjectedUserMessage("Mein Name ist Max.")])
+        conversation = InjectedConversation(
+            messages=[InjectedUserMessage(text="Mein Name ist Max.")]
+        )
         agent = make_agent(injected_conversation=conversation)
         assert agent._realtime_session._injected_conversation is conversation
 
     def test_injected_conversation_seeds_conversation_history(self) -> None:
         conversation = InjectedConversation(
-            [
-                InjectedUserMessage("Mein Name ist Max."),
-                InjectedAssistantMessage("Hallo Max, wie kann ich helfen?"),
+            messages=[
+                InjectedUserMessage(text="Mein Name ist Max."),
+                InjectedAssistantMessage(text="Hallo Max, wie kann ich helfen?"),
             ]
         )
         agent = make_agent(injected_conversation=conversation)

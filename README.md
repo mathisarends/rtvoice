@@ -396,19 +396,10 @@ agent = RealtimeAgent(
     system_prompt="You are a helpful assistant.",
     injected_conversation=InjectedConversation(
         messages=[
-            InjectedUserMessage("My name is Alice and I prefer short answers."),
-            InjectedAssistantMessage("Got it, Alice. I'll keep things brief."),
+            InjectedUserMessage(text="My name is Alice and I prefer short answers."),
+            InjectedAssistantMessage(text="Got it, Alice. I'll keep things brief."),
         ]
     ),
-)
-```
-
-Use `InjectedConversation.from_pairs()` for a more concise form when you have multiple user/assistant exchanges:
-
-```python
-conversation = InjectedConversation.from_pairs(
-    ("My name is Alice.", "Nice to meet you, Alice."),
-    ("I prefer short answers.", "Understood, I'll be brief."),
 )
 ```
 

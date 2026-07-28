@@ -214,14 +214,8 @@ class TestRealtimeTools:
 
         assert "my_tool" in [tool.name for tool in schema]
 
-    def test_get_schema_hides_defaults_without_their_dependencies(self) -> None:
+    def test_get_schema_hides_context_bound_defaults(self) -> None:
         realtime = Tools()
-
-        assert [tool.name for tool in realtime.get_schema()] == []
-
-    def test_stop_is_exposed_once_an_event_bus_is_injected(self) -> None:
-        realtime = Tools()
-        realtime.set_context(ToolContext(EventBus()))
 
         assert [tool.name for tool in realtime.get_schema()] == ["stop"]
 
@@ -257,11 +251,11 @@ class TestTextToolSchema:
 
         assert "function" in schema[0].to_openai_schema()
 
-    def test_text_schema_hides_defaults_without_their_dependencies(self) -> None:
+    def test_text_schema_hides_context_bound_defaults(self) -> None:
         tools = Tools()
 
         schema = tools.get_schema(ToolSchemaFormat.TEXT)
-        assert [tool.name for tool in schema] == []
+        assert [tool.name for tool in schema] == ["stop"]
 
 
 class TestToolStatuses:

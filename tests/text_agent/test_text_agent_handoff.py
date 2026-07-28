@@ -23,7 +23,7 @@ def exposed_names(tools: Tools) -> set[str]:
 
 def test_handoff_tool_is_hidden_without_a_text_agent() -> None:
     tools = Tools()
-    tools.set_context(ToolContext(EventBus()))
+    tools.set_context(ToolContext())
 
     assert "text_agent" not in exposed_names(tools)
 

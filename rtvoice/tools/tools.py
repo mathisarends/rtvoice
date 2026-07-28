@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from enum import StrEnum
 from typing import Any, Literal, overload
 
 from pydantic import BaseModel
@@ -31,7 +30,7 @@ from rtvoice.tools.params import (
     TextAgentParams,
 )
 from rtvoice.tools.results import ActionResult
-from rtvoice.tools.views import ActionKind, Tool
+from rtvoice.tools.views import ActionKind, Tool, ToolSchemaFormat
 
 logger = logging.getLogger(__name__)
 
@@ -42,11 +41,6 @@ def _describe_handoff(handoff: Handoff) -> str:
     return (
         f"{handoff.description}\n\nHandoff instructions: {handoff.handoff_instructions}"
     )
-
-
-class ToolSchemaFormat(StrEnum):
-    REALTIME = "realtime"
-    TEXT = "text"
 
 
 class Tools:

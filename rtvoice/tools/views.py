@@ -22,6 +22,11 @@ class ActionKind(StrEnum):
     END_SESSION = "end_session"
 
 
+class ToolSchemaFormat(StrEnum):
+    REALTIME = "realtime"
+    TEXT = "text"
+
+
 def _make_dummy(param_model: type[BaseModel]) -> BaseModel:
     defaults: dict[str, Any] = {}
     for field_name, field in param_model.model_fields.items():

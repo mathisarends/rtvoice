@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any, Self
+from typing import Any
 
 from pydantic import BaseModel
 from transitbus import EventBus
@@ -98,21 +98,12 @@ class Tools:
             return result
         return ActionResult.success(result)
 
-    def clone(self) -> Self:
-        new = type(self)()
-        # mutate in place so the clone's handler chain keeps referencing this dict
-        new._tools.update(self._tools)
-        return new
-
     def merge(self, other: Tools) -> None:
         for tool in other._tools.values():
             # every Tools carries the defaults, so merging must not collide on them
             if tool.name in self._default_tool_names:
                 continue
             self._register_tool(tool)
-
-    def is_registered(self, tool: Tool) -> bool:
-        return tool in self._tools.values()
 
     def _register_tool(self, tool: Tool) -> None:
         if tool.name in self._tools:

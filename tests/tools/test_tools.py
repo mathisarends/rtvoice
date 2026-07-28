@@ -203,38 +203,6 @@ class TestSetContext:
         assert tools._context is new_context
 
 
-class TestClone:
-    def test_clone_is_different_instance(self, tools: Tools) -> None:
-        clone = tools.clone()
-
-        assert clone is not tools
-
-    def test_clone_shares_registered_tools(self, tools: Tools) -> None:
-        @tools.action(description="A tool")
-        def my_tool() -> None: ...
-
-        clone = tools.clone()
-
-        assert clone.get("my_tool") is not None
-
-    def test_clone_registry_is_independent(self, tools: Tools) -> None:
-        @tools.action(description="Original tool")
-        def original() -> None: ...
-
-        clone = tools.clone()
-
-        @clone.action(description="Clone only")
-        def clone_only() -> None: ...
-
-        assert tools.get("clone_only") is None
-
-    def test_clone_preserves_type(self) -> None:
-        realtime = Tools()
-        clone = realtime.clone()
-
-        assert type(clone) is Tools
-
-
 class TestRealtimeTools:
     def test_get_schema_returns_list(self) -> None:
         realtime = Tools()

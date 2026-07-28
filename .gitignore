@@ -29,5 +29,10 @@ build/
 
 .ruff_cache/
 
-
 site/
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml

@@ -1,9 +1,9 @@
 import warnings
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from rtvoice.conversation.views import ConversationTurn
 from rtvoice.tokens.models import UsageReport
@@ -119,7 +119,7 @@ class ServerVAD(BaseModel):
     silence_duration_ms: int = 500
 
 
-TurnDetection = Annotated[SemanticVAD | ServerVAD, Field(discriminator="type")]
+TurnDetection = SemanticVAD | ServerVAD
 
 
 class InjectedUserMessage(BaseModel):

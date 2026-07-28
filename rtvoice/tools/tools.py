@@ -11,7 +11,7 @@ from rtvoice.agent.subagent import Subagent
 from rtvoice.conversation import ConversationHistory
 from rtvoice.events.views import StopAgentCommand
 from rtvoice.realtime.schemas import FunctionTool
-from rtvoice.skills.manager import SkillManager
+from rtvoice.skills import Skills
 from rtvoice.tools.argument_resolver import resolve_arguments
 from rtvoice.tools.binding import (
     ToolAvailability,
@@ -178,10 +178,8 @@ class Tools:
             params=LoadSkillParams,
             available_when=_with_skills(),
         )
-        def load_skill(
-            params: LoadSkillParams, skill_manager: Inject[SkillManager]
-        ) -> ActionResult:
-            return ActionResult.success(skill_manager.load(params.name))
+        def load_skill(params: LoadSkillParams, skills: Inject[Skills]) -> ActionResult:
+            return ActionResult.success(skills.load(params.name))
 
         @self.action(
             "Read one file bundled with a skill, as listed by load_skill.",
@@ -190,9 +188,9 @@ class Tools:
             available_when=_with_skills(),
         )
         def read_skill_resource(
-            params: ReadSkillResourceParams, skill_manager: Inject[SkillManager]
+            params: ReadSkillResourceParams, skills: Inject[Skills]
         ) -> ActionResult:
-            content = skill_manager.read_resource(params.name, params.path)
+            content = skills.read_resource(params.name, params.path)
             return ActionResult.success(content)
 
         @self.action(
@@ -203,16 +201,16 @@ class Tools:
             available_when=_with_skills(),
         )
         async def run_skill_script(
-            params: RunSkillScriptParams, skill_manager: Inject[SkillManager]
+            params: RunSkillScriptParams, skills: Inject[Skills]
         ) -> ActionResult:
-            output = await skill_manager.run_script(
+            output = await skills.run_script(
                 params.name, params.path, params.args, params.timeout
             )
             return ActionResult.success(output)
 
 
 def _with_skills() -> ToolAvailability:
-    return requires(SkillManager, predicate=lambda manager: manager.size > 0)
+    return requires(Skills, predicate=lambda skills: skills.size > 0)
 
 
 def _describe_subagent(subagent: Subagent) -> str:

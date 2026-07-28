@@ -12,7 +12,7 @@ from rtvoice.llm import (
     ToolResultMessage,
     UserMessage,
 )
-from rtvoice.skills import SkillManager, Skills
+from rtvoice.skills import Skills
 
 if TYPE_CHECKING:
     from rtvoice.tools import Tools
@@ -39,14 +39,14 @@ class Subagent[T]:
         self.name = "subagent"
         self.description = description
         self._llm = llm or ChatModel(model="gpt-5.4-mini")
-        self._skill_manager = SkillManager(skills) if skills is not None else None
+        self._skills = skills
         self._tools = Tools()
         if tools:
             self._tools.merge(tools)
 
         self._system_prompt = (
-            self._skill_manager.append_discovery_prompt(system_prompt)
-            if self._skill_manager is not None
+            self._skills.append_discovery_prompt(system_prompt)
+            if self._skills is not None
             else system_prompt
         )
 
@@ -54,9 +54,7 @@ class Subagent[T]:
         self.handoff_instructions = handoff_instructions
         self.result_instructions = result_instructions
 
-        self._tools.set_context(
-            ToolContext(tool_injection_context, self._skill_manager)
-        )
+        self._tools.set_context(ToolContext(tool_injection_context, self._skills))
 
     async def start(
         self,

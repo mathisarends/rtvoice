@@ -287,7 +287,8 @@ description: Research current sources. Use when up-to-date facts are required.
 Follow the workflow in `references/workflow.md`.
 ```
 
-Pass a `Skills` source to either `RealtimeAgent` or `Subagent`:
+Create `Skills` from one or more local directories and pass the same instance to
+`RealtimeAgent` or `Subagent`:
 
 ```python
 from rtvoice import RealtimeAgent, Skills, Subagent

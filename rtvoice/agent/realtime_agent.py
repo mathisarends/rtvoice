@@ -37,7 +37,7 @@ from rtvoice.events.views import (
 from rtvoice.realtime import OpenAIProvider, RealtimeProvider, RealtimeSession
 from rtvoice.shared.decorators import timed
 from rtvoice.shared.speech_speed import SpeechSpeed
-from rtvoice.skills import SkillManager, Skills
+from rtvoice.skills import Skills
 from rtvoice.tokens import PricingCatalog
 from rtvoice.tools import ToolContext, Tools
 
@@ -48,7 +48,7 @@ class RealtimeAgent[T]:
     def __init__(
         self,
         *,
-        system_prompt: str = "",
+        system_prompt: str,
         model: RealtimeModel = RealtimeModel.GPT_REALTIME_2_1_MINI,
         reasoning_effort: ReasoningEffort | None = ReasoningEffort.LOW,
         voice: AssistantVoice = AssistantVoice.MARIN,
@@ -103,14 +103,14 @@ class RealtimeAgent[T]:
                 for message in injected_conversation.messages
             )
 
-        self._skill_manager = SkillManager(skills) if skills is not None else None
+        self._skills = skills
         self._tools = Tools()
         if tools:
             self._tools.merge(tools)
 
         system_prompt = (
-            self._skill_manager.append_discovery_prompt(system_prompt)
-            if self._skill_manager is not None
+            self._skills.append_discovery_prompt(system_prompt)
+            if self._skills is not None
             else system_prompt
         )
 
@@ -118,7 +118,7 @@ class RealtimeAgent[T]:
             self._event_bus,
             self._conversation_history,
             tool_injection_context,
-            self._skill_manager,
+            self._skills,
             self._subagent,
         )
         self._tools.set_context(tool_context)

@@ -1,11 +1,9 @@
-from __future__ import annotations
-
 import base64
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
 from html import escape
 from pathlib import Path
+from typing import Self
 
 from rtvoice.skills.models import Skill, parse_skill
 from rtvoice.skills.scripts import run_script
@@ -13,21 +11,16 @@ from rtvoice.skills.scripts import run_script
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True, slots=True)
 class Skills:
-    paths: tuple[Path, ...]
-
-    @classmethod
-    def from_local_dir(cls, *paths: str | Path) -> Skills:
+    def __init__(self, paths: tuple[Path, ...]) -> None:
         if not paths:
             raise ValueError("At least one skills directory is required.")
-        return cls(paths=tuple(Path(path) for path in paths))
-
-
-class SkillManager:
-    def __init__(self, config: Skills) -> None:
         self._skills: dict[str, Skill] = {}
-        self._discover(config)
+        self._discover(paths)
+
+    @classmethod
+    def from_local_dir(cls, *paths: str | Path) -> Self:
+        return cls(paths=tuple(Path(path) for path in paths))
 
     @property
     def size(self) -> int:
@@ -135,8 +128,8 @@ class SkillManager:
             )
         return skill
 
-    def _discover(self, config: Skills) -> None:
-        for configured_path in config.paths:
+    def _discover(self, paths: tuple[Path, ...]) -> None:
+        for configured_path in paths:
             root = configured_path.resolve()
             if not root.exists():
                 raise ValueError(f"Skills directory does not exist: {root}")

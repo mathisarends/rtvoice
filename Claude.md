@@ -8,3 +8,5 @@ possible. When the user corrects a mistake, record it below as a short bullet
 
 - Comments explain the *why*, never the *what/how*. Drop docstrings that just
   restate the signature.
+- Built-in tools belong inline in `Tools._register_default_tools`, gated by
+  `available_when` — no helper module, no per-tool `_register_*` methods.

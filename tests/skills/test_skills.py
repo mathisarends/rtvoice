@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from rtvoice import RealtimeAgent, Skills, TextAgent
-from rtvoice.skills import register_skill_tools
 from rtvoice.tools import ToolContext, Tools
 
 
@@ -179,7 +178,7 @@ _SKILL_TOOLS = {"load_skill", "read_skill_resource", "run_skill_script"}
 
 
 class TestSkillTools:
-    def test_skill_tools_are_not_registered_by_default(self) -> None:
+    def test_skill_tools_are_hidden_without_skills(self) -> None:
         tools = Tools()
 
         exposed = {tool.name for tool in tools.get_schema()}
@@ -190,7 +189,6 @@ class TestSkillTools:
         make_skill(tmp_path)
         skills = Skills.from_local_dir(tmp_path)
         tools = Tools()
-        register_skill_tools(tools)
         tools.set_context(ToolContext(skills))
 
         exposed = {tool.name for tool in tools.get_schema()}
@@ -202,7 +200,6 @@ class TestSkillTools:
         make_skill(tmp_path)
         skills = Skills.from_local_dir(tmp_path)
         tools = Tools()
-        register_skill_tools(tools)
         tools.set_context(ToolContext(skills))
 
         loaded = await tools.execute("load_skill", {"name": "internet-research"})
@@ -215,7 +212,6 @@ class TestSkillTools:
         (skill_dir / "notes.md").write_text("Read me.", encoding="utf-8")
         script = make_script(skill_dir, "import sys\nprint(sys.argv[1].upper())\n")
         tools = Tools()
-        register_skill_tools(tools)
         tools.set_context(ToolContext(Skills.from_local_dir(tmp_path)))
 
         resource = await tools.execute(

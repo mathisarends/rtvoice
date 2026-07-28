@@ -33,6 +33,12 @@ class ToolContext:
         self._dependencies.clear()
         return self
 
+    def without(self, *excluded: type) -> Self:
+        self._dependencies = [
+            dep for dep in self._dependencies if not isinstance(dep, excluded)
+        ]
+        return self
+
     def resolve[T](self, expected_type: type[T]) -> T | None:
         for dependency in self._dependencies:
             if isinstance(dependency, expected_type):

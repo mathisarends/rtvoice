@@ -7,7 +7,7 @@ from transitbus import EventBus
 
 from rtvoice.agent.listener import AgentListener, AgentListenerBridge
 from rtvoice.agent.system_prompt import SystemPrompt
-from rtvoice.agent.text_agent import TextAgent, register_text_agent_tool
+from rtvoice.agent.text_agent import TextAgent
 from rtvoice.agent.views import (
     AgentResult,
     AssistantVoice,
@@ -51,7 +51,7 @@ from rtvoice.realtime import (
 )
 from rtvoice.shared.decorators import timed
 from rtvoice.shared.speech_speed import SpeechSpeed
-from rtvoice.skills import Skills, register_skill_tools
+from rtvoice.skills import Skills
 from rtvoice.tokens import PricingCatalog
 from rtvoice.tools import ToolContext, Tools
 
@@ -117,10 +117,6 @@ class RealtimeAgent[T]:
 
         self._skills = skills
         self._tools = Tools()
-        if self._text_agent is not None:
-            register_text_agent_tool(self._tools, self._text_agent)
-        if self._skills is not None:
-            register_skill_tools(self._tools)
         if tools:
             self._tools.merge(tools)
 

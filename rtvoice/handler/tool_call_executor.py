@@ -91,12 +91,14 @@ class ToolCallExecutor:
                 logger.error("Tool '%s' crashed: %s", call.tool.name, result)
                 serialized = f"Tool execution failed: {result}"
                 call_should_respond = True
+                instruction = None
             else:
                 serialized = serialize_tool_result(result)
                 if result.respond is not None:
                     call_should_respond = result.respond
                 else:
                     call_should_respond = call.tool.respond if result.ok else True
+                instruction = result.instruction or call.tool.result_instruction
 
             should_respond |= call_should_respond
             await self._event_bus.dispatch(
@@ -109,8 +111,8 @@ class ToolCallExecutor:
             )
 
             await send_function_call_output(self._websocket, call.call_id, serialized)
-            if call.tool.result_instruction:
-                result_instructions.append(call.tool.result_instruction)
+            if instruction:
+                result_instructions.append(instruction)
 
         if should_respond:
             await send_batched_response(self._websocket, result_instructions)

@@ -4,7 +4,6 @@ import json
 import logging
 
 from rtvoice.agent.system_prompt import SystemPrompt
-from rtvoice.conversation import ConversationHistory
 from rtvoice.llm import (
     AssistantMessage,
     ChatModel,
@@ -13,15 +12,13 @@ from rtvoice.llm import (
     ToolResultMessage,
     UserMessage,
 )
-from rtvoice.skills import Skills, register_skill_tools
-from rtvoice.tools import Inject, ToolContext, Tools, ToolSchemaFormat
-from rtvoice.tools.binding import described, provided
-from rtvoice.tools.params import TextAgentParams
+from rtvoice.skills import Skills
+from rtvoice.tools import Handoff, ToolContext, Tools, ToolSchemaFormat
 
 logger = logging.getLogger(__name__)
 
 
-class TextAgent[T]:
+class TextAgent[T](Handoff):
     def __init__(
         self,
         *,
@@ -40,8 +37,6 @@ class TextAgent[T]:
         self._llm = llm or ChatModel(model="gpt-5.4-mini")
         self._skills = skills
         self._tools = Tools()
-        if self._skills is not None:
-            register_skill_tools(self._tools)
         if tools:
             self._tools.merge(tools)
 
@@ -54,7 +49,11 @@ class TextAgent[T]:
         self.handoff_instructions = handoff_instructions
         self.result_instructions = result_instructions
 
-        self._tools.set_context(ToolContext(tool_injection_context, self._skills))
+        # withholding the Handoff keeps the handoff tool unavailable here: a
+        # delegated agent must not delegate to another agent again
+        self._tools.set_context(
+            ToolContext(tool_injection_context, self._skills).without(Handoff)
+        )
 
     async def start(
         self,
@@ -126,36 +125,3 @@ class TextAgent[T]:
                 )
 
         return "Max iterations reached."
-
-
-def register_text_agent_tool(tools: Tools, text_agent: TextAgent) -> None:
-    @tools.action(
-        described(
-            TextAgent,
-            render=_describe_text_agent,
-            default="Delegate a task to the text agent.",
-        ),
-        name="text_agent",
-        params=TextAgentParams,
-        available_when=provided(TextAgent),
-        result_instruction=text_agent.result_instructions,
-    )
-    async def _text_agent_tool(
-        params: TextAgentParams,
-        text_agent: Inject[TextAgent],
-        conversation_history: Inject[ConversationHistory],
-    ) -> str:
-        conversation_summary = conversation_history.format()
-        return await text_agent.start(
-            params.task,
-            context=conversation_summary,
-        )
-
-
-def _describe_text_agent(text_agent: TextAgent) -> str:
-    if not text_agent.handoff_instructions:
-        return text_agent.description
-    return (
-        f"{text_agent.description}\n\n"
-        f"Handoff instructions: {text_agent.handoff_instructions}"
-    )

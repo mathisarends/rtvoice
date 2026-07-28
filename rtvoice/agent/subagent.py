@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
 
+from rtvoice.agent.system_prompt import SystemPrompt
+from rtvoice.conversation import ConversationHistory
 from rtvoice.llm import (
     AssistantMessage,
     ChatModel,
@@ -12,10 +13,10 @@ from rtvoice.llm import (
     ToolResultMessage,
     UserMessage,
 )
-from rtvoice.skills import Skills
-
-if TYPE_CHECKING:
-    from rtvoice.tools import Tools
+from rtvoice.skills import Skills, register_skill_tools
+from rtvoice.tools import Inject, ToolContext, Tools
+from rtvoice.tools.binding import described, provided
+from rtvoice.tools.params import SubagentParams
 
 logger = logging.getLogger(__name__)
 
@@ -34,20 +35,19 @@ class Subagent[T]:
         result_instructions: str | None = None,
         tool_injection_context: T | None = None,
     ) -> None:
-        from rtvoice.tools import ToolContext, Tools
-
         self.name = "subagent"
         self.description = description
         self._llm = llm or ChatModel(model="gpt-5.4-mini")
         self._skills = skills
         self._tools = Tools()
+        if self._skills is not None:
+            register_skill_tools(self._tools)
         if tools:
             self._tools.merge(tools)
 
-        self._system_prompt = (
-            self._skills.append_discovery_prompt(system_prompt)
-            if self._skills is not None
-            else system_prompt
+        self._system_prompt = SystemPrompt(
+            system_prompt,
+            skills=self._skills if self._skills is not None else (),
         )
 
         self._max_iterations = max_iterations
@@ -65,7 +65,7 @@ class Subagent[T]:
         return await self._loop(messages)
 
     def _build_messages(self, task: str, context: str | None) -> list[Message]:
-        messages = [SystemMessage(content=self._system_prompt)]
+        messages = [SystemMessage(content=str(self._system_prompt))]
         if context:
             messages.append(
                 UserMessage(
@@ -126,3 +126,36 @@ class Subagent[T]:
                 )
 
         return "Max iterations reached."
+
+
+def register_subagent_tool(tools: Tools, subagent: Subagent) -> None:
+    @tools.action(
+        described(
+            Subagent,
+            render=_describe_subagent,
+            default="Delegate a task to the subagent.",
+        ),
+        name="subagent",
+        params=SubagentParams,
+        available_when=provided(Subagent),
+        result_instruction=subagent.result_instructions,
+    )
+    async def _subagent_tool(
+        params: SubagentParams,
+        subagent: Inject[Subagent],
+        conversation_history: Inject[ConversationHistory],
+    ) -> str:
+        conversation_summary = conversation_history.format()
+        return await subagent.start(
+            params.task,
+            context=conversation_summary,
+        )
+
+
+def _describe_subagent(subagent: Subagent) -> str:
+    if not subagent.handoff_instructions:
+        return subagent.description
+    return (
+        f"{subagent.description}\n\n"
+        f"Handoff instructions: {subagent.handoff_instructions}"
+    )

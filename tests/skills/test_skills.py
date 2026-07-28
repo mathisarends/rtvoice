@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from rtvoice import RealtimeAgent, Skills, Subagent
+from rtvoice.skills import register_skill_tools
 from rtvoice.tools import ToolContext, Tools
 
 
@@ -36,27 +37,16 @@ def make_skill(
 
 
 class TestSkills:
-    def test_discovery_discloses_metadata_but_not_instructions(
-        self, tmp_path: Path
-    ) -> None:
+    def test_discovers_skills(self, tmp_path: Path) -> None:
         make_skill(tmp_path)
 
         skills = Skills.from_local_dir(tmp_path)
-        prompt = skills.discovery_prompt()
+        skill = next(iter(skills))
 
-        assert "<name>internet-research</name>" in prompt
-        assert "Research sources" in prompt
-        assert "Use the bundled workflow" not in prompt
-        assert skills.names() == ["internet-research"]
-
-    def test_appends_discovery_prompt_to_system_prompt(self, tmp_path: Path) -> None:
-        make_skill(tmp_path)
-        skills = Skills.from_local_dir(tmp_path)
-
-        system_prompt = skills.append_discovery_prompt("You are helpful.")
-
-        assert system_prompt.startswith("You are helpful.")
-        assert "<name>internet-research</name>" in system_prompt
+        assert skill.name == "internet-research"
+        assert (
+            skill.description == "Research sources. Use when current facts are needed."
+        )
 
     def test_load_skill_lists_relative_resources_without_reading_them(
         self, tmp_path: Path
@@ -120,13 +110,6 @@ class TestSkills:
         with pytest.raises(ValueError, match="parent directory"):
             Skills.from_local_dir(tmp_path)
 
-    def test_description_is_xml_escaped(self, tmp_path: Path) -> None:
-        make_skill(tmp_path, description="Use for A < B & current facts.")
-
-        prompt = Skills.from_local_dir(tmp_path).discovery_prompt()
-
-        assert "A &lt; B &amp; current facts" in prompt
-
     def test_later_source_overrides_duplicate(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
@@ -137,8 +120,7 @@ class TestSkills:
 
         skills = Skills.from_local_dir(first, second)
 
-        assert "Second source." in skills.discovery_prompt()
-        assert "First source." not in skills.discovery_prompt()
+        assert skills.get("internet-research").description == "Second source."
         assert any("overrides skill" in record.message for record in caplog.records)
 
 
@@ -196,8 +178,8 @@ class TestSkillScripts:
 _SKILL_TOOLS = {"load_skill", "read_skill_resource", "run_skill_script"}
 
 
-class TestDefaultTools:
-    def test_skill_defaults_are_hidden_without_dependencies(self) -> None:
+class TestSkillTools:
+    def test_skill_tools_are_not_registered_by_default(self) -> None:
         tools = Tools()
 
         exposed = {tool.name for tool in tools.get_schema()}
@@ -208,24 +190,19 @@ class TestDefaultTools:
         make_skill(tmp_path)
         skills = Skills.from_local_dir(tmp_path)
         tools = Tools()
+        register_skill_tools(tools)
         tools.set_context(ToolContext(skills))
 
         exposed = {tool.name for tool in tools.get_schema()}
 
         assert exposed >= _SKILL_TOOLS
 
-    def test_merge_keeps_the_receivers_defaults(self) -> None:
-        tools = Tools()
-
-        tools.merge(Tools())
-
-        assert tools.get("load_skill") is not None
-
     @pytest.mark.asyncio
     async def test_load_skill_uses_injected_skills(self, tmp_path: Path) -> None:
         make_skill(tmp_path)
         skills = Skills.from_local_dir(tmp_path)
         tools = Tools()
+        register_skill_tools(tools)
         tools.set_context(ToolContext(skills))
 
         loaded = await tools.execute("load_skill", {"name": "internet-research"})
@@ -238,6 +215,7 @@ class TestDefaultTools:
         (skill_dir / "notes.md").write_text("Read me.", encoding="utf-8")
         script = make_script(skill_dir, "import sys\nprint(sys.argv[1].upper())\n")
         tools = Tools()
+        register_skill_tools(tools)
         tools.set_context(ToolContext(Skills.from_local_dir(tmp_path)))
 
         resource = await tools.execute(
@@ -284,8 +262,9 @@ class TestAgentIntegration:
             skills=Skills.from_local_dir(tmp_path),
         )
 
-        assert "<name>internet-research</name>" in subagent._system_prompt
-        assert "Use the bundled workflow" not in subagent._system_prompt
+        system_prompt = str(subagent._system_prompt)
+        assert "<name>internet-research</name>" in system_prompt
+        assert "Use the bundled workflow" not in system_prompt
         assert {tool.name for tool in subagent._tools.get_schema()} >= _SKILL_TOOLS
 
         loaded = await subagent._tools.execute(

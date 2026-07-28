@@ -1,6 +1,6 @@
 import base64
 import logging
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from html import escape
 from pathlib import Path
 from typing import Self
@@ -33,6 +33,9 @@ class Skills:
     def names(self) -> list[str]:
         return list(self._skills)
 
+    def __iter__(self) -> Iterator[Skill]:
+        return iter(self._skills.values())
+
     def get(self, name: str) -> Skill:
         try:
             return self._skills[name]
@@ -41,42 +44,6 @@ class Skills:
             raise ValueError(
                 f"Skill '{name}' not found. Available skills: {available}."
             ) from exc
-
-    def discovery_prompt(self) -> str:
-        if not self._skills:
-            return ""
-
-        entries = "\n".join(
-            (
-                "<skill>\n"
-                f"<name>{escape(skill.name)}</name>\n"
-                f"<description>{escape(skill.description)}</description>\n"
-                "</skill>"
-            )
-            for skill in self._skills.values()
-        )
-        return (
-            "## Available Skills\n\n"
-            "<usage>\n"
-            "Skills provide specialized capabilities and domain knowledge. "
-            "Use them when they match the current task.\n\n"
-            'Load a skill with `load_skill(name="<skill-name>")` before '
-            "following its instructions. It lists the skill's bundled files. "
-            "Read one with `read_skill_resource`, run one with "
-            "`run_skill_script`. Both take paths relative to the skill.\n"
-            "</usage>\n\n"
-            "<available_skills>\n"
-            f"{entries}\n"
-            "</available_skills>"
-        )
-
-    def append_discovery_prompt(self, system_prompt: str) -> str:
-        prompt = self.discovery_prompt()
-        if not prompt:
-            return system_prompt
-        if not system_prompt:
-            return prompt
-        return f"{system_prompt.rstrip()}\n\n{prompt}"
 
     def load(self, name: str) -> str:
         skill = self._current(name)

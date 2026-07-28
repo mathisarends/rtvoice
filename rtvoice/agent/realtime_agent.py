@@ -5,7 +5,8 @@ from pathlib import Path
 from transitbus import EventBus
 
 from rtvoice.agent.listener import AgentListener, AgentListenerBridge
-from rtvoice.agent.subagent import Subagent
+from rtvoice.agent.subagent import Subagent, register_subagent_tool
+from rtvoice.agent.system_prompt import SystemPrompt
 from rtvoice.agent.views import (
     AgentResult,
     AssistantVoice,
@@ -37,7 +38,7 @@ from rtvoice.events.views import (
 from rtvoice.realtime import OpenAIProvider, RealtimeProvider, RealtimeSession
 from rtvoice.shared.decorators import timed
 from rtvoice.shared.speech_speed import SpeechSpeed
-from rtvoice.skills import Skills
+from rtvoice.skills import Skills, register_skill_tools
 from rtvoice.tokens import PricingCatalog
 from rtvoice.tools import ToolContext, Tools
 
@@ -105,13 +106,16 @@ class RealtimeAgent[T]:
 
         self._skills = skills
         self._tools = Tools()
+        if self._subagent is not None:
+            register_subagent_tool(self._tools, self._subagent)
+        if self._skills is not None:
+            register_skill_tools(self._tools)
         if tools:
             self._tools.merge(tools)
 
-        system_prompt = (
-            self._skills.append_discovery_prompt(system_prompt)
-            if self._skills is not None
-            else system_prompt
+        self._system_prompt = SystemPrompt(
+            system_prompt,
+            skills=self._skills if self._skills is not None else (),
         )
 
         tool_context = ToolContext(
@@ -141,7 +145,7 @@ class RealtimeAgent[T]:
             model=model,
             reasoning_effort=reasoning_effort,
             # Agent-level "system prompt" becomes Session-level "instructions" (the model's own param name).
-            instructions=system_prompt,
+            instructions=str(self._system_prompt),
             voice=voice,
             speech_speed=SpeechSpeed(speech_speed),
             transcription_model=transcription_model,

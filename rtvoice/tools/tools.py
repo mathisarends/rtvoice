@@ -7,27 +7,12 @@ from typing import Any, Self
 from pydantic import BaseModel
 from transitbus import EventBus
 
-from rtvoice.agent.subagent import Subagent
-from rtvoice.conversation import ConversationHistory
 from rtvoice.events.views import StopAgentCommand
 from rtvoice.realtime.schemas import FunctionTool
-from rtvoice.skills import Skills
 from rtvoice.tools.argument_resolver import resolve_arguments
-from rtvoice.tools.binding import (
-    ToolAvailability,
-    ToolDescription,
-    described,
-    provided,
-    requires,
-)
+from rtvoice.tools.binding import ToolAvailability, ToolDescription
 from rtvoice.tools.di import Inject, ToolContext
 from rtvoice.tools.middleware import MiddlewareChain, ToolCall
-from rtvoice.tools.params import (
-    LoadSkillParams,
-    ReadSkillResourceParams,
-    RunSkillScriptParams,
-    SubagentParams,
-)
 from rtvoice.tools.results import ActionResult
 from rtvoice.tools.views import ActionKind, Tool
 
@@ -74,10 +59,6 @@ class Tools:
 
     def set_context(self, context: ToolContext) -> None:
         self._context = context
-        subagent = context.resolve(Subagent)
-        self._tools["subagent"].result_instruction = (
-            subagent.result_instructions if subagent is not None else None
-        )
 
     def inject_tool(self, tool: Tool) -> None:
         self._tools[tool.name] = tool
@@ -151,72 +132,3 @@ class Tools:
         async def stop(event_bus: Inject[EventBus]) -> ActionResult:
             await event_bus.dispatch(StopAgentCommand())
             return ActionResult.success("Conversation ended.")
-
-        @self.action(
-            described(
-                Subagent,
-                render=_describe_subagent,
-                default="Delegate a task to the subagent.",
-            ),
-            params=SubagentParams,
-            available_when=provided(Subagent),
-        )
-        async def subagent(
-            params: SubagentParams,
-            subagent: Inject[Subagent],
-            conversation_history: Inject[ConversationHistory],
-        ) -> str:
-            conversation_summary = conversation_history.format()
-            return await subagent.start(
-                params.task,
-                context=conversation_summary,
-            )
-
-        @self.action(
-            "Load a skill's instructions and the list of its bundled files. "
-            "Call this before using a skill.",
-            params=LoadSkillParams,
-            available_when=_with_skills(),
-        )
-        def load_skill(params: LoadSkillParams, skills: Inject[Skills]) -> ActionResult:
-            return ActionResult.success(skills.load(params.name))
-
-        @self.action(
-            "Read one file bundled with a skill, as listed by load_skill.",
-            params=ReadSkillResourceParams,
-            kind=ActionKind.READ,
-            available_when=_with_skills(),
-        )
-        def read_skill_resource(
-            params: ReadSkillResourceParams, skills: Inject[Skills]
-        ) -> ActionResult:
-            content = skills.read_resource(params.name, params.path)
-            return ActionResult.success(content)
-
-        @self.action(
-            "Run one script bundled with a skill, as listed by load_skill. The "
-            "script runs in the skill's directory; no shell is involved.",
-            params=RunSkillScriptParams,
-            kind=ActionKind.DESTRUCTIVE,
-            available_when=_with_skills(),
-        )
-        async def run_skill_script(
-            params: RunSkillScriptParams, skills: Inject[Skills]
-        ) -> ActionResult:
-            output = await skills.run_script(
-                params.name, params.path, params.args, params.timeout
-            )
-            return ActionResult.success(output)
-
-
-def _with_skills() -> ToolAvailability:
-    return requires(Skills, predicate=lambda skills: skills.size > 0)
-
-
-def _describe_subagent(subagent: Subagent) -> str:
-    if not subagent.handoff_instructions:
-        return subagent.description
-    return (
-        f"{subagent.description}\n\n"
-        f"Handoff instructions: {subagent.handoff_instructions}"
-    )

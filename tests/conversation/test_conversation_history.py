@@ -5,8 +5,10 @@ from rtvoice.conversation import ConversationHistory, ConversationTurn
 from rtvoice.events.views import (
     AssistantInterruptedEvent,
     AssistantTranscriptCompletedEvent,
+    ToolExecutedEvent,
     UserTranscriptCompletedEvent,
 )
+from rtvoice.tools import ActionKind
 
 
 @pytest.fixture
@@ -106,6 +108,42 @@ class TestTurns:
 
     def test_turns_empty_initially(self, history: ConversationHistory) -> None:
         assert history.turns == []
+
+
+class TestToolExecutedTurns:
+    @pytest.mark.asyncio
+    async def test_appends_tool_turn_on_tool_executed_event(
+        self, bus: EventBus, history: ConversationHistory
+    ) -> None:
+        await bus.dispatch(
+            ToolExecutedEvent(
+                name="load_skill",
+                action_kind=ActionKind.GENERIC,
+                silent=True,
+                result="<skill_content>...</skill_content>",
+            )
+        )
+
+        assert len(history.turns) == 1
+        assert history.turns[0].role == "tool"
+        assert history.turns[0].transcript == (
+            "load_skill: <skill_content>...</skill_content>"
+        )
+
+    @pytest.mark.asyncio
+    async def test_format_includes_tool_turn(
+        self, bus: EventBus, history: ConversationHistory
+    ) -> None:
+        await bus.dispatch(
+            ToolExecutedEvent(
+                name="turn_on_lights",
+                action_kind=ActionKind.MUTATE,
+                silent=True,
+                result="OK",
+            )
+        )
+
+        assert "[TOOL]: turn_on_lights: OK" in history.format()
 
 
 class TestInterruptions:

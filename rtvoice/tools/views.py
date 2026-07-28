@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import re
 from collections.abc import Callable
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel
@@ -14,7 +14,7 @@ from rtvoice.tools.di import ToolContext
 from rtvoice.tools.schemas import build as build_schema
 
 
-class ActionKind(Enum):
+class ActionKind(StrEnum):
     GENERIC = "generic"
     READ = "read"
     MUTATE = "mutate"

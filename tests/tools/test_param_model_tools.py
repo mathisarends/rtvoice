@@ -142,11 +142,11 @@ class TestActionWithParamModel:
     async def test_flat_params_still_work(self, tools: Tools) -> None:
         @tools.action(description="Add numbers")
         async def add(a: int, b: int) -> ActionResult:
-            return ActionResult.success(a + b)
+            return ActionResult.success(str(a + b))
 
         result = await tools.execute("add", {"a": 3, "b": 7})
 
-        assert result.value == 10
+        assert result.value == "10"
 
     @pytest.mark.asyncio
     async def test_executes_with_param_model(self, tools: Tools) -> None:
@@ -162,11 +162,11 @@ class TestActionWithParamModel:
     async def test_param_model_with_defaults(self, tools: Tools) -> None:
         @tools.action(description="Search", params=SearchParams)
         async def search(params: SearchParams) -> ActionResult:
-            return ActionResult.success(params.max_results)
+            return ActionResult.success(str(params.max_results))
 
         result = await tools.execute("search", {"query": "test"})
 
-        assert result.value == 10
+        assert result.value == "10"
 
     @pytest.mark.asyncio
     async def test_param_model_with_inject(self, tools: Tools) -> None:

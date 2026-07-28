@@ -68,11 +68,11 @@ class TestExecute:
     async def test_executes_tool_with_arguments(self, tools: Tools) -> None:
         @tools.action(description="Add numbers")
         async def add(a: int, b: int) -> ActionResult:
-            return ActionResult.success(a + b)
+            return ActionResult.success(str(a + b))
 
         result = await tools.execute("add", {"a": 1, "b": 2})
 
-        assert result.value == 3
+        assert result.value == "3"
 
     @pytest.mark.asyncio
     async def test_unknown_tool_returns_failure(self, tools: Tools) -> None:

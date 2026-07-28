@@ -7,6 +7,7 @@ from rtvoice.conversation.views import ConversationTurn
 from rtvoice.events.views import (
     AssistantInterruptedEvent,
     AssistantTranscriptCompletedEvent,
+    ToolExecutedEvent,
     UserTranscriptCompletedEvent,
 )
 from rtvoice.shared.speech_speed import DEFAULT_SPEECH_SPEED, SpeechSpeed
@@ -76,9 +77,15 @@ class ConversationHistory:
         self._event_bus.on(UserTranscriptCompletedEvent, self._on_user)
         self._event_bus.on(AssistantTranscriptCompletedEvent, self._on_assistant)
         self._event_bus.on(AssistantInterruptedEvent, self._on_assistant_interrupted)
+        self._event_bus.on(ToolExecutedEvent, self._on_tool_executed)
 
     async def _on_user(self, event: UserTranscriptCompletedEvent) -> None:
         self._turns.append(ConversationTurn(role="user", transcript=event.transcript))
+
+    async def _on_tool_executed(self, event: ToolExecutedEvent) -> None:
+        self._turns.append(
+            ConversationTurn(role="tool", transcript=f"{event.name}: {event.result}")
+        )
 
     async def _on_assistant(self, event: AssistantTranscriptCompletedEvent) -> None:
         keys = _assistant_keys(event.item_id, event.response_id)

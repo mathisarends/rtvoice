@@ -96,6 +96,7 @@ class ToolExecutedEvent(Event):
     name: str
     action_kind: ActionKindValue
     silent: bool
+    result: str
 
 
 class AssistantInterruptedEvent(Event):

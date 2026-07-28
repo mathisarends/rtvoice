@@ -104,6 +104,7 @@ class ToolCallExecutor:
                     name=call.tool.name,
                     action_kind=call.tool.kind,
                     silent=not call_should_respond,
+                    result=serialized,
                 )
             )
 

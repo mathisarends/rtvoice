@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING
-
-from pydantic import BaseModel
 
 from rtvoice.realtime.schemas import (
     ConversationItemCreateEvent,
@@ -19,18 +16,7 @@ if TYPE_CHECKING:
 def serialize_tool_result(result: ActionResult) -> str:
     if not result.ok:
         return result.error or "Tool execution failed."
-
-    value = result.value
-    if value is None:
-        return "OK"
-    if isinstance(value, str):
-        return value
-    if isinstance(value, BaseModel):
-        return value.model_dump_json(exclude_none=True)
-    try:
-        return json.dumps(value)
-    except (TypeError, ValueError):
-        return str(value)
+    return result.value if result.value is not None else "OK"
 
 
 async def send_function_call_output(

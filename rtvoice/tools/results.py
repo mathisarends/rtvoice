@@ -1,16 +1,16 @@
 from dataclasses import dataclass
-from typing import Any, Self
+from typing import Self
 
 
 @dataclass(frozen=True)
 class ActionResult:
     ok: bool
-    value: Any = None
+    value: str | None = None
     error: str | None = None
     respond: bool | None = None
 
     @classmethod
-    def success(cls, value: Any = None, *, respond: bool | None = None) -> Self:
+    def success(cls, value: str | None = None, *, respond: bool | None = None) -> Self:
         return cls(ok=True, value=value, respond=respond)
 
     @classmethod

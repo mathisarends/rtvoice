@@ -209,7 +209,7 @@ class TestToolBatching:
         )
 
     @pytest.mark.asyncio
-    async def test_non_string_result_is_serialized(
+    async def test_structured_result_is_passed_through_pre_serialized(
         self,
         event_bus: EventBus,
         executor: ToolCallExecutor,
@@ -222,7 +222,7 @@ class TestToolBatching:
 
         tools.get.return_value = make_tool()
         tools.execute.return_value = ActionResult.success(
-            WeatherPayload(city="Berlin", temperature=18)
+            WeatherPayload(city="Berlin", temperature=18).model_dump_json()
         )
 
         await event_bus.dispatch(make_function_call_item())
@@ -291,6 +291,7 @@ class TestToolBatching:
         assert executed[0].name == "get_weather"
         assert executed[0].action_kind is ActionKind.MUTATE
         assert executed[0].silent is True
+        assert executed[0].result == "tool_result"
 
     @pytest.mark.asyncio
     async def test_execution_event_uses_result_response_override(

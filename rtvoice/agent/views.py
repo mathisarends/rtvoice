@@ -119,7 +119,7 @@ class ServerVAD(BaseModel):
     silence_duration_ms: int = 500
 
 
-TurnDetection = SemanticVAD | ServerVAD
+type TurnDetection = SemanticVAD | ServerVAD
 
 
 class InjectedUserMessage(BaseModel):

@@ -190,6 +190,7 @@ class TestListenerBridgeEventPropagation:
             name="turn_on_lights",
             action_kind=ActionKind.MUTATE,
             silent=True,
+            result="Lights on.",
         )
         await bridge._event_bus.dispatch(execution)
 

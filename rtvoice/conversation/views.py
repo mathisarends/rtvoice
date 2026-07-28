@@ -6,7 +6,7 @@ from rtvoice.shared.speech_speed import DEFAULT_SPEECH_SPEED, SpeechSpeed
 
 @dataclass
 class ConversationTurn:
-    role: Literal["user", "assistant"]
+    role: Literal["user", "assistant", "tool"]
     transcript: str
     interrupted: bool = False
     played_ms: int | None = None

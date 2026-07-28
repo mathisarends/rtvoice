@@ -53,7 +53,14 @@
       "Bash(mv tests/realtime/test_session_config.py tests/realtime/test_session_settings.py)",
       "PowerShell(.venv\\\\Scripts\\\\python.exe -m pytest tests -q 2>&1 | Select-Object -Last 40)",
       "PowerShell(.venv\\\\Scripts\\\\python.exe -m ruff check rtvoice tests; .venv\\\\Scripts\\\\python.exe -m ruff format rtvoice tests)",
-      "PowerShell(.venv\\\\Scripts\\\\python.exe -m pytest tests -q 2>&1 | Select-Object -Last 12; git diff --stat; git status --porcelain)"
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -m pytest tests -q 2>&1 | Select-Object -Last 12; git diff --stat; git status --porcelain)",
+      "Bash(./.venv/Scripts/python -c \"from rtvoice.tools import Tools, ToolSchemaFormat; from rtvoice.tools.views import ToolSchemaFormat as V; print\\(ToolSchemaFormat is V\\)\")",
+      "Bash(./.venv/Scripts/python -m pytest tests/tools/test_tools.py tests/text_agent/test_text_agent_handoff.py -q)",
+      "Bash(./.venv/Scripts/python -m pytest tests/tools/test_tools.py -q -k \"hides_defaults\")",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -m pytest tests -q 2>&1 | Select-Object -Last 15)",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -m ruff check rtvoice tests; .venv\\\\Scripts\\\\python.exe -m ruff format --check rtvoice tests 2>&1 | Select-Object -Last 5)",
+      "Bash(uv --version)",
+      "Bash(uv python *)"
     ]
   }
 }

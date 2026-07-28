@@ -156,14 +156,13 @@ class Tools:
     def _register_default_tools(self) -> None:
         """Every Tools instance carries these; `available_when` decides which of
         them a given agent actually sees, based on what its context provides."""
-        with_skills = requires(Skills, predicate=lambda skills: skills.size > 0)
+        _with_skills = requires(Skills, predicate=lambda skills: skills.size > 0)
 
         @self.action(
             "End the conversation and shut the agent down. Call this when the user "
             "says goodbye or asks you to stop. Say a short farewell first.",
             name="stop",
             kind=ActionKind.END_SESSION,
-            available_when=provided(EventBus),
         )
         async def _stop(event_bus: Inject[EventBus]) -> ActionResult:
             await event_bus.dispatch(StopAgentCommand())
@@ -173,7 +172,7 @@ class Tools:
             "Load a skill's instructions and the list of its bundled files. "
             "Call this before using a skill.",
             params=LoadSkillParams,
-            available_when=with_skills,
+            available_when=_with_skills,
         )
         def load_skill(params: LoadSkillParams, skills: Inject[Skills]) -> ActionResult:
             return ActionResult.success(skills.load(params.name))
@@ -182,7 +181,7 @@ class Tools:
             "Read one file bundled with a skill, as listed by load_skill.",
             params=ReadSkillResourceParams,
             kind=ActionKind.READ,
-            available_when=with_skills,
+            available_when=_with_skills,
         )
         def read_skill_resource(
             params: ReadSkillResourceParams, skills: Inject[Skills]
@@ -194,7 +193,7 @@ class Tools:
             "script runs in the skill's directory; no shell is involved.",
             params=RunSkillScriptParams,
             kind=ActionKind.DESTRUCTIVE,
-            available_when=with_skills,
+            available_when=_with_skills,
         )
         async def run_skill_script(
             params: RunSkillScriptParams, skills: Inject[Skills]

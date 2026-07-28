@@ -75,6 +75,47 @@ class TestSkills:
             == "Loaded later."
         )
 
+    def test_read_resource_returns_base64_for_binary_content(
+        self, tmp_path: Path
+    ) -> None:
+        skill_dir = make_skill(tmp_path)
+        (skill_dir / "logo.png").write_bytes(b"\xff\xd8\xff\x00binary")
+
+        skills = Skills.from_local_dir(tmp_path)
+
+        result = skills.read_resource("internet-research", "logo.png")
+
+        assert result.startswith("base64: ")
+
+    def test_read_resource_reports_unreadable_file(self, tmp_path: Path) -> None:
+        skill_dir = make_skill(tmp_path)
+        (skill_dir / "notes.md").write_text("content", encoding="utf-8")
+        skills = Skills.from_local_dir(tmp_path)
+
+        with (
+            patch.object(Path, "read_bytes", side_effect=OSError("locked")),
+            pytest.raises(ValueError, match="Could not read resource"),
+        ):
+            skills.read_resource("internet-research", "notes.md")
+
+    def test_read_resource_absolute_path_is_rejected(self, tmp_path: Path) -> None:
+        skill_dir = make_skill(tmp_path)
+        (skill_dir / "notes.md").write_text("content", encoding="utf-8")
+        skills = Skills.from_local_dir(tmp_path)
+
+        with pytest.raises(ValueError, match="must be relative"):
+            skills.read_resource("internet-research", str(skill_dir / "notes.md"))
+
+    def test_read_resource_missing_file_lists_available_resources(
+        self, tmp_path: Path
+    ) -> None:
+        skill_dir = make_skill(tmp_path)
+        (skill_dir / "notes.md").write_text("content", encoding="utf-8")
+        skills = Skills.from_local_dir(tmp_path)
+
+        with pytest.raises(ValueError, match=r"notes\.md"):
+            skills.read_resource("internet-research", "missing.md")
+
     def test_resource_path_cannot_escape_skill(self, tmp_path: Path) -> None:
         make_skill(tmp_path)
         (tmp_path / "secret.txt").write_text("secret", encoding="utf-8")
@@ -108,6 +149,40 @@ class TestSkills:
 
         with pytest.raises(ValueError, match="parent directory"):
             Skills.from_local_dir(tmp_path)
+
+    def test_requires_at_least_one_directory(self) -> None:
+        with pytest.raises(ValueError, match="At least one skills directory"):
+            Skills(paths=())
+
+    def test_directory_must_exist(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="does not exist"):
+            Skills.from_local_dir(tmp_path / "missing")
+
+    def test_directory_must_be_a_directory(self, tmp_path: Path) -> None:
+        not_a_dir = tmp_path / "skills.txt"
+        not_a_dir.write_text("not a directory", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="must be a directory"):
+            Skills.from_local_dir(not_a_dir)
+
+    def test_directories_lists_every_discovered_skill(self, tmp_path: Path) -> None:
+        make_skill(tmp_path, name="internet-research")
+        make_skill(tmp_path, name="weather-lookup")
+
+        skills = Skills.from_local_dir(tmp_path)
+
+        assert set(skills.directories) == {
+            tmp_path / "internet-research",
+            tmp_path / "weather-lookup",
+        }
+
+    def test_get_unknown_skill_lists_available_names(self, tmp_path: Path) -> None:
+        make_skill(tmp_path)
+
+        skills = Skills.from_local_dir(tmp_path)
+
+        with pytest.raises(ValueError, match="internet-research"):
+            skills.get("unknown-skill")
 
     def test_later_source_overrides_duplicate(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture

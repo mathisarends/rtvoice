@@ -60,7 +60,14 @@
       "PowerShell(.venv\\\\Scripts\\\\python.exe -m pytest tests -q 2>&1 | Select-Object -Last 15)",
       "PowerShell(.venv\\\\Scripts\\\\python.exe -m ruff check rtvoice tests; .venv\\\\Scripts\\\\python.exe -m ruff format --check rtvoice tests 2>&1 | Select-Object -Last 5)",
       "Bash(uv --version)",
-      "Bash(uv python *)"
+      "Bash(uv python *)",
+      "Bash(awk -F: '{print $1}')",
+      "Bash(echo \"exit: $?\")",
+      "Read(//c/Users/mathi/.claude/**)",
+      "Bash(powershell.exe -NoProfile -Command 'Get-Content C:\\\\Users\\\\mathi\\\\.claude\\\\settings.json -ErrorAction SilentlyContinue | Select-String -Pattern '\\\\''hooks'\\\\'' -Context 0,20')",
+      "Bash(echo \"exit:$?\")",
+      "Bash(echo \"tracked:$?\")",
+      "Bash(grep -c \"^\\\\.coverage$\")"
     ]
   }
 }

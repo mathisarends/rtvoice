@@ -80,6 +80,70 @@ async def test_runs_tools_until_final_completion() -> None:
 
 
 @pytest.mark.asyncio
+async def test_reports_invalid_tool_arguments_and_retries() -> None:
+    bad_call = ToolCall(
+        id="call_bad",
+        function=Function(name="search_schedule", arguments="not-json"),
+    )
+    llm = MagicMock()
+    llm.invoke = AsyncMock(
+        side_effect=[
+            ChatInvokeCompletion(completion="Checking", tool_calls=[bad_call]),
+            ChatInvokeCompletion(completion="Recovered"),
+        ]
+    )
+    tools = Tools()
+
+    @tools.action(description="Search schedule")
+    async def search_schedule(query: str) -> str:
+        return f"result:{query}"
+
+    text_agent = TextAgent(
+        description="Planning helper",
+        system_prompt="You are a planner.",
+        llm=llm,
+        tools=tools,
+    )
+
+    assert await text_agent.start("Plan my day") == "Recovered"
+    messages = llm.invoke.await_args_list[1].args[0]
+    assert isinstance(messages[-1], ToolResultMessage)
+    assert "could not parse tool arguments" in messages[-1].content
+
+
+@pytest.mark.asyncio
+async def test_reports_tool_failure_and_retries() -> None:
+    call = ToolCall(
+        id="call_fail",
+        function=Function(name="search_schedule", arguments='{"query":"Monday"}'),
+    )
+    llm = MagicMock()
+    llm.invoke = AsyncMock(
+        side_effect=[
+            ChatInvokeCompletion(completion="Checking", tool_calls=[call]),
+            ChatInvokeCompletion(completion="Recovered"),
+        ]
+    )
+    tools = Tools()
+
+    @tools.action(description="Search schedule")
+    async def search_schedule(query: str) -> str:
+        raise ValueError("schedule unavailable")
+
+    text_agent = TextAgent(
+        description="Planning helper",
+        system_prompt="You are a planner.",
+        llm=llm,
+        tools=tools,
+    )
+
+    assert await text_agent.start("Plan my day") == "Recovered"
+    messages = llm.invoke.await_args_list[1].args[0]
+    assert isinstance(messages[-1], ToolResultMessage)
+    assert "tool 'search_schedule' failed" in messages[-1].content
+
+
+@pytest.mark.asyncio
 async def test_returns_max_iterations_message() -> None:
     call = ToolCall(
         id="call_repeat",

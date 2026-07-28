@@ -5,7 +5,15 @@ from transitbus import EventBus
 
 from rtvoice import TextAgent
 from rtvoice.conversation import ConversationHistory
-from rtvoice.tools import ToolContext, Tools, ToolSchemaFormat
+from rtvoice.tools import ActionResult, Inject, ToolContext, Tools, ToolSchemaFormat
+
+
+class FileSystem:
+    pass
+
+
+class CommandPolicy:
+    pass
 
 
 def make_text_agent(**kwargs) -> TextAgent:
@@ -61,9 +69,36 @@ def test_text_agent_cannot_hand_off_to_itself() -> None:
 def test_text_agent_context_drops_an_injected_text_agent() -> None:
     nested = make_text_agent()
 
-    text_agent = make_text_agent(tool_injection_context=nested)
+    text_agent = make_text_agent(tool_dependencies=(nested,))
 
     assert text_agent._tools._context.resolve(TextAgent) is None
+
+
+@pytest.mark.asyncio
+async def test_text_agent_injects_multiple_user_dependencies() -> None:
+    file_system = FileSystem()
+    policy = CommandPolicy()
+    received = {}
+    tools = Tools()
+
+    @tools.action("Use application dependencies")
+    async def use_dependencies(
+        injected_file_system: Inject[FileSystem],
+        injected_policy: Inject[CommandPolicy],
+    ) -> ActionResult:
+        received["file_system"] = injected_file_system
+        received["policy"] = injected_policy
+        return ActionResult.success()
+
+    text_agent = make_text_agent(
+        tools=tools,
+        tool_dependencies=(file_system, policy),
+    )
+
+    result = await text_agent._tools.execute("use_dependencies")
+
+    assert result.ok
+    assert received == {"file_system": file_system, "policy": policy}
 
 
 @pytest.mark.asyncio

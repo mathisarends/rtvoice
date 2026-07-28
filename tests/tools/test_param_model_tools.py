@@ -38,6 +38,14 @@ class ReminderParams(BaseModel):
     locations: list[LocationParams] = Field(default_factory=list)
 
 
+class SearchClient:
+    pass
+
+
+class SearchPolicy:
+    pass
+
+
 @pytest.fixture
 def tools() -> Tools:
     return Tools()
@@ -186,6 +194,33 @@ class TestActionWithParamModel:
         assert isinstance(received["params"], SearchParams)
         assert received["params"].query == "hello"
         assert received["bus"] is injected_bus
+
+    @pytest.mark.asyncio
+    async def test_param_model_with_multiple_injected_dependencies(
+        self, tools: Tools
+    ) -> None:
+        client = SearchClient()
+        policy = SearchPolicy()
+        tools.set_context(ToolContext(client, policy))
+        received = {}
+
+        @tools.action(description="Search", params=SearchParams)
+        async def search(
+            params: SearchParams,
+            injected_client: Inject[SearchClient],
+            injected_policy: Inject[SearchPolicy],
+        ) -> ActionResult:
+            received["params"] = params
+            received["client"] = injected_client
+            received["policy"] = injected_policy
+            return ActionResult.success()
+
+        result = await tools.execute("search", {"query": "hello"})
+
+        assert result.ok
+        assert received["params"] == SearchParams(query="hello")
+        assert received["client"] is client
+        assert received["policy"] is policy
 
 
 class TestLambdaStatus:

@@ -207,13 +207,13 @@ async def play_song(params: PlaySongParams) -> str:
 
 ### Context injection
 
-Any tool parameter typed as `Inject[T]` is filled automatically by the framework — the model never sees it and does not need to supply a value. Three types are injectable:
+Any tool parameter typed as `Inject[T]` is filled automatically by the framework — the model never sees it and does not need to supply a value. Framework and application dependencies are injectable:
 
-| Type                          | What it provides              |
-| ----------------------------- | ----------------------------- |
-| `Inject[EventBus]`            | Transit Bus event bus         |
-| `Inject[ConversationHistory]` | Full conversation so far      |
-| `Inject[YourContextType]`     | Your custom `tool_injection_context=` object |
+| Type                          | What it provides                            |
+| ----------------------------- | ------------------------------------------- |
+| `Inject[EventBus]`            | Transit Bus event bus                       |
+| `Inject[ConversationHistory]` | Full conversation so far                    |
+| `Inject[YourDependency]`      | A matching object from `tool_dependencies=` |
 
 ```python
 from rtvoice import Tools, Inject
@@ -232,30 +232,45 @@ async def summarise(
 
 ### Custom application context
 
-Pass any object as `tool_injection_context=` on `RealtimeAgent`. It is then injectable in every tool via `Inject[YourType]`.
+Pass application collaborators as `tool_dependencies=` on `RealtimeAgent` or
+`TextAgent`. Each tool declares only the objects it uses.
 
 ```python
 from dataclasses import dataclass
 from rtvoice import RealtimeAgent, Tools, Inject
 
 @dataclass
-class AppState:
-    user_name: str
-    premium: bool
+class UserDirectory:
+    names: dict[str, str]
+
+@dataclass
+class PlanPolicy:
+    premium_users: set[str]
 
 tools = Tools()
+users = UserDirectory(names={"alice": "Alice"})
+plans = PlanPolicy(premium_users={"alice"})
 
 @tools.action("Greet the user by name")
-async def greet(state: Inject[AppState]) -> str:
-    tier = "premium" if state.premium else "free"
-    return f"Hello {state.user_name}, you are on the {tier} plan."
+async def greet(
+    user_id: str,
+    users: Inject[UserDirectory],
+    plans: Inject[PlanPolicy],
+) -> str:
+    tier = "premium" if user_id in plans.premium_users else "free"
+    return f"Hello {users.names[user_id]}, you are on the {tier} plan."
 
 agent = RealtimeAgent(
     system_prompt="Greet the user when asked.",
     tools=tools,
-    tool_injection_context=AppState(user_name="Alice", premium=True),
+    tool_dependencies=(users, plans),
 )
 ```
+
+Dependencies are resolved with `isinstance` in registration order, so the first
+matching object wins. Framework dependencies are registered before application
+dependencies and cannot be shadowed by a user-supplied subtype. `None` entries
+are ignored.
 
 ---
 
@@ -367,17 +382,17 @@ completion as the tool result.
 
 **`TextAgent` parameters:**
 
-| Parameter              | Description                                               |
-| ---------------------- | --------------------------------------------------------- |
-| `description`          | Shown to the realtime model to decide when to delegate    |
-| `system_prompt`        | System prompt for the text agent's own LLM loop           |
-| `llm`                  | `ChatOpenAI(model=...)` or any `ChatModel` implementation |
-| `tools`                | `Tools` instance with the actions the text agent may call |
+| Parameter              | Description                                                |
+| ---------------------- | ---------------------------------------------------------- |
+| `description`          | Shown to the realtime model to decide when to delegate     |
+| `system_prompt`        | System prompt for the text agent's own LLM loop            |
+| `llm`                  | `ChatOpenAI(model=...)` or any `ChatModel` implementation  |
+| `tools`                | `Tools` instance with the actions the text agent may call  |
 | `skills`               | Local Agent Skills exposed through progressive disclosure |
-| `result_instructions`  | Tells the realtime model how to present the result        |
-| `handoff_instructions` | Extra guidance appended to the tool description           |
-| `max_iterations`       | Loop iteration cap (default: 10)                          |
-| `tool_injection_context` | Arbitrary object injectable inside text-agent tools      |
+| `result_instructions`  | Tells the realtime model how to present the result         |
+| `handoff_instructions` | Extra guidance appended to the tool description            |
+| `max_iterations`       | Loop iteration cap (default: 10)                           |
+| `tool_dependencies`    | Objects injectable inside text-agent tools                 |
 
 ---
 

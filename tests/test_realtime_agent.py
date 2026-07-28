@@ -3,6 +3,7 @@ import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from transitbus import EventBus
 
 from rtvoice.agent import RealtimeAgent, TextAgent
 from rtvoice.agent.listener import AgentListener
@@ -38,6 +39,19 @@ from rtvoice.events.views import (
     UserStoppedSpeakingEvent,
     UserTranscriptCompletedEvent,
 )
+from rtvoice.tools import ActionResult, Inject, Tools
+
+
+class FileSystem:
+    pass
+
+
+class CommandPolicy:
+    pass
+
+
+class ApplicationEventBus(EventBus):
+    pass
 
 
 def make_agent(**kwargs) -> RealtimeAgent:
@@ -108,6 +122,53 @@ class TestInitDefaults:
     def test_system_prompt_is_passed_to_realtime_session(self) -> None:
         agent = make_agent(system_prompt="Be concise.")
         assert agent._realtime_session.settings.instructions == "Be concise."
+
+    @pytest.mark.asyncio
+    async def test_injects_multiple_user_dependencies_into_one_tool(self) -> None:
+        file_system = FileSystem()
+        policy = CommandPolicy()
+        received = {}
+        tools = Tools()
+
+        @tools.action("Use application dependencies")
+        async def use_dependencies(
+            injected_file_system: Inject[FileSystem],
+            injected_policy: Inject[CommandPolicy],
+        ) -> ActionResult:
+            received["file_system"] = injected_file_system
+            received["policy"] = injected_policy
+            return ActionResult.success()
+
+        agent = make_agent(
+            tools=tools,
+            tool_dependencies=(file_system, policy),
+        )
+
+        result = await agent._tools.execute("use_dependencies")
+
+        assert result.ok
+        assert received == {"file_system": file_system, "policy": policy}
+
+    @pytest.mark.asyncio
+    async def test_framework_dependencies_precede_user_dependencies(self) -> None:
+        user_event_bus = ApplicationEventBus()
+        received = {}
+        tools = Tools()
+
+        @tools.action("Use the event bus")
+        async def use_event_bus(event_bus: Inject[EventBus]) -> ActionResult:
+            received["event_bus"] = event_bus
+            return ActionResult.success()
+
+        agent = make_agent(
+            tools=tools,
+            tool_dependencies=(user_event_bus,),
+        )
+
+        result = await agent._tools.execute("use_event_bus")
+
+        assert result.ok
+        assert received["event_bus"] is agent._event_bus
 
     def test_default_inactivity_timeout_disabled(self) -> None:
         agent = make_agent()

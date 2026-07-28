@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections.abc import Sequence
 from pathlib import Path
 from typing import assert_never
 
@@ -68,7 +69,7 @@ def _injected_turn(message: InjectedMessage) -> ConversationTurn:
             assert_never(message)
 
 
-class RealtimeAgent[T]:
+class RealtimeAgent:
     def __init__(
         self,
         *,
@@ -82,7 +83,7 @@ class RealtimeAgent[T]:
         noise_reduction: NoiseReduction = NoiseReduction.FAR_FIELD,
         turn_detection: TurnDetection | None = None,
         tools: Tools | None = None,
-        tool_injection_context: T | None = None,
+        tool_dependencies: Sequence[object] = (),
         skills: Skills | None = None,
         text_agent: TextAgent | None = None,
         audio_input: AudioInput | None = None,
@@ -128,9 +129,9 @@ class RealtimeAgent[T]:
         tool_context = ToolContext(
             self._event_bus,
             self._conversation_history,
-            tool_injection_context,
             self._skills,
             self._text_agent,
+            *tool_dependencies,
         )
         self._tools.set_context(tool_context)
 

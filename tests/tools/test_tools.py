@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from transitbus import EventBus
 
 from rtvoice.tools import ActionResult, Tools, ToolSchemaFormat
+from rtvoice.tools.argument_resolver import resolve_arguments
 from rtvoice.tools.di import Inject, ToolContext
 
 
@@ -193,6 +194,20 @@ class TestPrepareArguments:
         result = await tools.execute("handler", {})
 
         assert not result.ok
+
+    def test_missing_injected_dependency_raises_value_error(self, tools: Tools) -> None:
+        @tools.action(description="Needs injected event bus")
+        async def handler(bus: Inject[EventBus]) -> ActionResult:
+            return ActionResult.success(bus)
+
+        tool = tools.get("handler")
+
+        assert tool is not None
+        with pytest.raises(
+            ValueError,
+            match="Missing injected dependency for parameter 'bus' of type 'EventBus'",
+        ):
+            resolve_arguments(tool, {}, None, ToolContext())
 
 
 class TestSetContext:

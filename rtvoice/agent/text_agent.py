@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Sequence
 
 from rtvoice.agent.system_prompt import SystemPrompt
 from rtvoice.llm import (
@@ -18,7 +19,7 @@ from rtvoice.tools import Handoff, ToolContext, Tools, ToolSchemaFormat
 logger = logging.getLogger(__name__)
 
 
-class TextAgent[T](Handoff):
+class TextAgent(Handoff):
     def __init__(
         self,
         *,
@@ -30,7 +31,7 @@ class TextAgent[T](Handoff):
         max_iterations: int = 10,
         handoff_instructions: str | None = None,
         result_instructions: str | None = None,
-        tool_injection_context: T | None = None,
+        tool_dependencies: Sequence[object] = (),
     ) -> None:
         self.name = "text_agent"
         self.description = description
@@ -52,7 +53,7 @@ class TextAgent[T](Handoff):
         # withholding the Handoff keeps the handoff tool unavailable here: a
         # delegated agent must not delegate to another agent again
         self._tools.set_context(
-            ToolContext(tool_injection_context, self._skills).without(Handoff)
+            ToolContext(self._skills, *tool_dependencies).without(Handoff)
         )
 
     async def start(

@@ -2,7 +2,7 @@ import pytest
 from pydantic import BaseModel
 from transitbus import EventBus
 
-from rtvoice.tools import ActionResult, Tools
+from rtvoice.tools import ActionResult, Tools, ToolSchemaFormat
 from rtvoice.tools.di import Inject, ToolContext
 
 
@@ -220,43 +220,42 @@ class TestRealtimeTools:
         assert [tool.name for tool in realtime.get_schema()] == ["stop"]
 
 
-class TestJsonToolSchema:
-    def test_get_json_schema_returns_list(self) -> None:
+class TestTextToolSchema:
+    def test_get_schema_returns_text_tools(self) -> None:
         tools = Tools()
 
         @tools.action(description="A tool")
         def my_tool(name: str) -> None: ...
 
-        schema = tools.get_json_schema()
+        schema = tools.get_schema(ToolSchemaFormat.TEXT)
 
-        assert "my_tool" in [entry["function"]["name"] for entry in schema]
+        assert "my_tool" in [tool.name for tool in schema]
 
-    def test_get_json_schema_has_function_type(self) -> None:
+    def test_text_schema_has_function_type(self) -> None:
         tools = Tools()
 
         @tools.action(description="A tool")
         def my_tool(name: str) -> None: ...
 
-        schema = tools.get_json_schema()
+        schema = tools.get_schema(ToolSchemaFormat.TEXT)
 
-        assert schema[0]["type"] == "function"
+        assert schema[0].to_openai_schema()["type"] == "function"
 
-    def test_get_json_schema_contains_function_key(self) -> None:
+    def test_text_schema_contains_function_key(self) -> None:
         tools = Tools()
 
         @tools.action(description="A tool")
         def my_tool(name: str) -> None: ...
 
-        schema = tools.get_json_schema()
+        schema = tools.get_schema(ToolSchemaFormat.TEXT)
 
-        assert "function" in schema[0]
+        assert "function" in schema[0].to_openai_schema()
 
-    def test_get_json_schema_only_defaults_for_no_tools(self) -> None:
+    def test_text_schema_only_defaults_for_no_tools(self) -> None:
         tools = Tools()
 
-        assert [entry["function"]["name"] for entry in tools.get_json_schema()] == [
-            "stop"
-        ]
+        schema = tools.get_schema(ToolSchemaFormat.TEXT)
+        assert [tool.name for tool in schema] == ["stop"]
 
 
 class TestToolStatuses:

@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any
+from enum import StrEnum
+from typing import Any, Literal, overload
 
 from pydantic import BaseModel
 from transitbus import EventBus
 
 from rtvoice.events.views import StopAgentCommand
-from rtvoice.realtime.schemas import FunctionTool
+from rtvoice.llm import RawSchemaTool
+from rtvoice.realtime.schemas import FunctionTool as RealtimeFunctionTool
 from rtvoice.tools.argument_resolver import resolve_arguments
 from rtvoice.tools.binding import ToolAvailability, ToolDescription
 from rtvoice.tools.di import Inject, ToolContext
@@ -17,6 +19,11 @@ from rtvoice.tools.results import ActionResult
 from rtvoice.tools.views import ActionKind, Tool
 
 logger = logging.getLogger(__name__)
+
+
+class ToolSchemaFormat(StrEnum):
+    REALTIME = "realtime"
+    TEXT = "text"
 
 
 class Tools:
@@ -66,20 +73,33 @@ class Tools:
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
 
-    def get_schema(self) -> list[FunctionTool]:
-        return [
+    @overload
+    def get_schema(
+        self, schema_format: Literal[ToolSchemaFormat.REALTIME] = ...
+    ) -> list[RealtimeFunctionTool]: ...
+
+    @overload
+    def get_schema(
+        self, schema_format: Literal[ToolSchemaFormat.TEXT]
+    ) -> list[RawSchemaTool]: ...
+
+    def get_schema(
+        self, schema_format: ToolSchemaFormat = ToolSchemaFormat.REALTIME
+    ) -> list[RealtimeFunctionTool] | list[RawSchemaTool]:
+        schemas = [
             tool.to_schema(self._context)
             for tool in self._tools.values()
             if tool.is_available(self._context)
         ]
-
-    def get_json_schema(self) -> list[dict]:
+        if schema_format is ToolSchemaFormat.REALTIME:
+            return schemas
         return [
-            {
-                "type": "function",
-                "function": tool.model_dump(exclude={"type"}, exclude_none=True),
-            }
-            for tool in self.get_schema()
+            RawSchemaTool(
+                name=schema.name,
+                description=schema.description or "",
+                schema=schema.parameters.model_dump(exclude_none=True),
+            )
+            for schema in schemas
         ]
 
     async def execute(

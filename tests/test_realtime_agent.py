@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from rtvoice.agent import RealtimeAgent, Subagent
+from rtvoice.agent import RealtimeAgent, TextAgent
 from rtvoice.agent.listener import AgentListener
 from rtvoice.agent.views import (
     AgentError,
@@ -108,19 +108,19 @@ class TestInitDefaults:
         assert agent._realtime_session._inactivity_timeout_seconds is None
 
     @pytest.mark.asyncio
-    async def test_subagent_is_executed_as_injected_regular_tool(self) -> None:
-        subagent = Subagent(
-            description="A subagent",
+    async def test_text_agent_is_executed_as_injected_regular_tool(self) -> None:
+        text_agent = TextAgent(
+            description="A text agent",
             system_prompt="Do the task.",
             llm=MagicMock(),
         )
-        subagent.start = AsyncMock(return_value="final result")
-        agent = make_agent(subagent=subagent)
+        text_agent.start = AsyncMock(return_value="final result")
+        agent = make_agent(text_agent=text_agent)
 
-        result = await agent._tools.execute("subagent", {"task": "Plan my day"})
+        result = await agent._tools.execute("text_agent", {"task": "Plan my day"})
 
         assert result.value == "final result"
-        subagent.start.assert_awaited_once_with(
+        text_agent.start.assert_awaited_once_with(
             "Plan my day", context="(no conversation yet)"
         )
 

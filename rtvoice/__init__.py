@@ -1,4 +1,4 @@
-from .agent import AgentListener, RealtimeAgent, Subagent
+from .agent import AgentListener, RealtimeAgent, TextAgent
 from .agent.views import (
     AssistantVoice,
     InjectedAssistantMessage,
@@ -59,7 +59,7 @@ __all__ = [
     "ServerVAD",
     "Skill",
     "Skills",
-    "Subagent",
+    "TextAgent",
     "TokenTotals",
     "TokenTracker",
     "ToolContext",

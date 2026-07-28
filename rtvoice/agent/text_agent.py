@@ -14,14 +14,14 @@ from rtvoice.llm import (
     UserMessage,
 )
 from rtvoice.skills import Skills, register_skill_tools
-from rtvoice.tools import Inject, ToolContext, Tools
+from rtvoice.tools import Inject, ToolContext, Tools, ToolSchemaFormat
 from rtvoice.tools.binding import described, provided
-from rtvoice.tools.params import SubagentParams
+from rtvoice.tools.params import TextAgentParams
 
 logger = logging.getLogger(__name__)
 
 
-class Subagent[T]:
+class TextAgent[T]:
     def __init__(
         self,
         *,
@@ -35,7 +35,7 @@ class Subagent[T]:
         result_instructions: str | None = None,
         tool_injection_context: T | None = None,
     ) -> None:
-        self.name = "subagent"
+        self.name = "text_agent"
         self.description = description
         self._llm = llm or ChatModel(model="gpt-5.4-mini")
         self._skills = skills
@@ -76,7 +76,7 @@ class Subagent[T]:
         return messages
 
     async def _loop(self, messages: list[Message]) -> str:
-        tool_schema = self._tools.get_json_schema()
+        tool_schema = self._tools.get_schema(ToolSchemaFormat.TEXT)
 
         for _ in range(self._max_iterations):
             response = await self._llm.invoke(messages, tools=tool_schema)
@@ -128,34 +128,34 @@ class Subagent[T]:
         return "Max iterations reached."
 
 
-def register_subagent_tool(tools: Tools, subagent: Subagent) -> None:
+def register_text_agent_tool(tools: Tools, text_agent: TextAgent) -> None:
     @tools.action(
         described(
-            Subagent,
-            render=_describe_subagent,
-            default="Delegate a task to the subagent.",
+            TextAgent,
+            render=_describe_text_agent,
+            default="Delegate a task to the text agent.",
         ),
-        name="subagent",
-        params=SubagentParams,
-        available_when=provided(Subagent),
-        result_instruction=subagent.result_instructions,
+        name="text_agent",
+        params=TextAgentParams,
+        available_when=provided(TextAgent),
+        result_instruction=text_agent.result_instructions,
     )
-    async def _subagent_tool(
-        params: SubagentParams,
-        subagent: Inject[Subagent],
+    async def _text_agent_tool(
+        params: TextAgentParams,
+        text_agent: Inject[TextAgent],
         conversation_history: Inject[ConversationHistory],
     ) -> str:
         conversation_summary = conversation_history.format()
-        return await subagent.start(
+        return await text_agent.start(
             params.task,
             context=conversation_summary,
         )
 
 
-def _describe_subagent(subagent: Subagent) -> str:
-    if not subagent.handoff_instructions:
-        return subagent.description
+def _describe_text_agent(text_agent: TextAgent) -> str:
+    if not text_agent.handoff_instructions:
+        return text_agent.description
     return (
-        f"{subagent.description}\n\n"
-        f"Handoff instructions: {subagent.handoff_instructions}"
+        f"{text_agent.description}\n\n"
+        f"Handoff instructions: {text_agent.handoff_instructions}"
     )

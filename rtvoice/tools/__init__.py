@@ -3,7 +3,7 @@ from .di import Inject, ToolContext
 from .middleware import ToolFeedbackError
 from .params import ToolParams
 from .results import ActionResult
-from .tools import Tools
+from .tools import Tools, ToolSchemaFormat
 from .views import ActionKind, Tool
 
 __all__ = [
@@ -16,6 +16,7 @@ __all__ = [
     "ToolDescription",
     "ToolFeedbackError",
     "ToolParams",
+    "ToolSchemaFormat",
     "Tools",
     "described",
     "provided",

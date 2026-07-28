@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from rtvoice import Subagent
+from rtvoice import TextAgent
 from rtvoice.llm import (
     ChatInvokeCompletion,
     Function,
@@ -18,26 +18,26 @@ async def test_returns_completion_when_no_tool_calls() -> None:
     llm.invoke = AsyncMock(
         return_value=ChatInvokeCompletion(completion="Final answer", tool_calls=[])
     )
-    subagent = Subagent(
+    text_agent = TextAgent(
         description="Planning helper",
         system_prompt="You are a planner.",
         llm=llm,
     )
 
-    assert await subagent.start("Plan my day") == "Final answer"
+    assert await text_agent.start("Plan my day") == "Final answer"
 
 
 @pytest.mark.asyncio
 async def test_includes_context_in_messages() -> None:
     llm = MagicMock()
     llm.invoke = AsyncMock(return_value=ChatInvokeCompletion(completion="Done"))
-    subagent = Subagent(
+    text_agent = TextAgent(
         description="Planning helper",
         system_prompt="You are a planner.",
         llm=llm,
     )
 
-    await subagent.start("Plan my day", context="Morning focus")
+    await text_agent.start("Plan my day", context="Morning focus")
 
     messages = llm.invoke.await_args.args[0]
     assert [message.content for message in messages] == [
@@ -66,14 +66,14 @@ async def test_runs_tools_until_final_completion() -> None:
     async def search_schedule(query: str) -> str:
         return f"result:{query}"
 
-    subagent = Subagent(
+    text_agent = TextAgent(
         description="Planning helper",
         system_prompt="You are a planner.",
         llm=llm,
         tools=tools,
     )
 
-    assert await subagent.start("Plan my day") == "Found one appointment"
+    assert await text_agent.start("Plan my day") == "Found one appointment"
     messages = llm.invoke.await_args_list[1].args[0]
     assert isinstance(messages[-1], ToolResultMessage)
     assert messages[-1].content == "result:Monday"
@@ -95,7 +95,7 @@ async def test_returns_max_iterations_message() -> None:
     async def echo(text: str) -> str:
         return text
 
-    subagent = Subagent(
+    text_agent = TextAgent(
         description="Planning helper",
         system_prompt="You are a planner.",
         llm=llm,
@@ -103,5 +103,5 @@ async def test_returns_max_iterations_message() -> None:
         max_iterations=2,
     )
 
-    assert await subagent.start("Plan my day") == "Max iterations reached."
+    assert await text_agent.start("Plan my day") == "Max iterations reached."
     assert llm.invoke.await_count == 2

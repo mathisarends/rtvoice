@@ -34,7 +34,7 @@ agent = RealtimeAgent(
 ```
 
 ```python
-subagent = Subagent(
+text_agent = TextAgent(
     description="Plant komplexe Aufgaben.",
     system_prompt="Du bist ein präziser Planungsagent.",
 )
@@ -228,7 +228,7 @@ verwendeten Konstruktor-Dependencies einschließlich `event_bus` auf `self`.
 ### 1. API-Bezeichnung (umgesetzt)
 
 - `RealtimeAgent.instructions` zu `system_prompt` umbenennen.
-- `Subagent.instructions` zu `system_prompt` umbenennen.
+- `TextAgent.instructions` zu `system_prompt` umbenennen.
 - interne Variablen entsprechend benennen.
 - erst beim Erstellen von `RealtimeSessionSettings` auf das Wire-Feld
   `instructions` abbilden.

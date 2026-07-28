@@ -36,5 +36,5 @@ class RunSkillScriptParams(SkillParams):
     )
 
 
-class SubagentParams(ToolParams):
-    task: str = Field(description="The task to hand off to the subagent.")
+class TextAgentParams(ToolParams):
+    task: str = Field(description="The task to hand off to the text agent.")

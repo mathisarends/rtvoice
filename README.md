@@ -50,7 +50,7 @@ Run it, speak into your microphone, and the agent responds through your speakers
   - [Context injection](#context-injection)
   - [Custom application context](#custom-application-context)
 - [Agent Skills](#agent-skills)
-- [Subagent](#subagent)
+- [Text agent](#text-agent)
 - [Injected conversation](#injected-conversation)
 - [Lifecycle listener](#lifecycle-listener)
 - [Custom audio devices](#custom-audio-devices)
@@ -288,14 +288,14 @@ Follow the workflow in `references/workflow.md`.
 ```
 
 Create `Skills` from one or more local directories and pass the same instance to
-`RealtimeAgent` or `Subagent`:
+`RealtimeAgent` or `TextAgent`:
 
 ```python
-from rtvoice import RealtimeAgent, Skills, Subagent
+from rtvoice import RealtimeAgent, Skills, TextAgent
 
 skills = Skills.from_local_dir("./skills")
 
-subagent = Subagent(
+text_agent = TextAgent(
     description="Handles research tasks.",
     system_prompt="Use the relevant skill before researching.",
     skills=skills,
@@ -304,7 +304,7 @@ subagent = Subagent(
 agent = RealtimeAgent(
     system_prompt="Help the user and load relevant skills before using them.",
     skills=skills,
-    subagent=subagent,
+    text_agent=text_agent,
 )
 ```
 
@@ -327,13 +327,13 @@ directory as trusted code.
 
 ---
 
-## Subagent
+## Text agent
 
-Delegate complex, multi-step tasks to an LLM-driven subagent. The voice agent
+Delegate complex, multi-step tasks to an LLM-driven text agent. The voice agent
 hands off the task and presents the result when done.
 
 ```python
-from rtvoice import RealtimeAgent, Subagent, Tools
+from rtvoice import RealtimeAgent, TextAgent, Tools
 from rtvoice.llm import ChatOpenAI
 
 tools = Tools()
@@ -347,7 +347,7 @@ async def book_table(
 ) -> str:
     return f"Booked for {party_size} at {restaurant} on {date} at {time}."
 
-subagent = Subagent(
+text_agent = TextAgent(
     description="Books restaurant tables on behalf of the user.",
     system_prompt="Use book_table to complete booking requests.",
     tools=tools,
@@ -355,29 +355,29 @@ subagent = Subagent(
 )
 
 agent = RealtimeAgent(
-    system_prompt="Delegate restaurant bookings to the subagent.",
-    subagent=subagent,
+    system_prompt="Delegate restaurant bookings to the text agent.",
+    text_agent=text_agent,
 )
 ```
 
-**How it works:** the realtime agent provides the `Subagent` through tool
-dependency injection and registers it as a regular `subagent` tool. When
-invoked, the subagent runs its own tool-calling loop and returns the final LLM
+**How it works:** the realtime agent provides the `TextAgent` through tool
+dependency injection and registers it as a regular `text_agent` tool. When
+invoked, the text agent runs its own tool-calling loop and returns the final LLM
 completion as the tool result.
 
-**`Subagent` parameters:**
+**`TextAgent` parameters:**
 
 | Parameter              | Description                                               |
 | ---------------------- | --------------------------------------------------------- |
 | `description`          | Shown to the realtime model to decide when to delegate    |
-| `system_prompt`        | System prompt for the subagent's own LLM loop             |
+| `system_prompt`        | System prompt for the text agent's own LLM loop           |
 | `llm`                  | `ChatOpenAI(model=...)` or any `ChatModel` implementation |
-| `tools`                | `Tools` instance with the actions the subagent may call   |
+| `tools`                | `Tools` instance with the actions the text agent may call |
 | `skills`               | Local Agent Skills exposed through progressive disclosure |
 | `result_instructions`  | Tells the realtime model how to present the result        |
 | `handoff_instructions` | Extra guidance appended to the tool description           |
 | `max_iterations`       | Loop iteration cap (default: 10)                          |
-| `tool_injection_context` | Arbitrary object injectable inside subagent tools        |
+| `tool_injection_context` | Arbitrary object injectable inside text-agent tools      |
 
 ---
 

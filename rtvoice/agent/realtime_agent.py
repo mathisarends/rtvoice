@@ -5,8 +5,8 @@ from pathlib import Path
 from transitbus import EventBus
 
 from rtvoice.agent.listener import AgentListener, AgentListenerBridge
-from rtvoice.agent.subagent import Subagent, register_subagent_tool
 from rtvoice.agent.system_prompt import SystemPrompt
+from rtvoice.agent.text_agent import TextAgent, register_text_agent_tool
 from rtvoice.agent.views import (
     AgentResult,
     AssistantVoice,
@@ -61,7 +61,7 @@ class RealtimeAgent[T]:
         tools: Tools | None = None,
         tool_injection_context: T | None = None,
         skills: Skills | None = None,
-        subagent: Subagent | None = None,
+        text_agent: TextAgent | None = None,
         audio_input: AudioInputDevice | None = None,
         audio_output: AudioOutputDevice | None = None,
         echo_cancellation: EchoCancellation | None = None,
@@ -73,7 +73,7 @@ class RealtimeAgent[T]:
         api_key: str | None = None,
         pricing_catalog: PricingCatalog | None = None,
     ):
-        self._subagent = subagent
+        self._text_agent = text_agent
 
         if api_key and provider:
             raise ValueError("Pass either `provider` or `api_key`, not both.")
@@ -106,8 +106,8 @@ class RealtimeAgent[T]:
 
         self._skills = skills
         self._tools = Tools()
-        if self._subagent is not None:
-            register_subagent_tool(self._tools, self._subagent)
+        if self._text_agent is not None:
+            register_text_agent_tool(self._tools, self._text_agent)
         if self._skills is not None:
             register_skill_tools(self._tools)
         if tools:
@@ -123,7 +123,7 @@ class RealtimeAgent[T]:
             self._conversation_history,
             tool_injection_context,
             self._skills,
-            self._subagent,
+            self._text_agent,
         )
         self._tools.set_context(tool_context)
 

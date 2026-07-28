@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from rtvoice import RealtimeAgent, Skills, Subagent
+from rtvoice import RealtimeAgent, Skills, TextAgent
 from rtvoice.skills import register_skill_tools
 from rtvoice.tools import ToolContext, Tools
 
@@ -253,21 +253,21 @@ class TestAgentIntegration:
         assert {tool.name for tool in agent._tools.get_schema()} >= _SKILL_TOOLS
 
     @pytest.mark.asyncio
-    async def test_subagent_loads_skill_progressively(self, tmp_path: Path) -> None:
+    async def test_text_agent_loads_skill_progressively(self, tmp_path: Path) -> None:
         make_skill(tmp_path)
-        subagent = Subagent(
-            description="Research subagent",
+        text_agent = TextAgent(
+            description="Research text agent",
             system_prompt="Be accurate.",
             llm=MagicMock(),
             skills=Skills.from_local_dir(tmp_path),
         )
 
-        system_prompt = str(subagent._system_prompt)
+        system_prompt = str(text_agent._system_prompt)
         assert "<name>internet-research</name>" in system_prompt
         assert "Use the bundled workflow" not in system_prompt
-        assert {tool.name for tool in subagent._tools.get_schema()} >= _SKILL_TOOLS
+        assert {tool.name for tool in text_agent._tools.get_schema()} >= _SKILL_TOOLS
 
-        loaded = await subagent._tools.execute(
+        loaded = await text_agent._tools.execute(
             "load_skill", {"name": "internet-research"}
         )
 

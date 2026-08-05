@@ -351,8 +351,9 @@ Delegate complex, multi-step tasks to an LLM-driven text agent. The voice agent
 hands off the task and presents the result when done.
 
 ```python
+from llmify import ChatOpenAI
+
 from rtvoice import RealtimeAgent, TextAgent, Tools
-from rtvoice.llm import ChatOpenAI
 
 tools = Tools()
 

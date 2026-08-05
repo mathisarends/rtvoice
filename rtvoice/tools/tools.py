@@ -4,12 +4,12 @@ import logging
 from collections.abc import Callable
 from typing import Any, Literal, overload
 
+from llmify import RawSchemaTool
 from pydantic import BaseModel
 from transitbus import EventBus
 
 from rtvoice.conversation import ConversationHistory
 from rtvoice.events.views import StopAgentCommand
-from rtvoice.llm import RawSchemaTool
 from rtvoice.realtime.schemas import FunctionTool as RealtimeFunctionTool
 from rtvoice.skills import Skills
 from rtvoice.tools.argument_resolver import resolve_arguments

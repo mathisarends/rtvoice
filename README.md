@@ -53,6 +53,7 @@ Run it, speak into your microphone, and the agent responds through your speakers
 - [Text agent](#text-agent)
 - [Injected conversation](#injected-conversation)
 - [Lifecycle listener](#lifecycle-listener)
+- [Speech in, streamed text out](#speech-in-streamed-text-out)
 - [Custom audio devices](#custom-audio-devices)
 - [Echo cancellation](#echo-cancellation)
 - [Turn detection](#turn-detection)
@@ -482,6 +483,30 @@ class MyListener(AgentListener):
     ) -> None:
         print(name, action_kind, silent)
 ```
+
+---
+
+## Speech in, streamed text out
+
+Set `output_modalities=["text"]` to keep microphone input and receive only text
+from the model. Text chunks arrive through
+`AgentListener.on_assistant_transcript_delta()`:
+
+```python
+class TextStream(AgentListener):
+    async def on_assistant_transcript_delta(self, delta: str) -> None:
+        print(delta, end="", flush=True)
+
+
+agent = RealtimeAgent(
+    system_prompt="Answer concisely.",
+    output_modalities=["text"],
+    listener=TextStream(),
+)
+```
+
+See [`examples/speech_in_text_out.py`](examples/speech_in_text_out.py) for a
+runnable version that also avoids opening a speaker device.
 
 ---
 

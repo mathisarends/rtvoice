@@ -4,9 +4,12 @@ import logging
 import os
 import wave
 from contextlib import suppress
-from typing import Any
+from typing import TYPE_CHECKING
 
 from rtvoice.audio.ports import AudioOutput
+
+if TYPE_CHECKING:
+    from sonosify import HostedAudioClip, SonosClient
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +36,10 @@ class SonosOutput(AudioOutput):
         self._volume = volume
         self._sample_rate = sample_rate
         self._advertised_host = advertised_host
-        self._client: Any = None
+        self._client: SonosClient | None = None
         self._pcm = bytearray()
         self._active = False
-        self._clip: Any = None
+        self._clip: HostedAudioClip | None = None
         self._playback_task: asyncio.Task[None] | None = None
 
     @property
@@ -111,7 +114,7 @@ class SonosOutput(AudioOutput):
                 logger.exception("Could not cancel Sonos audio clip %s", clip.id)
             clip.close()
 
-    async def _await_finish(self, clip: Any) -> None:
+    async def _await_finish(self, clip: "HostedAudioClip") -> None:
         with suppress(Exception):
             await clip.wait_until_finished()
         if self._clip is clip:

@@ -73,7 +73,8 @@
       "Read(//c//**)",
       "Bash(pip download *)",
       "Bash(pip show *)",
-      "Bash(uv lock *)"
+      "Bash(uv lock *)",
+      "Bash(python3 *)"
     ]
   }
 }

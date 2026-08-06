@@ -5,6 +5,7 @@ Set OPENAI_API_KEY, SONOS_IP_ADDRESS, and SONOS_SPEAKER_NAME in `.env`, then run
 """
 
 import asyncio
+import logging
 
 from dotenv import load_dotenv
 
@@ -12,6 +13,10 @@ from rtvoice import RealtimeAgent
 from rtvoice.audio import SonosOutput
 
 load_dotenv(override=True)
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+)
 
 
 async def main() -> None:

@@ -35,14 +35,6 @@ from rtvoice.tools.views import ActionKind, Tool, ToolSchemaFormat
 logger = logging.getLogger(__name__)
 
 
-def _describe_handoff(handoff: Handoff) -> str:
-    if not handoff.handoff_instructions:
-        return handoff.description
-    return (
-        f"{handoff.description}\n\nHandoff instructions: {handoff.handoff_instructions}"
-    )
-
-
 class Tools:
     def __init__(self):
         self._tools: dict[str, Tool] = {}
@@ -215,3 +207,11 @@ class Tools:
                 params.task, context=conversation_history.format()
             )
             return ActionResult.success(answer, instruction=handoff.result_instructions)
+
+
+def _describe_handoff(handoff: Handoff) -> str:
+    if not handoff.handoff_instructions:
+        return handoff.description
+    return (
+        f"{handoff.description}\n\nHandoff instructions: {handoff.handoff_instructions}"
+    )

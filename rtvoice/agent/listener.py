@@ -10,6 +10,7 @@ from rtvoice.events.views import (
     AgentErrorEvent,
     AgentSessionConnectedEvent,
     AgentStartingEvent,
+    AgentStoppedEvent,
     AssistantInterruptedEvent,
     AssistantStartedRespondingEvent,
     AssistantStoppedRespondingEvent,
@@ -115,6 +116,7 @@ class AgentListenerBridge:
             self._on_assistant_transcript_delta,
         )
         self._event_bus.on(AgentStartingEvent, self._on_agent_starting)
+        self._event_bus.on(AgentStoppedEvent, self._on_agent_stopped)
         self._event_bus.on(
             AgentSessionConnectedEvent,
             self._on_agent_session_connected,
@@ -163,6 +165,9 @@ class AgentListenerBridge:
 
     async def _on_agent_starting(self, _: AgentStartingEvent) -> None:
         await self._listener.on_agent_starting()
+
+    async def _on_agent_stopped(self, _: AgentStoppedEvent) -> None:
+        await self._listener.on_agent_stopped()
 
     async def _on_agent_session_connected(self, _: AgentSessionConnectedEvent) -> None:
         await self._listener.on_agent_session_connected()

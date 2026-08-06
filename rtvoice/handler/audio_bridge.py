@@ -85,6 +85,7 @@ class AudioBridge:
         await self._audio_session.clear_output_buffer()
 
     async def _on_response_done(self, _: ResponseDoneEvent) -> None:
+        await self._audio_session.finish_output_response()
         asyncio.create_task(self._wait_for_playback_completion())
 
     async def _wait_for_playback_completion(self) -> None:

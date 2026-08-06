@@ -13,3 +13,5 @@ possible. When the user corrects a mistake, record it below as a short bullet
 - Use semantic aliases for primitive mapping keys/values.
 - Prefer private module helpers over static methods that need no class state.
 - Keep listener event payloads flat when fields suffice; avoid nested metadata wrappers.
+- Omit `clip_type` for custom Sonos URLs; some firmware rejects
+  `VOICE_ASSISTANT` with `ERROR_INVALID_OBJECT_ID`.

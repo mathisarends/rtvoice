@@ -29,6 +29,9 @@ class ReferenceTapOutput(AudioOutput):
         self._timeline.write(chunk)
         await self._output.play_chunk(chunk)
 
+    async def finish_response(self) -> None:
+        await self._output.finish_response()
+
     async def clear_buffer(self) -> None:
         await self._output.clear_buffer()
         self._timeline.discard_pending()

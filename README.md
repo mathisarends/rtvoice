@@ -15,6 +15,12 @@ A Python library for building real-time voice agents powered by the OpenAI Realt
 pip install rtvoice[audio]
 ```
 
+For Sonos output, install the separate optional adapter dependency:
+
+```bash
+pip install rtvoice[sonos]
+```
+
 Requires Python 3.13+ and an `OPENAI_API_KEY` environment variable (or pass `api_key=` directly).
 
 ---
@@ -581,6 +587,28 @@ agent = RealtimeAgent(
 ```
 
 Audio format: **16-bit PCM, 24 kHz, mono** in both directions.
+
+### Sonos output
+
+`SonosOutput` buffers each assistant response as a WAV clip and exposes it on
+the local network only for the duration of playback. Sonosify is imported only
+when this output is started, so the adapter adds no runtime work to other audio
+outputs.
+
+```python
+from rtvoice import RealtimeAgent
+from rtvoice.audio import SonosOutput
+
+agent = RealtimeAgent(
+    system_prompt="...",
+    audio_output=SonosOutput(),
+)
+```
+
+Configure the target with `SONOS_IP_ADDRESS` and `SONOS_SPEAKER_NAME`. The
+speaker must be able to reach the machine running rtvoice. On hosts with
+multiple network interfaces, pass `advertised_host="192.168.1.20"` explicitly.
+See [`examples/sonos_output.py`](examples/sonos_output.py) for a runnable agent.
 
 ---
 

@@ -36,6 +36,7 @@ def audio_session() -> MagicMock:
     session.start = AsyncMock()
     session.stop = AsyncMock()
     session.play_chunk = AsyncMock()
+    session.finish_output_response = AsyncMock()
     session.clear_output_buffer = AsyncMock()
     session.stream_input_chunks = MagicMock(return_value=_empty_stream())
     session.is_playing = False
@@ -149,6 +150,23 @@ class TestBargeIn:
 
 
 class TestPlaybackCompletion:
+    @pytest.mark.asyncio
+    async def test_response_done_finishes_output_response(
+        self,
+        event_bus: EventBus,
+        audio_bridge: AudioBridge,
+        audio_session: MagicMock,
+    ) -> None:
+        await event_bus.dispatch(
+            ResponseDoneEvent(
+                type=RealtimeServerEvent.RESPONSE_DONE,
+                event_id="evt_001",
+                response=RealtimeResponseObject(id="resp_001"),
+            )
+        )
+
+        audio_session.finish_output_response.assert_awaited_once_with()
+
     @pytest.mark.asyncio
     async def test_response_done_dispatches_playback_completed_when_not_playing(
         self,

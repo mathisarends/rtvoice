@@ -17,6 +17,9 @@ dependencies = [
 
 [project.optional-dependencies]
 audio = ["sounddevice>=0.5.1"]
+sonos = [
+    "sonosify>=0.4.0",
+]
 
 [dependency-groups]
 dev = [

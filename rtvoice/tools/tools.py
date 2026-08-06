@@ -4,12 +4,12 @@ import logging
 from collections.abc import Callable
 from typing import Any, Literal, overload
 
+from llmify import RawSchemaTool
 from pydantic import BaseModel
 from transitbus import EventBus
 
 from rtvoice.conversation import ConversationHistory
 from rtvoice.events.views import StopAgentCommand
-from rtvoice.llm import RawSchemaTool
 from rtvoice.realtime.schemas import FunctionTool as RealtimeFunctionTool
 from rtvoice.skills import Skills
 from rtvoice.tools.argument_resolver import resolve_arguments
@@ -33,14 +33,6 @@ from rtvoice.tools.results import ActionResult
 from rtvoice.tools.views import ActionKind, Tool, ToolSchemaFormat
 
 logger = logging.getLogger(__name__)
-
-
-def _describe_handoff(handoff: Handoff) -> str:
-    if not handoff.handoff_instructions:
-        return handoff.description
-    return (
-        f"{handoff.description}\n\nHandoff instructions: {handoff.handoff_instructions}"
-    )
 
 
 class Tools:
@@ -215,3 +207,11 @@ class Tools:
                 params.task, context=conversation_history.format()
             )
             return ActionResult.success(answer, instruction=handoff.result_instructions)
+
+
+def _describe_handoff(handoff: Handoff) -> str:
+    if not handoff.handoff_instructions:
+        return handoff.description
+    return (
+        f"{handoff.description}\n\nHandoff instructions: {handoff.handoff_instructions}"
+    )

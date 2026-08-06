@@ -67,7 +67,14 @@
       "Bash(powershell.exe -NoProfile -Command 'Get-Content C:\\\\Users\\\\mathi\\\\.claude\\\\settings.json -ErrorAction SilentlyContinue | Select-String -Pattern '\\\\''hooks'\\\\'' -Context 0,20')",
       "Bash(echo \"exit:$?\")",
       "Bash(echo \"tracked:$?\")",
-      "Bash(grep -c \"^\\\\.coverage$\")"
+      "Bash(grep -c \"^\\\\.coverage$\")",
+      "Bash(uv pip *)",
+      "Bash(powershell -Command \"Get-Content 'C:\\\\code\\\\rtvoice\\\\.venv\\\\Lib\\\\site-packages\\\\sonosify-0.4.1.dist-info\\\\METADATA' | Select-Object -First 250\")",
+      "Read(//c//**)",
+      "Bash(pip download *)",
+      "Bash(pip show *)",
+      "Bash(uv lock *)",
+      "Bash(python3 *)"
     ]
   }
 }

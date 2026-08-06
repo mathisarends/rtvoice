@@ -15,6 +15,12 @@ A Python library for building real-time voice agents powered by the OpenAI Realt
 pip install rtvoice[audio]
 ```
 
+For Sonos output, install the separate optional adapter dependency:
+
+```bash
+pip install rtvoice[sonos]
+```
+
 Requires Python 3.13+ and an `OPENAI_API_KEY` environment variable (or pass `api_key=` directly).
 
 ---
@@ -53,6 +59,7 @@ Run it, speak into your microphone, and the agent responds through your speakers
 - [Text agent](#text-agent)
 - [Injected conversation](#injected-conversation)
 - [Lifecycle listener](#lifecycle-listener)
+- [Speech in, streamed text out](#speech-in-streamed-text-out)
 - [Custom audio devices](#custom-audio-devices)
 - [Echo cancellation](#echo-cancellation)
 - [Turn detection](#turn-detection)
@@ -351,8 +358,9 @@ Delegate complex, multi-step tasks to an LLM-driven text agent. The voice agent
 hands off the task and presents the result when done.
 
 ```python
+from llmify import ChatOpenAI
+
 from rtvoice import RealtimeAgent, TextAgent, Tools
-from rtvoice.llm import ChatOpenAI
 
 tools = Tools()
 
@@ -484,6 +492,30 @@ class MyListener(AgentListener):
 
 ---
 
+## Speech in, streamed text out
+
+Set `output_modalities=["text"]` to keep microphone input and receive only text
+from the model. Text chunks arrive through
+`AgentListener.on_assistant_transcript_delta()`:
+
+```python
+class TextStream(AgentListener):
+    async def on_assistant_transcript_delta(self, delta: str) -> None:
+        print(delta, end="", flush=True)
+
+
+agent = RealtimeAgent(
+    system_prompt="Answer concisely.",
+    output_modalities=["text"],
+    listener=TextStream(),
+)
+```
+
+See [`examples/speech_in_text_out.py`](examples/speech_in_text_out.py) for a
+runnable version that also avoids opening a speaker device.
+
+---
+
 ## Custom audio devices
 
 Implement `AudioInput` or `AudioOutput` from `rtvoice.audio` to replace the default microphone or speaker — useful for telephony, file playback, testing, or embedded hardware.
@@ -555,6 +587,29 @@ agent = RealtimeAgent(
 ```
 
 Audio format: **16-bit PCM, 24 kHz, mono** in both directions.
+
+### Sonos output
+
+`SonosOutput` buffers each assistant response as a WAV clip and hands it to
+sonosify's built-in Clip API server, which hosts it only until the speaker
+fetches it and reports playback completion. Sonosify is imported only when
+this output is started, so the adapter adds no runtime work to other audio
+outputs.
+
+```python
+from rtvoice import RealtimeAgent
+from rtvoice.audio import SonosOutput
+
+agent = RealtimeAgent(
+    system_prompt="...",
+    audio_output=SonosOutput(),
+)
+```
+
+Configure the target with `SONOS_IP_ADDRESS` and `SONOS_SPEAKER_NAME`. The
+speaker must be able to reach the machine running rtvoice. On hosts with
+multiple network interfaces, pass `advertised_host="192.168.1.20"` explicitly.
+See [`examples/sonos_output.py`](examples/sonos_output.py) for a runnable agent.
 
 ---
 

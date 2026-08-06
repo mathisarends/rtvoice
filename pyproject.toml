@@ -1,6 +1,6 @@
 [project]
 name = "rtvoice"
-version = "0.9.0"
+version = "0.10.0"
 description = "Real-time voice assistant built on OpenAI's Realtime API"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -17,6 +17,9 @@ dependencies = [
 
 [project.optional-dependencies]
 audio = ["sounddevice>=0.5.1"]
+sonos = [
+    "sonosify>=0.4.1",
+]
 
 [dependency-groups]
 dev = [

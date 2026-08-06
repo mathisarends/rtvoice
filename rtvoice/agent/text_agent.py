@@ -4,15 +4,17 @@ import json
 import logging
 from collections.abc import Sequence
 
-from rtvoice.agent.system_prompt import SystemPrompt
-from rtvoice.llm import (
+from llmify import (
     AssistantMessage,
     ChatModel,
+    ChatOpenAI,
     Message,
     SystemMessage,
     ToolResultMessage,
     UserMessage,
 )
+
+from rtvoice.agent.system_prompt import SystemPrompt
 from rtvoice.skills import Skills
 from rtvoice.tools import Handoff, ToolContext, Tools, ToolSchemaFormat
 
@@ -35,7 +37,7 @@ class TextAgent(Handoff):
     ) -> None:
         self.name = "text_agent"
         self.description = description
-        self._llm = llm or ChatModel(model="gpt-5.4-mini")
+        self._llm = llm or ChatOpenAI(model="gpt-5.4-mini")
         self._skills = skills
         self._tools = Tools()
         if tools:

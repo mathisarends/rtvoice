@@ -1,3 +1,4 @@
+import base64
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -73,7 +74,7 @@ def make_audio_delta(
         response_id=response_id,
         output_index=0,
         content_index=0,
-        delta="AAAA",
+        delta=base64.b64encode(bytes(96_000)).decode(),
     )
 
 
@@ -101,6 +102,19 @@ class TestStateTracking:
         await event_bus.dispatch(make_response_created())
 
         assert coordinator._assistant_is_speaking is True
+
+    @pytest.mark.asyncio
+    async def test_response_created_discards_previous_playback_tracking(
+        self, event_bus: EventBus, coordinator: BargeInCoordinator
+    ) -> None:
+        await event_bus.dispatch(make_response_created("resp_old"))
+        await event_bus.dispatch(make_audio_delta(response_id="resp_old"))
+
+        await event_bus.dispatch(make_response_created("resp_new"))
+
+        assert coordinator._item_id is None
+        assert coordinator._start_time is None
+        assert coordinator._audio_bytes == 0
 
     @pytest.mark.asyncio
     async def test_playback_timer_starts_with_first_audio_chunk(
@@ -305,11 +319,12 @@ class TestBargeIn:
         assert len(received) == 1
 
     @pytest.mark.asyncio
-    async def test_barge_in_after_response_done_still_marks_buffered_audio(
+    async def test_barge_in_after_playback_ended_ignores_stale_item(
         self,
         event_bus: EventBus,
         coordinator: BargeInCoordinator,
         audio_session: MagicMock,
+        websocket: AsyncMock,
     ) -> None:
         received: list[AssistantInterruptedEvent] = []
 
@@ -324,5 +339,29 @@ class TestBargeIn:
 
         await event_bus.dispatch(make_speech_started())
 
-        assert len(received) == 1
-        assert received[0].item_id == "item_001"
+        assert received == []
+        websocket.send.assert_not_awaited()
+        assert coordinator._item_id is None
+
+    @pytest.mark.asyncio
+    async def test_truncate_time_does_not_exceed_received_audio(
+        self,
+        event_bus: EventBus,
+        coordinator: BargeInCoordinator,
+        audio_session: MagicMock,
+        websocket: AsyncMock,
+    ) -> None:
+        coordinator._clock = MagicMock(side_effect=[100.0, 114.2])
+        await event_bus.dispatch(make_response_created())
+        await event_bus.dispatch(make_audio_delta())
+        await event_bus.dispatch(make_response_done())
+        audio_session.is_playing = True
+
+        await event_bus.dispatch(make_speech_started())
+
+        truncate = next(
+            call.args[0]
+            for call in websocket.send.await_args_list
+            if isinstance(call.args[0], ConversationItemTruncateEvent)
+        )
+        assert truncate.audio_end_ms == 2_000

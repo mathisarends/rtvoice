@@ -34,6 +34,9 @@ class AudioOutput(ABC):
     async def play_chunk(self, chunk: bytes) -> None:
         """Enqueue a raw 16-bit PCM chunk."""
 
+    async def finish_response(self) -> None:  # noqa: B027
+        pass
+
     @property
     @abstractmethod
     def is_playing(self) -> bool:

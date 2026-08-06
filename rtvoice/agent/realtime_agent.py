@@ -59,16 +59,6 @@ from rtvoice.tools import ToolContext, Tools
 logger = logging.getLogger(__name__)
 
 
-def _injected_turn(message: InjectedMessage) -> ConversationTurn:
-    match message:
-        case InjectedUserMessage(text=text):
-            return UserTurn(transcript=text)
-        case InjectedAssistantMessage(text=text):
-            return AssistantTurn(transcript=text)
-        case _:
-            assert_never(message)
-
-
 class RealtimeAgent:
     def __init__(
         self,
@@ -278,5 +268,12 @@ class RealtimeAgent:
         self._stopped.set()
         logger.info("Agent stopped successfully")
 
-        if self._listener:
-            await self._listener.on_agent_stopped()
+
+def _injected_turn(message: InjectedMessage) -> ConversationTurn:
+    match message:
+        case InjectedUserMessage(text=text):
+            return UserTurn(transcript=text)
+        case InjectedAssistantMessage(text=text):
+            return AssistantTurn(transcript=text)
+        case _:
+            assert_never(message)

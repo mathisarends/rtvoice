@@ -18,7 +18,7 @@ class CustomerDirectory:
     names: Mapping[CustomerId, CustomerName]
 
     def name_for(self, customer_id: CustomerId) -> CustomerName:
-        return self.names.get(customer_id, "Unbekannt")
+        return self.names.get(customer_id, "Unknown")
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,7 +36,7 @@ class CustomerParams(BaseModel):
 tools = Tools()
 
 
-@tools.action("Kundennamen und Tarif nachschlagen.", params=CustomerParams)
+@tools.action("Look up a customer's name and plan.", params=CustomerParams)
 def describe_customer(
     params: CustomerParams,
     customers: Inject[CustomerDirectory],
@@ -44,7 +44,7 @@ def describe_customer(
 ) -> str:
     name = customers.name_for(params.customer_id)
     tier = plans.tier_for(params.customer_id)
-    return f"Kunde {params.customer_id}: {name}, Tarif {tier}"
+    return f"Customer {params.customer_id}: {name}, plan {tier}"
 
 
 async def main() -> None:
@@ -52,14 +52,12 @@ async def main() -> None:
     customers = CustomerDirectory(names={"42": "Max", "7": "Ada"})
     plans = PlanPolicy(premium_customer_ids=frozenset({"42"}))
     agent = RealtimeAgent(
-        system_prompt=(
-            "Hilf knapp bei Kundenfragen. Nutze das Werkzeug für Kundendaten."
-        ),
+        system_prompt="Answer customer questions concisely. Use the customer tool.",
         tools=tools,
         tool_dependencies=(customers, plans),
     )
 
-    print("Frag zum Beispiel: Welchen Tarif hat Kunde 42?")
+    print("Try asking: Which plan does customer 42 have?")
     await agent.start()
 
 

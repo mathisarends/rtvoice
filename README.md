@@ -590,9 +590,10 @@ Audio format: **16-bit PCM, 24 kHz, mono** in both directions.
 
 ### Sonos output
 
-`SonosOutput` buffers each assistant response as a WAV clip and exposes it on
-the local network only for the duration of playback. Sonosify is imported only
-when this output is started, so the adapter adds no runtime work to other audio
+`SonosOutput` buffers each assistant response as a WAV clip and hands it to
+sonosify's built-in Clip API server, which hosts it only until the speaker
+fetches it and reports playback completion. Sonosify is imported only when
+this output is started, so the adapter adds no runtime work to other audio
 outputs.
 
 ```python

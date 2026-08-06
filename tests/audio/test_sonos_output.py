@@ -2,11 +2,31 @@ import asyncio
 import sys
 from types import SimpleNamespace
 from typing import ClassVar
-from urllib.parse import urlparse
 
 import pytest
 
 from rtvoice.audio import SonosOutput
+
+
+class FakeHostedAudioClip:
+    def __init__(self, clip_id: str, client: "FakeSonosClient") -> None:
+        self.id = clip_id
+        self._client = client
+        self.closed = False
+        self._finished = asyncio.Event()
+
+    def finish(self) -> None:
+        self._finished.set()
+
+    async def wait_until_finished(self) -> object:
+        await self._finished.wait()
+        return SimpleNamespace(status="DONE")
+
+    async def cancel(self) -> None:
+        await self._client.cancel_audio_clip(self.id)
+
+    def close(self) -> None:
+        self.closed = True
 
 
 class FakeSonosClient:
@@ -14,14 +34,19 @@ class FakeSonosClient:
 
     def __init__(self, ip_address: str) -> None:
         self.ip_address = ip_address
-        self.played: list[tuple[str, dict[str, object]]] = []
+        self.played: list[tuple[bytes, dict[str, object]]] = []
+        self.clips: list[FakeHostedAudioClip] = []
         self.cancelled: list[str] = []
         self.closed = False
         self.instances.append(self)
 
-    async def play_audio_clip(self, url: str, **options: object) -> object:
-        self.played.append((url, options))
-        return SimpleNamespace(id="clip-1")
+    async def play_audio_clip_data(
+        self, audio: bytes, **options: object
+    ) -> FakeHostedAudioClip:
+        self.played.append((audio, options))
+        clip = FakeHostedAudioClip(f"clip-{len(self.played)}", self)
+        self.clips.append(clip)
+        return clip
 
     async def cancel_audio_clip(self, clip_id: str) -> None:
         self.cancelled.append(clip_id)
@@ -44,7 +69,7 @@ def fake_sonosify(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_uses_environment_and_schedules_complete_wav(
+async def test_uses_environment_and_hosts_wav_via_sonosify(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("SONOS_IP_ADDRESS", "192.0.2.10")
@@ -56,11 +81,12 @@ async def test_uses_environment_and_schedules_complete_wav(
     await output.finish_response()
 
     client = FakeSonosClient.instances[0]
-    url, options = client.played[0]
+    audio, options = client.played[0]
     assert client.ip_address == "192.0.2.10"
     assert options["name"] == "rtvoice: Kitchen"
-    assert "clip_type" not in options
-    assert url.startswith("http://127.0.0.1:")
+    assert options["content_type"] == "audio/wav"
+    assert options["local_host"] == "127.0.0.1"
+    assert audio.startswith(b"RIFF")
     assert output.is_playing
 
     await output.clear_buffer()
@@ -70,21 +96,18 @@ async def test_uses_environment_and_schedules_complete_wav(
 
 
 @pytest.mark.asyncio
-async def test_serves_wav_with_byte_ranges() -> None:
-    output = SonosOutput("192.0.2.10", advertised_host="127.0.0.1")
+async def test_stops_playing_once_sonosify_reports_finished() -> None:
+    output = SonosOutput("192.0.2.10")
     await output.start()
     await output.play_chunk(b"\x01\x02" * 240)
     await output.finish_response()
-    url = FakeSonosClient.instances[0].played[0][0]
-    parsed = urlparse(url)
+    assert output.is_playing
 
-    reader, writer = await asyncio.open_connection(parsed.hostname, parsed.port)
-    writer.write(f"GET {parsed.path} HTTP/1.1\r\nRange: bytes=0-3\r\n\r\n".encode())
-    await writer.drain()
-    response = await reader.read()
+    client = FakeSonosClient.instances[0]
+    client.clips[0].finish()
+    await output._playback_task
 
-    assert response.startswith(b"HTTP/1.1 206 Partial Content")
-    assert response.endswith(b"RIFF")
+    assert not output.is_playing
     await output.stop()
 
 

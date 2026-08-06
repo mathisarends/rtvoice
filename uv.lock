@@ -650,7 +650,7 @@ requires-dist = [
     { name = "py-llmify", extras = ["openai"], specifier = ">=0.7.0" },
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "pyyaml", specifier = ">=6.0.3" },
-    { name = "sonosify", marker = "extra == 'sonos'", specifier = ">=0.4.0" },
+    { name = "sonosify", marker = "extra == 'sonos'", specifier = ">=0.4.1" },
     { name = "sounddevice", marker = "extra == 'audio'", specifier = ">=0.5.1" },
     { name = "tokenary", specifier = ">=0.1.1" },
     { name = "transitbus", specifier = ">=0.1.0" },
@@ -704,7 +704,7 @@ wheels = [
 
 [[package]]
 name = "sonosify"
-version = "0.4.0"
+version = "0.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -712,9 +712,9 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/27/df/24b7078a1df6fde87380b2d8902ff443d1d0de16dd4fe5e927484e249102/sonosify-0.4.0.tar.gz", hash = "sha256:c5e047343332e60bfc4774b38fa818609bd8fa103e213d1d3158848e1a5bd595", size = 9833623, upload-time = "2026-08-06T11:43:07.74Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/35/02/c75a3fe717daf6fb53cf855835b0b905883c0861b0c0009ff0ca905e9852/sonosify-0.4.1.tar.gz", hash = "sha256:7d19f951842d44ec8c1168885f6d8b527e6a962a08c7032af2512c65f545a80e", size = 10119395, upload-time = "2026-08-06T16:17:57.32Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e0/b4/a9a1a3a5bd274735267d422448051a9466e4118f32f3d6699ad14c679f51/sonosify-0.4.0-py3-none-any.whl", hash = "sha256:c4fab13e911530b6663ed5ab6d080ab9561b23e364e774625b760346b5fc9429", size = 37717, upload-time = "2026-08-06T11:43:00.983Z" },
+    { url = "https://files.pythonhosted.org/packages/e8/f5/d9064ae9fc669bcb8d24f68db02d7a68a50e8e8deec64af5c8d055caefa0/sonosify-0.4.1-py3-none-any.whl", hash = "sha256:a33f52776266d3112f875267b01587f634534f4523e27d8ec5d6fd954b023d61", size = 42205, upload-time = "2026-08-06T16:17:54.543Z" },
 ]
 
 [[package]]

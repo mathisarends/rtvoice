@@ -1,3 +1,4 @@
+import base64
 import logging
 import time
 from collections.abc import Callable
@@ -23,6 +24,10 @@ from rtvoice.shared.speech_speed import DEFAULT_SPEECH_SPEED, SpeechSpeed
 
 logger = logging.getLogger(__name__)
 
+_BYTES_PER_SAMPLE = 2
+_SAMPLE_RATE = 24_000
+_MILLISECONDS_PER_SECOND = 1_000
+
 
 class BargeInCoordinator:
     """Handles interruptions - user barge-in as well as programmatic ones: cancels
@@ -46,6 +51,7 @@ class BargeInCoordinator:
         self._response_id: str | None = None
         self._item_id: str | None = None
         self._start_time: float | None = None
+        self._audio_bytes = 0
         self._assistant_is_speaking = False
 
         self._event_bus.on(ResponseCreatedEvent, self._on_response_created)
@@ -61,17 +67,26 @@ class BargeInCoordinator:
     def _elapsed_ms(self) -> int | None:
         if self._start_time is None:
             return None
-        return int((self._clock() - self._start_time) * 1000)
+        elapsed_ms = int((self._clock() - self._start_time) * _MILLISECONDS_PER_SECOND)
+        audio_ms = (
+            self._audio_bytes
+            * _MILLISECONDS_PER_SECOND
+            // (_BYTES_PER_SAMPLE * _SAMPLE_RATE)
+        )
+        return min(elapsed_ms, audio_ms)
 
     async def _on_response_created(self, event: ResponseCreatedEvent) -> None:
         self._response_id = event.response_id
+        self._item_id = None
         self._start_time = None
+        self._audio_bytes = 0
         self._assistant_is_speaking = True
         logger.debug("Response started: %s", event.response_id)
 
     async def _on_audio_delta(self, event: ResponseOutputAudioDeltaEvent) -> None:
         if event.response_id != self._response_id:
             return
+        self._audio_bytes += len(base64.b64decode(event.delta))
         if not self._item_id:
             self._item_id = event.item_id
             self._start_time = self._clock()
@@ -98,11 +113,9 @@ class BargeInCoordinator:
         await self._interrupt("Interrupt requested")
 
     async def _interrupt(self, cause: str) -> None:
-        if (
-            not self._assistant_is_speaking
-            and self._item_id is None
-            and not self._audio_session.is_playing
-        ):
+        if not self._assistant_is_speaking and not self._audio_session.is_playing:
+            # Playback completion is polled, so its event can trail the device state.
+            self._reset()
             return
 
         logger.info("%s - cancelling response", cause)
@@ -142,6 +155,7 @@ class BargeInCoordinator:
         self._response_id = None
         self._item_id = None
         self._start_time = None
+        self._audio_bytes = 0
         self._assistant_is_speaking = False
 
     def set_speech_speed(self, speed: SpeechSpeed) -> None:

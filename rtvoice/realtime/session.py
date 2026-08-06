@@ -96,16 +96,17 @@ class RealtimeSession:
 
     def _setup_handlers(self) -> None:
         self._transcript_logger = TranscriptLogger(event_bus=self._event_bus)
-        self._audio_bridge = AudioBridge(
-            event_bus=self._event_bus,
-            audio_session=self._audio_session,
-            websocket=self._websocket,
-        )
+        # The coordinator must observe playback before AudioBridge clears it.
         self._barge_in_coordinator = BargeInCoordinator(
             event_bus=self._event_bus,
             websocket=self._websocket,
             audio_session=self._audio_session,
             speech_speed=self._speech_speed,
+        )
+        self._audio_bridge = AudioBridge(
+            event_bus=self._event_bus,
+            audio_session=self._audio_session,
+            websocket=self._websocket,
         )
 
         if (
